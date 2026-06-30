@@ -279,6 +279,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyDevice(device);
         if (enableValidationLayers) {
             DestroyDebugUtilsMessenger(instance, debugMessenger, nullptr);
         }
