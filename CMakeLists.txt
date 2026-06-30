@@ -34,14 +34,11 @@ target_link_libraries(VulkanTutorial PRIVATE
 )
 
 if(WIN32)
-    # vcpkg 在 Multi-config 构建（VS generator）下分别装 debug/release 两套 dll
-    # 用 $<CONFIG> generator expression 让构建时按配置选目录
+    # glfw3.dll 来自 vcpkg（按 $<CONFIG> 选 debug/release 子目录）
+    # vulkan-1.dll 不需要 copy：Windows 显卡驱动已部署在 C:\Windows\System32\
     add_custom_command(TARGET VulkanTutorial POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
-            $<TARGET_FILE_DIR:VulkanTutorial>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/vulkan-1.dll"
             $<TARGET_FILE_DIR:VulkanTutorial>
     )
 endif()
