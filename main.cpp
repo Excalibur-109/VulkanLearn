@@ -65,7 +65,7 @@ void DestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEXT de
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
 
-    bool Complete() {
+    bool isComplete() {
         return graphicsFamily.has_value();
     }
 };
@@ -158,7 +158,7 @@ private:
 
     bool isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device);
-        return indices.Complete();
+        return indices.isComplete();
     }
 
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
@@ -173,7 +173,7 @@ private:
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
             }
-            if (indices.Complete()) {
+            if (indices.isComplete()) {
                 break;
             }
             i++;
