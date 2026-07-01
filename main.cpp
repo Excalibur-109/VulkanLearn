@@ -266,8 +266,8 @@ private:
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
         swapchainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
-        swapchainFormat = surfaceFormat.format;
-        swapchainExtent = extent;
+        swapchainImageFormat = surfaceFormat.format;
+        swapchainImageExtent = extent;
     }
 
     void createImageViews() {
@@ -276,7 +276,7 @@ private:
             VkImageViewCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             createInfo.image = swapchainImages[i];
-            createInfo.format = swapchainFormat;
+            createInfo.format = swapchainImageFormat;
             createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
             createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -487,8 +487,8 @@ private:
     VkSwapchainKHR swapchain;
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
-    VkFormat swapchainFormat;
-    VkExtent2D swapchainExtent;
+    VkFormat swapchainImageFormat;
+    VkExtent2D swapchainImageExtent;
 };
 
 int main()
