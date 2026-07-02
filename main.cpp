@@ -138,6 +138,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyCommandPool(device, commandPool);
         for (auto framebuffer : swapchainFramebuffers) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
