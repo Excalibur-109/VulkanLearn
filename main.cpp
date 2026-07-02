@@ -135,6 +135,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
         for (auto imageView : swapchainImageViews) {
@@ -366,8 +367,8 @@ private:
     }
 
     void createGraphicsPipeline() {
-        auto vertShaderCode = readFile("vert.spv");
-        auto fragShaderCode = readFile("frag.spv");
+        auto vertShaderCode = readFile("shaders/vert.spv");
+        auto fragShaderCode = readFile("shaders/frag.spv");
         auto vertShaderModule = createShaderModule(vertShaderCode);
         auto fragShaderModule = createShaderModule(fragShaderCode);
 
@@ -426,18 +427,18 @@ private:
         viewportState.pViewports = &viewport;
         viewportState.pScissors = &scissor;
 
-        VkPipelineRasterizationStateCreateInfo rasterzier{};
-        rasterzier.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterzier.depthClampEnable = VK_FALSE;
-        rasterzier.rasterizerDiscardEnable = VK_FALSE;
-        rasterzier.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterzier.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterzier.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        rasterzier.depthBiasEnable = VK_FALSE;
-        rasterzier.depthBiasConstantFactor = 0.0f;
-        rasterzier.depthBiasClamp = VK_FALSE;
-        rasterzier.depthBiasSlopeFactor = 0.0f;
-        rasterzier.lineWidth = 1.0f;
+        VkPipelineRasterizationStateCreateInfo rasterizier{};
+        rasterizier.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizier.depthClampEnable = VK_FALSE;
+        rasterizier.rasterizerDiscardEnable = VK_FALSE;
+        rasterizier.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizier.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizier.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizier.depthBiasEnable = VK_FALSE;
+        rasterizier.depthBiasConstantFactor = 0.0f;
+        rasterizier.depthBiasClamp = VK_FALSE;
+        rasterizier.depthBiasSlopeFactor = 0.0f;
+        rasterizier.lineWidth = 1.0f;
 
         VkPipelineMultisampleStateCreateInfo multisample{};
         multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -480,6 +481,27 @@ private:
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizier;
+        pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        pipelineInfo.basePipelineIndex = -1;
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics pipeline!");
         }
 
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
@@ -674,6 +696,7 @@ private:
     VkExtent2D swapchainExtent;
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;  
+    VkPipeline graphicsPipeline;
 };
 
 int main()
