@@ -1,4 +1,6 @@
 #include <vulkan/vulkan.h>
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -171,6 +173,7 @@ private:
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
     VkPipelineLayout pipelineLayout;  
     VkPipeline graphicsPipeline;
     std::vector<VkFramebuffer> swapchainFramebuffers;
@@ -217,8 +220,9 @@ private:
         createCommandPool();
         createVertexBuffer();
         createIndexBuffer();
-        createDescriptorPool();
         createUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
         createCommandBuffer();
         createSyncObjects();
     }
@@ -251,6 +255,7 @@ private:
 
         vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -335,6 +340,7 @@ private:
             vkDestroyBuffer(device, uniformBuffers[i], nullptr);
             vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
         }
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
         vkDestroyBuffer(device, indexBuffer, nullptr);
         vkFreeMemory(device, indexBufferMemory, nullptr);
@@ -664,18 +670,18 @@ private:
         viewportState.pViewports = &viewport;
         viewportState.pScissors = &scissor;
 
-        VkPipelineRasterizationStateCreateInfo rasterizier{};
-        rasterizier.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizier.depthClampEnable = VK_FALSE;
-        rasterizier.rasterizerDiscardEnable = VK_FALSE;
-        rasterizier.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizier.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizier.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        rasterizier.depthBiasEnable = VK_FALSE;
-        rasterizier.depthBiasConstantFactor = 0.0f;
-        rasterizier.depthBiasClamp = VK_FALSE;
-        rasterizier.depthBiasSlopeFactor = 0.0f;
-        rasterizier.lineWidth = 1.0f;
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f;
+        rasterizer.depthBiasClamp = VK_FALSE;
+        rasterizer.depthBiasSlopeFactor = 0.0f;
+        rasterizer.lineWidth = 1.0f;
 
         VkPipelineMultisampleStateCreateInfo multisample{};
         multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -727,7 +733,7 @@ private:
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizier;
+        pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisample;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
@@ -887,6 +893,36 @@ private:
         }
     }
 
+    void createDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+        allocInfo.pSetLayouts = layouts.data();
+        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor sets!");
+        }
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = uniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSets[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
+            descriptorWrite.pImageInfo = nullptr;
+            descriptorWrite.pTexelBufferView = nullptr;
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+        }
+    }
+
     void createUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
         uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -974,7 +1010,7 @@ private:
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
         
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indcies.size()), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
