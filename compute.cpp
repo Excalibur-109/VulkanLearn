@@ -227,6 +227,8 @@ private:
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    VkBuffer shaderStorageBuffer;
+    VkDeviceMemory shaderStorageBufferMemory;
     uint32_t mipLevels;
     VkImage textureImage;
     VkImageView textureImageView;

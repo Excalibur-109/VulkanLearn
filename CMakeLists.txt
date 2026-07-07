@@ -11,7 +11,7 @@ if(MSVC)
 endif()
 
 # main.cpp 跟 CMakeLists.txt 同级，直接列出来
-add_executable(VulkanTutorial main.cpp)
+add_executable(VulkanTutorial compute.cpp)
 
 find_package(Vulkan        REQUIRED)         # Module 模式：CMake 自带 FindVulkan 模块，依赖 VULKAN_SDK 环境变量
 find_package(glfw3         CONFIG REQUIRED)
