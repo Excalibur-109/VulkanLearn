@@ -204,6 +204,9 @@ private:
     VkImageView textureImageView;
     VkSampler textureSampler;
     VkDeviceMemory textureImageMemory;
+    VkImage depthImage;
+    VkImageView depthImageView;
+    VkDeviceMemory depthImageMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -236,6 +239,7 @@ private:
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
+        createDepthResources();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
@@ -555,7 +559,7 @@ private:
     void createImageViews() {
         swapchainImageViews.resize(swapchainImages.size());
         for (int i = 0; i < swapchainImages.size(); ++i) {
-            swapchainImageViews[i] = createImageView(swapchainImages[i], swapchainImageFormat);
+            swapchainImageViews[i] = createImageView(swapchainImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         }
     }
 
@@ -833,6 +837,38 @@ private:
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
+    void createDepthResources() {
+        VkFormat depthFormat = findDepthFormat();
+        createImage(swapchainExtent.width, swapchainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+
+    VkFormat findSupportedFormat(const std::vector<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+        for (VkFormat format : candidates) {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+                return format;
+            }
+            else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+                return format;
+            }
+        }
+        throw std::runtime_error("failed to find supported format!");
+    }
+
+    VkFormat findDepthFormat() {
+        return findSupportedFormat(
+            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
+    }
+
+    bool hasStencilComponent(VkFormat format) {
+        return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
     void createTextureImage() {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -861,7 +897,7 @@ private:
     }
 
     void createTextureImageView() {
-        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
+        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void createTextureSampler() {
@@ -891,13 +927,13 @@ private:
         }
     }
 
-    VkImageView createImageView(VkImage image, VkFormat format) {
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.aspectMask = aspectFlags;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
