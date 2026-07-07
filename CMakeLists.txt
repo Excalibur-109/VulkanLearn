@@ -16,8 +16,8 @@ add_executable(VulkanTutorial main.cpp)
 find_package(Vulkan        REQUIRED)         # Module 模式：CMake 自带 FindVulkan 模块，依赖 VULKAN_SDK 环境变量
 find_package(glfw3         CONFIG REQUIRED)
 find_package(glm           CONFIG REQUIRED)
-find_package(tinyobjloader CONFIG REQUIRED)
 find_package(stb           REQUIRED)         # Module 模式：vcpkg 的 stb 只提供 FindStb.cmake，且是 header-only
+find_package(tinyobjloader REQUIRED)
 
 target_include_directories(VulkanTutorial PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}           # main.cpp 在当前目录
