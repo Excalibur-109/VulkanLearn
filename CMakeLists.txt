@@ -6,12 +6,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    add_compile_options(/W4 /permissive- /Zc:__cplusplus)
+    # 源码里有中文注释，MSVC 需要明确按 UTF-8 读取，避免本地代码页误解析。
+    add_compile_options(/W4 /permissive- /Zc:__cplusplus /utf-8)
     add_compile_definitions(NOMINMAX)
 endif()
 
-# main.cpp 跟 CMakeLists.txt 同级，直接列出来
-add_executable(VulkanTutorial main.cpp)
+# main.cpp 是现有教程入口，RenderVulkan.cpp 是基于 RenderDefinitions.hpp 的 Vulkan 后端实现。
+add_executable(VulkanTutorial
+    main.cpp
+    RenderDefinitions.hpp
+    RenderVulkan.hpp
+    RenderVulkan.cpp
+)
 
 find_package(Vulkan        REQUIRED)         # Module 模式：CMake 自带 FindVulkan 模块，依赖 VULKAN_SDK 环境变量
 find_package(glfw3         CONFIG REQUIRED)
