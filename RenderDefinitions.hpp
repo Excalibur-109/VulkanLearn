@@ -299,80 +299,80 @@ struct AdapterDesc {
  * - 压缩格式 BC* 不是所有平台都支持，需要根据 RenderCapabilities 或后端能力降级。
  */
 enum class Format : u16 {
-    Undefined,
+    Undefined, ///< 未指定格式；用于默认值、自动推导或无附件。
 
-    R8_UNorm,
-    R8_SNorm,
-    R8_UInt,
-    R8_SInt,
-    RG8_UNorm,
-    RG8_SNorm,
-    RG8_UInt,
-    RG8_SInt,
-    RGBA8_UNorm,
-    RGBA8_SNorm,
-    RGBA8_UInt,
-    RGBA8_SInt,
-    RGBA8_SRGB,
-    BGRA8_UNorm,
-    BGRA8_SRGB,
+    R8_UNorm, ///< 单通道 8 位无符号归一化，shader 读取为 0..1；常用于灰度/遮罩。
+    R8_SNorm, ///< 单通道 8 位有符号归一化，shader 读取为 -1..1；常用于方向/偏移数据。
+    R8_UInt, ///< 单通道 8 位无符号整数，shader 读取为 uint；常用于 ID/索引。
+    R8_SInt, ///< 单通道 8 位有符号整数，shader 读取为 int。
+    RG8_UNorm, ///< 双通道 8 位无符号归一化；常用于 RG mask、压缩法线的 XY。
+    RG8_SNorm, ///< 双通道 8 位有符号归一化；常用于单位向量 XY。
+    RG8_UInt, ///< 双通道 8 位无符号整数。
+    RG8_SInt, ///< 双通道 8 位有符号整数。
+    RGBA8_UNorm, ///< 四通道 8 位无符号归一化；常用 LDR 颜色/普通贴图格式。
+    RGBA8_SNorm, ///< 四通道 8 位有符号归一化；可用于需要 -1..1 的向量数据。
+    RGBA8_UInt, ///< 四通道 8 位无符号整数；常用于整数属性或 ID buffer。
+    RGBA8_SInt, ///< 四通道 8 位有符号整数。
+    RGBA8_SRGB, ///< 四通道 8 位 sRGB 颜色；采样时转换到线性空间。
+    BGRA8_UNorm, ///< BGRA 排列 8 位无符号归一化；Windows swapchain 常见。
+    BGRA8_SRGB, ///< BGRA 排列 8 位 sRGB；Windows sRGB swapchain 常见。
 
-    R16_UNorm,
-    R16_SNorm,
-    R16_UInt,
-    R16_SInt,
-    R16_Float,
-    RG16_UNorm,
-    RG16_SNorm,
-    RG16_UInt,
-    RG16_SInt,
-    RG16_Float,
-    RGBA16_UNorm,
-    RGBA16_SNorm,
-    RGBA16_UInt,
-    RGBA16_SInt,
-    RGBA16_Float,
+    R16_UNorm, ///< 单通道 16 位无符号归一化；比 R8 更高精度的 mask/高度图。
+    R16_SNorm, ///< 单通道 16 位有符号归一化；高精度 -1..1 数据。
+    R16_UInt, ///< 单通道 16 位无符号整数。
+    R16_SInt, ///< 单通道 16 位有符号整数。
+    R16_Float, ///< 单通道 16 位浮点；常用于半精度高度/亮度/中间结果。
+    RG16_UNorm, ///< 双通道 16 位无符号归一化。
+    RG16_SNorm, ///< 双通道 16 位有符号归一化。
+    RG16_UInt, ///< 双通道 16 位无符号整数。
+    RG16_SInt, ///< 双通道 16 位有符号整数。
+    RG16_Float, ///< 双通道 16 位浮点；常用于半精度向量数据。
+    RGBA16_UNorm, ///< 四通道 16 位无符号归一化；高精度颜色但非 HDR 浮点。
+    RGBA16_SNorm, ///< 四通道 16 位有符号归一化。
+    RGBA16_UInt, ///< 四通道 16 位无符号整数。
+    RGBA16_SInt, ///< 四通道 16 位有符号整数。
+    RGBA16_Float, ///< 四通道 16 位浮点；常用 HDR 渲染目标格式。
 
-    R32_UInt,
-    R32_SInt,
-    R32_Float,
-    RG32_UInt,
-    RG32_SInt,
-    RG32_Float,
-    RGB32_UInt,
-    RGB32_SInt,
-    RGB32_Float,
-    RGBA32_UInt,
-    RGBA32_SInt,
-    RGBA32_Float,
+    R32_UInt, ///< 单通道 32 位无符号整数；常用于大 ID、计数器、索引图。
+    R32_SInt, ///< 单通道 32 位有符号整数。
+    R32_Float, ///< 单通道 32 位浮点；高精度标量、深度拷贝或计算结果。
+    RG32_UInt, ///< 双通道 32 位无符号整数。
+    RG32_SInt, ///< 双通道 32 位有符号整数。
+    RG32_Float, ///< 双通道 32 位浮点。
+    RGB32_UInt, ///< 三通道 32 位无符号整数；支持度可能弱于 RGBA32。
+    RGB32_SInt, ///< 三通道 32 位有符号整数；支持度可能弱于 RGBA32。
+    RGB32_Float, ///< 三通道 32 位浮点；支持度可能弱于 RGBA32。
+    RGBA32_UInt, ///< 四通道 32 位无符号整数。
+    RGBA32_SInt, ///< 四通道 32 位有符号整数。
+    RGBA32_Float, ///< 四通道 32 位浮点；高精度 HDR/计算格式，带宽成本高。
 
-    RGB10A2_UNorm,
-    R11G11B10_Float,
+    RGB10A2_UNorm, ///< RGB 各 10 位、A 2 位无符号归一化；常用于 HDR-ish swapchain/颜色。
+    R11G11B10_Float, ///< 11/11/10 位无符号浮点 RGB；常用于紧凑 HDR 渲染目标，无 alpha。
 
-    D16_UNorm,
-    D24_UNorm,
-    S8_UInt,
-    D24_UNorm_S8_UInt,
-    D32_Float,
-    D32_Float_S8_UInt,
+    D16_UNorm, ///< 16 位无符号归一化深度格式。
+    D24_UNorm, ///< 24 位无符号归一化深度格式；平台支持差异较大。
+    S8_UInt, ///< 8 位 stencil-only 格式。
+    D24_UNorm_S8_UInt, ///< 24 位深度 + 8 位 stencil 的 depth-stencil 格式。
+    D32_Float, ///< 32 位浮点深度格式；常用高精度 depth attachment。
+    D32_Float_S8_UInt, ///< 32 位浮点深度 + 8 位 stencil；内存成本较高。
 
-    BC1RGBA_UNorm,
-    BC1RGBA_SRGB,
-    BC3RGBA_UNorm,
-    BC3RGBA_SRGB,
-    BC5RG_UNorm,
-    BC5RG_SNorm,
-    BC7RGBA_UNorm,
-    BC7RGBA_SRGB,
+    BC1RGBA_UNorm, ///< BC1/DXT1 压缩 RGBA 线性格式；适合低 alpha 需求贴图。
+    BC1RGBA_SRGB, ///< BC1/DXT1 压缩 sRGB 颜色格式。
+    BC3RGBA_UNorm, ///< BC3/DXT5 压缩 RGBA 线性格式；适合带 alpha 贴图。
+    BC3RGBA_SRGB, ///< BC3/DXT5 压缩 sRGB 颜色格式。
+    BC5RG_UNorm, ///< BC5 双通道无符号压缩；常用于法线/向量 XY 数据。
+    BC5RG_SNorm, ///< BC5 双通道有符号压缩；常用于 signed normal XY。
+    BC7RGBA_UNorm, ///< BC7 高质量 RGBA 压缩线性格式；桌面 GPU 常用。
+    BC7RGBA_SRGB, ///< BC7 高质量 sRGB 颜色压缩格式；桌面 GPU 常用。
 
-    ETC2RGB8_UNorm,
-    ETC2RGB8_SRGB,
-    ETC2RGBA8_UNorm,
-    ETC2RGBA8_SRGB,
-    ASTC4x4_UNorm,
-    ASTC4x4_SRGB,
-    ASTC8x8_UNorm,
-    ASTC8x8_SRGB
+    ETC2RGB8_UNorm, ///< ETC2 RGB 8 位压缩线性格式；移动端常见。
+    ETC2RGB8_SRGB, ///< ETC2 RGB 8 位压缩 sRGB 格式；移动端常见。
+    ETC2RGBA8_UNorm, ///< ETC2 RGBA 8 位压缩线性格式。
+    ETC2RGBA8_SRGB, ///< ETC2 RGBA 8 位压缩 sRGB 格式。
+    ASTC4x4_UNorm, ///< ASTC 4x4 高质量压缩线性格式；质量高、体积相对大。
+    ASTC4x4_SRGB, ///< ASTC 4x4 高质量压缩 sRGB 格式。
+    ASTC8x8_UNorm, ///< ASTC 8x8 高压缩率线性格式；质量低于 4x4。
+    ASTC8x8_SRGB ///< ASTC 8x8 高压缩率 sRGB 格式。
 };
 
 /// 判断格式是否包含深度分量，用于选择 depth attachment 或 depth texture 采样路径。
@@ -410,8 +410,8 @@ enum class SampleCount : u8 {
 enum class PresentMode : u8 {
     Immediate,
     Mailbox,
-    Fifo,
-    FifoRelaxed
+    FIFO,
+    FIFORelaxed
 };
 
 /**
@@ -1455,7 +1455,7 @@ struct SwapchainDesc {
     Extent2D extent{}; ///< drawable 尺寸。
     Format preferredFormat = Format::BGRA8_SRGB; ///< 期望后备缓冲格式，后端可根据平台支持选择最接近格式。
     ColorSpace colorSpace = ColorSpace::SRGBNonlinear; ///< 期望色彩空间。
-    PresentMode presentMode = PresentMode::Fifo; ///< 呈现模式。
+    PresentMode presentMode = PresentMode::FIFO; ///< 呈现模式。
     u32 imageCount = 2; ///< swapchain image 数量，常见为 2 或 3。
     SurfaceTransform preTransform = SurfaceTransform::Identity; ///< 呈现前表面变换。
     CompositeAlphaMode compositeAlpha = CompositeAlphaMode::Opaque; ///< 与系统 compositor 的 alpha 合成方式。
@@ -1858,7 +1858,7 @@ struct PresentDesc {
     SwapchainHandle swapchain{}; ///< 目标 swapchain。
     u32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
     std::vector<SemaphoreHandle> waitSemaphores; ///< present 前需要等待的 semaphore。
-    PresentMode presentMode = PresentMode::Fifo; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
+    PresentMode presentMode = PresentMode::FIFO; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
     bool allowTearing = false; ///< 本次呈现是否允许 tearing。
 };
 
@@ -2108,4 +2108,3 @@ struct RenderCapabilities {
     bool supportsTextureCompressionETC2 = false; ///< 是否支持 ETC2 压缩格式。
     bool supportsTextureCompressionASTC = false; ///< 是否支持 ASTC 压缩格式。
 };
-
