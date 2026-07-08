@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <cstddef>
@@ -10,6 +10,21 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+
+/// 固定宽度无符号 8 位整数。
+using u8 = std::uint8_t;
+
+/// 固定宽度无符号 16 位整数。
+using u16 = std::uint16_t;
+
+/// 固定宽度无符号 32 位整数。
+using u32 = std::uint32_t;
+
+/// 固定宽度无符号 64 位整数。
+using u64 = std::uint64_t;
+
+/// 固定宽度有符号 32 位整数。
+using i32 = std::int32_t;
 
 /**
  * @file RenderDefinitions.hpp
@@ -28,16 +43,14 @@
  * - 每个结构都尽量表达“意图”，而不是表达某个 API 的创建参数。
  * - 后端可以根据 RenderCapabilities 降级或选择不同实现路径。
  */
-namespace Engine::Render {
-
 /// 无效数组下标，常用于 optional index 或查找失败的返回值。
-inline constexpr std::uint32_t INVALID_INDEX = std::numeric_limits<std::uint32_t>::max();
+inline constexpr u32 INVALID_INDEX = std::numeric_limits<u32>::max();
 
-/// 0 被保留为无效句柄，真实后端资源句柄从非 0 值开始分配。
-inline constexpr std::uint64_t INVALID_HANDLE_VALUE = 0;
+/// 0 被保留为无效渲染资源句柄，真实后端资源句柄从非 0 值开始分配。
+inline constexpr u64 INVALID_RENDER_HANDLE_VALUE = 0;
 
 /// 表示 buffer binding 或 barrier 覆盖资源剩余全部范围。
-inline constexpr std::uint64_t WHOLE_SIZE = std::numeric_limits<std::uint64_t>::max();
+inline constexpr u64 WHOLE_SIZE = std::numeric_limits<u64>::max();
 
 /**
  * @brief 类型安全的轻量资源句柄。
@@ -49,18 +62,18 @@ inline constexpr std::uint64_t WHOLE_SIZE = std::numeric_limits<std::uint64_t>::
 template <typename Tag>
 struct Handle {
     /// 资源管理器分配的逻辑 id；0 表示无效。
-    std::uint64_t value = INVALID_HANDLE_VALUE;
+    u64 value = INVALID_RENDER_HANDLE_VALUE;
 
     constexpr Handle() noexcept = default;
 
     /// 显式从资源 id 构造句柄，避免整数被意外隐式转换成资源句柄。
-    explicit constexpr Handle(std::uint64_t handleValue) noexcept
+    explicit constexpr Handle(u64 handleValue) noexcept
         : value(handleValue) {
     }
 
     /// 判断句柄是否指向一个已分配的逻辑资源。
     [[nodiscard]] constexpr bool isValid() const noexcept {
-        return value != INVALID_HANDLE_VALUE;
+        return value != INVALID_RENDER_HANDLE_VALUE;
     }
 
     [[nodiscard]] explicit constexpr operator bool() const noexcept {
@@ -150,35 +163,33 @@ using MeshHandle = Handle<MeshTag>;
 /// 引擎层 material 资源句柄。
 using MaterialHandle = Handle<MaterialTag>;
 
-namespace detail {
 template <typename Enum>
-[[nodiscard]] constexpr auto toUnderlying(Enum value) noexcept {
+[[nodiscard]] constexpr auto renderEnumToUnderlying(Enum value) noexcept {
     return static_cast<std::underlying_type_t<Enum>>(value);
 }
 
 template <typename Enum>
-[[nodiscard]] constexpr Enum bitOr(Enum lhs, Enum rhs) noexcept {
-    return static_cast<Enum>(toUnderlying(lhs) | toUnderlying(rhs));
+[[nodiscard]] constexpr Enum renderEnumBitOr(Enum lhs, Enum rhs) noexcept {
+    return static_cast<Enum>(renderEnumToUnderlying(lhs) | renderEnumToUnderlying(rhs));
 }
 
 template <typename Enum>
-[[nodiscard]] constexpr Enum bitAnd(Enum lhs, Enum rhs) noexcept {
-    return static_cast<Enum>(toUnderlying(lhs) & toUnderlying(rhs));
+[[nodiscard]] constexpr Enum renderEnumBitAnd(Enum lhs, Enum rhs) noexcept {
+    return static_cast<Enum>(renderEnumToUnderlying(lhs) & renderEnumToUnderlying(rhs));
 }
-} // namespace detail
 
 template <typename Enum>
 [[nodiscard]] constexpr bool hasAny(Enum value, Enum flags) noexcept {
-    return (detail::toUnderlying(value) & detail::toUnderlying(flags)) != 0;
+    return (renderEnumToUnderlying(value) & renderEnumToUnderlying(flags)) != 0;
 }
 
 template <typename Enum>
 [[nodiscard]] constexpr bool hasAll(Enum value, Enum flags) noexcept {
-    return (detail::toUnderlying(value) & detail::toUnderlying(flags)) == detail::toUnderlying(flags);
+    return (renderEnumToUnderlying(value) & renderEnumToUnderlying(flags)) == renderEnumToUnderlying(flags);
 }
 
 /// 当前后端使用的图形 API，用于能力查询、日志和后端分支。
-enum class GraphicsApi : std::uint8_t {
+enum class GraphicsApi : u8 {
     Unknown,
     Vulkan,
     Direct3D11,
@@ -189,7 +200,7 @@ enum class GraphicsApi : std::uint8_t {
 };
 
 /// GPU 队列类型。不是所有 API 都公开独立队列，后端可以把多个类型映射到同一个实际队列。
-enum class QueueType : std::uint8_t {
+enum class QueueType : u8 {
     Graphics,
     Compute,
     Transfer,
@@ -197,50 +208,50 @@ enum class QueueType : std::uint8_t {
 };
 
 /// GPU 选择偏好。移动端/笔记本上可用于选择省电或高性能适配器。
-enum class PowerPreference : std::uint8_t {
+enum class PowerPreference : u8 {
     Default,
     LowPower,
     HighPerformance
 };
 
 /// 后端验证层开关级别。
-enum class ValidationMode : std::uint8_t {
+enum class ValidationMode : u8 {
     Disabled,
     Enabled,
     GpuAssisted
 };
 
 /// 引擎希望启用的渲染特性位。后端初始化时可根据设备能力做裁剪或报错。
-enum class RenderFeature : std::uint64_t {
-    None = 0,
-    Compute = 1ull << 0,
-    GeometryShader = 1ull << 1,
-    Tessellation = 1ull << 2,
-    MeshShader = 1ull << 3,
-    RayTracing = 1ull << 4,
-    Bindless = 1ull << 5,
-    SamplerAnisotropy = 1ull << 6,
-    SamplerCompare = 1ull << 7,
-    TimestampQuery = 1ull << 8,
-    OcclusionQuery = 1ull << 9,
-    PipelineStatisticsQuery = 1ull << 10,
-    IndirectDraw = 1ull << 11,
-    DrawIndirectCount = 1ull << 12,
-    DynamicRendering = 1ull << 13,
-    ConservativeRasterization = 1ull << 14,
-    TextureCompressionBC = 1ull << 15,
-    TextureCompressionETC2 = 1ull << 16,
-    TextureCompressionASTC = 1ull << 17,
-    Multiview = 1ull << 18,
-    DebugMarkers = 1ull << 19
+enum class RenderFeature : u64 {
+    None = 0, ///< 不请求任何额外功能。
+    Compute = 1ull << 0, ///< 启用 compute shader 和 compute queue/pass。
+    GeometryShader = 1ull << 1, ///< 启用 geometry shader 阶段。
+    Tessellation = 1ull << 2, ///< 启用 tessellation control/evaluation shader 阶段。
+    MeshShader = 1ull << 3, ///< 启用 task/mesh shader 现代几何管线。
+    RayTracing = 1ull << 4, ///< 启用硬件光追相关资源和 shader 阶段。
+    Bindless = 1ull << 5, ///< 启用大规模资源数组和 shader 动态索引。
+    SamplerAnisotropy = 1ull << 6, ///< 启用各向异性纹理过滤。
+    SamplerCompare = 1ull << 7, ///< 启用比较采样器，常用于 shadow map。
+    TimestampQuery = 1ull << 8, ///< 启用 GPU timestamp 查询，用于性能计时。
+    OcclusionQuery = 1ull << 9, ///< 启用遮挡查询，用于可见性判断。
+    PipelineStatisticsQuery = 1ull << 10, ///< 启用管线统计查询，例如 shader 调用次数。
+    IndirectDraw = 1ull << 11, ///< 启用 GPU 参数驱动的 indirect draw/dispatch。
+    DrawIndirectCount = 1ull << 12, ///< 启用 GPU count buffer 控制 indirect draw 数量。
+    DynamicRendering = 1ull << 13, ///< 启用无传统 render pass/framebuffer 的动态渲染路径。
+    ConservativeRasterization = 1ull << 14, ///< 启用保守光栅化，常用于遮挡或体素化。
+    TextureCompressionBC = 1ull << 15, ///< 启用 BC/DXT 系列压缩纹理格式。
+    TextureCompressionETC2 = 1ull << 16, ///< 启用 ETC2 压缩纹理格式，移动端常见。
+    TextureCompressionASTC = 1ull << 17, ///< 启用 ASTC 压缩纹理格式，移动端和现代 GPU 常见。
+    Multiview = 1ull << 18, ///< 启用单次 pass 渲染多个 view，常用于 VR/立体渲染。
+    DebugMarkers = 1ull << 19 ///< 启用 GPU 调试标记和对象命名。
 };
 
 [[nodiscard]] constexpr RenderFeature operator|(RenderFeature lhs, RenderFeature rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr RenderFeature operator&(RenderFeature lhs, RenderFeature rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr RenderFeature& operator|=(RenderFeature& lhs, RenderFeature rhs) noexcept {
@@ -257,7 +268,7 @@ struct RenderBackendDesc {
     ValidationMode validation = ValidationMode::Enabled; ///< 是否启用验证层/调试层。
     RenderFeature requiredFeatures = RenderFeature::None; ///< 必须支持的功能，不支持时初始化应失败。
     RenderFeature optionalFeatures = RenderFeature::DebugMarkers | RenderFeature::TimestampQuery; ///< 可选功能，后端尽量开启。
-    std::uint32_t framesInFlight = 2; ///< CPU/GPU 并行帧数。
+    u32 framesInFlight = 2; ///< CPU/GPU 并行帧数。
     bool enableGpuCrashDumps = false; ///< 是否启用 GPU 崩溃转储，具体支持由后端决定。
     bool enablePipelineCache = true; ///< 是否启用管线缓存。
 };
@@ -265,7 +276,7 @@ struct RenderBackendDesc {
 /// 队列族/队列能力描述，供后端选择 graphics/compute/transfer/present 队列。
 struct QueueDesc {
     QueueType type = QueueType::Graphics; ///< 队列类型。
-    std::uint32_t count = 1; ///< 希望创建的队列数量。
+    u32 count = 1; ///< 希望创建的队列数量。
     float priority = 1.0F; ///< 队列优先级，范围通常是 0 到 1。
 };
 
@@ -273,8 +284,8 @@ struct QueueDesc {
 struct AdapterDesc {
     std::string name; ///< GPU/适配器名称。
     GraphicsApi api = GraphicsApi::Unknown; ///< 该适配器所属后端 API。
-    std::uint64_t dedicatedVideoMemory = 0; ///< 独立显存字节数。
-    std::uint64_t sharedSystemMemory = 0; ///< 可共享系统内存字节数。
+    u64 dedicatedVideoMemory = 0; ///< 独立显存字节数。
+    u64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
     bool isIntegrated = false; ///< 是否集成显卡。
     bool isSoftware = false; ///< 是否软件适配器。
 };
@@ -287,101 +298,101 @@ struct AdapterDesc {
  * - Depth/Stencil 格式不能当普通 color attachment。
  * - 压缩格式 BC* 不是所有平台都支持，需要根据 RenderCapabilities 或后端能力降级。
  */
-enum class Format : std::uint16_t {
+enum class Format : u16 {
     Undefined,
 
-    R8UNorm,
-    R8SNorm,
-    R8UInt,
-    R8SInt,
-    RG8UNorm,
-    RG8SNorm,
-    RG8UInt,
-    RG8SInt,
-    RGBA8UNorm,
-    RGBA8SNorm,
-    RGBA8UInt,
-    RGBA8SInt,
-    RGBA8SRGB,
-    BGRA8UNorm,
-    BGRA8SRGB,
+    R8_UNorm,
+    R8_SNorm,
+    R8_UInt,
+    R8_SInt,
+    RG8_UNorm,
+    RG8_SNorm,
+    RG8_UInt,
+    RG8_SInt,
+    RGBA8_UNorm,
+    RGBA8_SNorm,
+    RGBA8_UInt,
+    RGBA8_SInt,
+    RGBA8_SRGB,
+    BGRA8_UNorm,
+    BGRA8_SRGB,
 
-    R16UNorm,
-    R16SNorm,
-    R16UInt,
-    R16SInt,
-    R16Float,
-    RG16UNorm,
-    RG16SNorm,
-    RG16UInt,
-    RG16SInt,
-    RG16Float,
-    RGBA16UNorm,
-    RGBA16SNorm,
-    RGBA16UInt,
-    RGBA16SInt,
-    RGBA16Float,
+    R16_UNorm,
+    R16_SNorm,
+    R16_UInt,
+    R16_SInt,
+    R16_Float,
+    RG16_UNorm,
+    RG16_SNorm,
+    RG16_UInt,
+    RG16_SInt,
+    RG16_Float,
+    RGBA16_UNorm,
+    RGBA16_SNorm,
+    RGBA16_UInt,
+    RGBA16_SInt,
+    RGBA16_Float,
 
-    R32UInt,
-    R32SInt,
-    R32Float,
-    RG32UInt,
-    RG32SInt,
-    RG32Float,
-    RGB32UInt,
-    RGB32SInt,
-    RGB32Float,
-    RGBA32UInt,
-    RGBA32SInt,
-    RGBA32Float,
+    R32_UInt,
+    R32_SInt,
+    R32_Float,
+    RG32_UInt,
+    RG32_SInt,
+    RG32_Float,
+    RGB32_UInt,
+    RGB32_SInt,
+    RGB32_Float,
+    RGBA32_UInt,
+    RGBA32_SInt,
+    RGBA32_Float,
 
-    RGB10A2UNorm,
-    R11G11B10Float,
+    RGB10A2_UNorm,
+    R11G11B10_Float,
 
-    D16UNorm,
-    D24UNorm,
-    S8UInt,
-    D24UNormS8UInt,
-    D32Float,
-    D32FloatS8UInt,
+    D16_UNorm,
+    D24_UNorm,
+    S8_UInt,
+    D24_UNorm_S8_UInt,
+    D32_Float,
+    D32_Float_S8_UInt,
 
-    BC1RGBAUNorm,
-    BC1RGBASRGB,
-    BC3RGBAUNorm,
-    BC3RGBASRGB,
-    BC5RGUNorm,
-    BC5RGSNorm,
-    BC7RGBAUNorm,
-    BC7RGBASRGB,
+    BC1RGBA_UNorm,
+    BC1RGBA_SRGB,
+    BC3RGBA_UNorm,
+    BC3RGBA_SRGB,
+    BC5RG_UNorm,
+    BC5RG_SNorm,
+    BC7RGBA_UNorm,
+    BC7RGBA_SRGB,
 
-    ETC2RGB8UNorm,
-    ETC2RGB8SRGB,
-    ETC2RGBA8UNorm,
-    ETC2RGBA8SRGB,
-    ASTC4x4UNorm,
-    ASTC4x4SRGB,
-    ASTC8x8UNorm,
-    ASTC8x8SRGB
+    ETC2RGB8_UNorm,
+    ETC2RGB8_SRGB,
+    ETC2RGBA8_UNorm,
+    ETC2RGBA8_SRGB,
+    ASTC4x4_UNorm,
+    ASTC4x4_SRGB,
+    ASTC8x8_UNorm,
+    ASTC8x8_SRGB
 };
 
 /// 判断格式是否包含深度分量，用于选择 depth attachment 或 depth texture 采样路径。
 [[nodiscard]] constexpr bool isDepthFormat(Format format) noexcept {
-    return format == Format::D16UNorm ||
-           format == Format::D24UNorm ||
-           format == Format::D24UNormS8UInt ||
-           format == Format::D32Float ||
-           format == Format::D32FloatS8UInt;
+    return format == Format::D16_UNorm ||
+           format == Format::D24_UNorm ||
+           format == Format::D24_UNorm_S8_UInt ||
+           format == Format::D32_Float ||
+           format == Format::D32_Float_S8_UInt;
 }
 
 /// 判断格式是否包含 stencil 分量，用于模板测试和 depth-stencil attachment 创建。
 [[nodiscard]] constexpr bool hasStencilFormat(Format format) noexcept {
-    return format == Format::S8UInt ||
-           format == Format::D24UNormS8UInt ||
-           format == Format::D32FloatS8UInt;
+    return format == Format::S8_UInt ||
+           format == Format::D24_UNorm_S8_UInt ||
+           format == Format::D32_Float_S8_UInt;
 }
 
 /// 多重采样数量，对应 Vulkan sample count / D3D sample count / Metal sampleCount。
-enum class SampleCount : std::uint8_t {
+enum class SampleCount : u8 {
     Count1 = 1,
     Count2 = 2,
     Count4 = 4,
@@ -396,7 +407,7 @@ enum class SampleCount : std::uint8_t {
  *
  * Fifo 是最通用的垂直同步模式；Immediate/Mailbox 可能不被所有平台支持。
  */
-enum class PresentMode : std::uint8_t {
+enum class PresentMode : u8 {
     Immediate,
     Mailbox,
     Fifo,
@@ -409,7 +420,7 @@ enum class PresentMode : std::uint8_t {
  * 显式 API（Vulkan/D3D12）需要把这些状态翻译成 image layout/resource state/barrier。
  * 隐式 API（OpenGL/D3D11）可以把它用于调试验证或减少不必要的绑定错误。
  */
-enum class ResourceState : std::uint16_t {
+enum class ResourceState : u16 {
     Undefined,
     Common,
     CopySource,
@@ -432,7 +443,7 @@ enum class ResourceState : std::uint16_t {
 };
 
 /// GPU 管线阶段位。需要精确同步时可配合 AccessFlags 构造 barrier。
-enum class PipelineStage : std::uint64_t {
+enum class PipelineStage : u64 {
     None = 0,
     TopOfPipe = 1ull << 0,
     DrawIndirect = 1ull << 1,
@@ -458,11 +469,11 @@ enum class PipelineStage : std::uint64_t {
 };
 
 [[nodiscard]] constexpr PipelineStage operator|(PipelineStage lhs, PipelineStage rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr PipelineStage operator&(PipelineStage lhs, PipelineStage rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr PipelineStage& operator|=(PipelineStage& lhs, PipelineStage rhs) noexcept {
@@ -471,7 +482,7 @@ constexpr PipelineStage& operator|=(PipelineStage& lhs, PipelineStage rhs) noexc
 }
 
 /// GPU 资源访问类型位。比 ResourceState 更接近后端 barrier 所需的 access mask。
-enum class AccessFlags : std::uint64_t {
+enum class AccessFlags : u64 {
     None = 0,
     IndirectCommandRead = 1ull << 0,
     IndexRead = 1ull << 1,
@@ -495,11 +506,11 @@ enum class AccessFlags : std::uint64_t {
 };
 
 [[nodiscard]] constexpr AccessFlags operator|(AccessFlags lhs, AccessFlags rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr AccessFlags operator&(AccessFlags lhs, AccessFlags rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr AccessFlags& operator|=(AccessFlags& lhs, AccessFlags rhs) noexcept {
@@ -509,28 +520,28 @@ constexpr AccessFlags& operator|=(AccessFlags& lhs, AccessFlags rhs) noexcept {
 
 /// 二维尺寸，常用于窗口、swapchain、viewport/scissor 和 2D 纹理。
 struct Extent2D {
-    std::uint32_t width = 1;
-    std::uint32_t height = 1;
+    u32 width = 1;
+    u32 height = 1;
 };
 
 /// 三维尺寸，2D 纹理时 depth 通常为 1，数组层数单独由 arrayLayers 表示。
 struct Extent3D {
-    std::uint32_t width = 1;
-    std::uint32_t height = 1;
-    std::uint32_t depth = 1;
+    u32 width = 1;
+    u32 height = 1;
+    u32 depth = 1;
 };
 
 /// 二维整数偏移，主要用于 scissor、copy region 和贴图区域更新。
 struct Offset2D {
-    std::int32_t x = 0;
-    std::int32_t y = 0;
+    i32 x = 0;
+    i32 y = 0;
 };
 
 /// 三维整数偏移，主要用于 buffer-to-texture 上传和 3D texture copy。
 struct Offset3D {
-    std::int32_t x = 0;
-    std::int32_t y = 0;
-    std::int32_t z = 0;
+    i32 x = 0;
+    i32 y = 0;
+    i32 z = 0;
 };
 
 /// 二维矩形区域。offset 是左上角，extent 是宽高。
@@ -560,7 +571,7 @@ struct ClearColor {
 /// depth-stencil attachment 的清屏值，默认 depth=1 表示远平面。
 struct ClearDepthStencil {
     float depth = 1.0F;
-    std::uint32_t stencil = 0;
+    u32 stencil = 0;
 };
 
 /// 同时容纳颜色和深度模板清屏值，RenderGraph attachment 可按实际类型读取对应字段。
@@ -570,7 +581,7 @@ struct ClearValue {
 };
 
 /// texture 子资源 aspect 位，用于区分 color/depth/stencil/plane。
-enum class TextureAspect : std::uint32_t {
+enum class TextureAspect : u32 {
     None = 0,
     Color = 1u << 0,
     Depth = 1u << 1,
@@ -582,11 +593,11 @@ enum class TextureAspect : std::uint32_t {
 };
 
 [[nodiscard]] constexpr TextureAspect operator|(TextureAspect lhs, TextureAspect rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr TextureAspect operator&(TextureAspect lhs, TextureAspect rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr TextureAspect& operator|=(TextureAspect& lhs, TextureAspect rhs) noexcept {
@@ -595,7 +606,7 @@ constexpr TextureAspect& operator|=(TextureAspect& lhs, TextureAspect rhs) noexc
 }
 
 /// buffer 的用途位。创建 buffer 时必须声明后续会如何使用，显式 API 会用它设置 usage flags。
-enum class BufferUsage : std::uint32_t {
+enum class BufferUsage : u32 {
     None = 0,
     TransferSource = 1u << 0,
     TransferDestination = 1u << 1,
@@ -608,11 +619,11 @@ enum class BufferUsage : std::uint32_t {
 };
 
 [[nodiscard]] constexpr BufferUsage operator|(BufferUsage lhs, BufferUsage rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr BufferUsage operator&(BufferUsage lhs, BufferUsage rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr BufferUsage& operator|=(BufferUsage& lhs, BufferUsage rhs) noexcept {
@@ -621,7 +632,7 @@ constexpr BufferUsage& operator|=(BufferUsage& lhs, BufferUsage rhs) noexcept {
 }
 
 /// buffer 创建附加标志，用于表达生命周期和后端内存选择提示。
-enum class BufferCreateFlags : std::uint32_t {
+enum class BufferCreateFlags : u32 {
     None = 0,
     DedicatedMemory = 1u << 0,
     SparseBinding = 1u << 1,
@@ -630,11 +641,11 @@ enum class BufferCreateFlags : std::uint32_t {
 };
 
 [[nodiscard]] constexpr BufferCreateFlags operator|(BufferCreateFlags lhs, BufferCreateFlags rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr BufferCreateFlags operator&(BufferCreateFlags lhs, BufferCreateFlags rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr BufferCreateFlags& operator|=(BufferCreateFlags& lhs, BufferCreateFlags rhs) noexcept {
@@ -643,7 +654,7 @@ constexpr BufferCreateFlags& operator|=(BufferCreateFlags& lhs, BufferCreateFlag
 }
 
 /// texture/image 的用途位。一个 texture 可以同时是采样贴图、渲染目标或拷贝目标。
-enum class TextureUsage : std::uint32_t {
+enum class TextureUsage : u32 {
     None = 0,
     TransferSource = 1u << 0,
     TransferDestination = 1u << 1,
@@ -656,11 +667,11 @@ enum class TextureUsage : std::uint32_t {
 };
 
 [[nodiscard]] constexpr TextureUsage operator|(TextureUsage lhs, TextureUsage rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr TextureUsage operator&(TextureUsage lhs, TextureUsage rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr TextureUsage& operator|=(TextureUsage& lhs, TextureUsage rhs) noexcept {
@@ -669,7 +680,7 @@ constexpr TextureUsage& operator|=(TextureUsage& lhs, TextureUsage rhs) noexcept
 }
 
 /// texture 创建附加标志，用于表达 cube、格式重解释、稀疏资源等需求。
-enum class TextureCreateFlags : std::uint32_t {
+enum class TextureCreateFlags : u32 {
     None = 0,
     CubeCompatible = 1u << 0,
     MutableFormat = 1u << 1,
@@ -680,11 +691,11 @@ enum class TextureCreateFlags : std::uint32_t {
 };
 
 [[nodiscard]] constexpr TextureCreateFlags operator|(TextureCreateFlags lhs, TextureCreateFlags rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr TextureCreateFlags operator&(TextureCreateFlags lhs, TextureCreateFlags rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr TextureCreateFlags& operator|=(TextureCreateFlags& lhs, TextureCreateFlags rhs) noexcept {
@@ -693,7 +704,7 @@ constexpr TextureCreateFlags& operator|=(TextureCreateFlags& lhs, TextureCreateF
 }
 
 /// 资源内存访问方向。后端可据此选择显存、本地可映射内存或读回内存。
-enum class MemoryUsage : std::uint8_t {
+enum class MemoryUsage : u8 {
     GpuOnly,
     CpuToGpu,
     GpuToCpu,
@@ -701,21 +712,21 @@ enum class MemoryUsage : std::uint8_t {
 };
 
 /// 资源生命周期提示，帮助资源分配器决定是否池化、复用或立即释放。
-enum class ResourceLifetime : std::uint8_t {
+enum class ResourceLifetime : u8 {
     Persistent,
     PerFrame,
     Transient
 };
 
 /// 纹理资源本身的维度，不包含 view 维度重解释。
-enum class TextureDimension : std::uint8_t {
+enum class TextureDimension : u8 {
     Texture1D,
     Texture2D,
     Texture3D
 };
 
 /// 纹理视图维度。一个 2D array texture 可以被创建为 View2DArray 或单层 View2D。
-enum class TextureViewDimension : std::uint8_t {
+enum class TextureViewDimension : u8 {
     View1D,
     View1DArray,
     View2D,
@@ -726,19 +737,19 @@ enum class TextureViewDimension : std::uint8_t {
 };
 
 /// 纹理采样过滤方式。
-enum class FilterMode : std::uint8_t {
+enum class FilterMode : u8 {
     Nearest,
     Linear
 };
 
 /// mip 层级之间的过滤方式。
-enum class MipmapMode : std::uint8_t {
+enum class MipmapMode : u8 {
     Nearest,
     Linear
 };
 
 /// UVW 坐标越界时的寻址方式。
-enum class AddressMode : std::uint8_t {
+enum class AddressMode : u8 {
     Repeat,
     MirroredRepeat,
     ClampToEdge,
@@ -746,14 +757,14 @@ enum class AddressMode : std::uint8_t {
 };
 
 /// ClampToBorder 模式下采样器返回的边框颜色。
-enum class BorderColor : std::uint8_t {
+enum class BorderColor : u8 {
     TransparentBlack,
     OpaqueBlack,
     OpaqueWhite
 };
 
 /// 通用比较函数，深度测试、模板测试和 shadow sampler 都会使用。
-enum class CompareOp : std::uint8_t {
+enum class CompareOp : u8 {
     Never,
     Less,
     Equal,
@@ -767,7 +778,7 @@ enum class CompareOp : std::uint8_t {
 /// GPU buffer 创建描述，不包含初始数据；初始数据通过 UploadBatchDesc 提交。
 struct BufferDesc {
     std::string debugName; ///< 调试名称，用于后端对象命名和 GPU 调试器显示。
-    std::uint64_t size = 0; ///< buffer 字节数。创建真实 GPU buffer 时必须大于 0。
+    u64 size = 0; ///< buffer 字节数。创建真实 GPU buffer 时必须大于 0。
     BufferUsage usage = BufferUsage::None; ///< 声明 buffer 的用途位，后端据此设置 usage flags。
     BufferCreateFlags flags = BufferCreateFlags::None; ///< 创建附加标志，例如 transient、dedicated memory。
     MemoryUsage memoryUsage = MemoryUsage::GpuOnly; ///< 内存访问模式，决定资源放在显存、上传堆或读回堆。
@@ -780,9 +791,9 @@ struct TextureDesc {
     std::string debugName; ///< 调试名称，用于后端对象命名。
     TextureDimension dimension = TextureDimension::Texture2D; ///< 资源维度。cube texture 本质上仍是 2D array。
     Extent3D extent{}; ///< texture 的像素尺寸。2D texture 的 depth 应为 1。
-    std::uint32_t arrayLayers = 1; ///< 数组层数；cube 为 6，cube array 为 6 的倍数。
-    std::uint32_t mipLevels = 1; ///< mip 层数；如果需要自动生成 mip，创建时仍要预留层数。
-    Format format = Format::RGBA8UNorm; ///< 资源存储格式。
+    u32 arrayLayers = 1; ///< 数组层数；cube 为 6，cube array 为 6 的倍数。
+    u32 mipLevels = 1; ///< mip 层数；如果需要自动生成 mip，创建时仍要预留层数。
+    Format format = Format::RGBA8_UNorm; ///< 资源存储格式。
     SampleCount samples = SampleCount::Count1; ///< MSAA 采样数；普通采样贴图一般为 Count1。
     TextureUsage usage = TextureUsage::Sampled; ///< texture 后续用途，影响后端 image usage/resource flags。
     TextureCreateFlags flags = TextureCreateFlags::None; ///< 创建附加标志，例如 cube compatible、mutable format。
@@ -797,10 +808,10 @@ struct TextureViewDesc {
     TextureViewDimension dimension = TextureViewDimension::View2D; ///< view 暴露给 shader/attachment 的维度。
     Format format = Format::Undefined; ///< Undefined 表示沿用底层 texture 格式。
     TextureAspect aspect = TextureAspect::Color; ///< view 覆盖的 aspect，depth/stencil view 需要显式设置。
-    std::uint32_t baseMipLevel = 0; ///< view 起始 mip。
-    std::uint32_t mipLevelCount = 1; ///< view 覆盖 mip 数。
-    std::uint32_t baseArrayLayer = 0; ///< view 起始数组层。
-    std::uint32_t arrayLayerCount = 1; ///< view 覆盖数组层数。
+    u32 baseMipLevel = 0; ///< view 起始 mip。
+    u32 mipLevelCount = 1; ///< view 覆盖 mip 数。
+    u32 baseArrayLayer = 0; ///< view 起始数组层。
+    u32 arrayLayerCount = 1; ///< view 覆盖数组层数。
 };
 
 /// sampler 创建描述。sampler 只描述采样规则，不持有 texture。
@@ -823,7 +834,7 @@ struct SamplerDesc {
 };
 
 /// shader 阶段位掩码，用于描述 shader 自身阶段和资源可见性。
-enum class ShaderStage : std::uint32_t {
+enum class ShaderStage : u32 {
     None = 0,
     Vertex = 1u << 0,
     TessControl = 1u << 1,
@@ -838,11 +849,11 @@ enum class ShaderStage : std::uint32_t {
 };
 
 [[nodiscard]] constexpr ShaderStage operator|(ShaderStage lhs, ShaderStage rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr ShaderStage operator&(ShaderStage lhs, ShaderStage rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr ShaderStage& operator|=(ShaderStage& lhs, ShaderStage rhs) noexcept {
@@ -851,7 +862,7 @@ constexpr ShaderStage& operator|=(ShaderStage& lhs, ShaderStage rhs) noexcept {
 }
 
 /// shader 源码或字节码的语言/中间格式。
-enum class ShaderLanguage : std::uint8_t {
+enum class ShaderLanguage : u8 {
     Unknown,
     GLSL,
     HLSL,
@@ -897,12 +908,12 @@ struct ShaderDesc {
 
 /// shader specialization constant，用于在创建管线时固化常量并触发后端优化。
 struct ShaderSpecializationConstant {
-    std::uint32_t constantId = 0; ///< shader 中声明的 specialization constant id。
+    u32 constantId = 0; ///< shader 中声明的 specialization constant id。
     std::vector<std::byte> data; ///< 常量原始字节数据，后端按 shader 反射信息解释类型。
 };
 
 /// 资源绑定槽类型，描述 shader 看到的资源类别。
-enum class BindingType : std::uint8_t {
+enum class BindingType : u8 {
     UniformBuffer,
     StorageBuffer,
     SampledTexture,
@@ -914,7 +925,7 @@ enum class BindingType : std::uint8_t {
 };
 
 /// sampled texture 在 shader 中的采样数据类型。
-enum class TextureSampleType : std::uint8_t {
+enum class TextureSampleType : u8 {
     Float,
     UnfilterableFloat,
     SignedInteger,
@@ -924,10 +935,10 @@ enum class TextureSampleType : std::uint8_t {
 
 /// 单个绑定槽的布局信息，相当于 descriptor binding/root parameter/argument entry。
 struct BindGroupLayoutEntry {
-    std::uint32_t binding = 0; ///< 绑定槽编号，对应 shader 中的 binding/register/argument index。
+    u32 binding = 0; ///< 绑定槽编号，对应 shader 中的 binding/register/argument index。
     BindingType type = BindingType::UniformBuffer; ///< 该槽位资源类型。
     ShaderStage visibility = ShaderStage::AllGraphics; ///< 哪些 shader stage 可以访问该槽位。
-    std::uint32_t arrayCount = 1; ///< 资源数组长度；bindless 或数组纹理绑定可大于 1。
+    u32 arrayCount = 1; ///< 资源数组长度；bindless 或数组纹理绑定可大于 1。
     bool writable = false; ///< storage buffer/texture 是否允许 shader 写入。
     TextureViewDimension textureViewDimension = TextureViewDimension::View2D; ///< texture 绑定期望的 view 维度。
     TextureSampleType textureSampleType = TextureSampleType::Float; ///< sampled texture 的采样类型。
@@ -937,15 +948,15 @@ struct BindGroupLayoutEntry {
 /// 一组绑定槽布局。Vulkan 中通常对应一个 descriptor set layout。
 struct BindGroupLayoutDesc {
     std::string debugName; ///< 调试名称。
-    std::uint32_t set = 0; ///< 绑定组编号，对应 Vulkan set / D3D register space / Metal buffer index 分组。
+    u32 set = 0; ///< 绑定组编号，对应 Vulkan set / D3D register space / Metal buffer index 分组。
     std::vector<BindGroupLayoutEntry> entries; ///< 该组内所有 binding 声明。
 };
 
 /// buffer 绑定到 shader 时的范围。
 struct BufferBinding {
     BufferHandle buffer{}; ///< 被绑定的 buffer。
-    std::uint64_t offset = 0; ///< 起始字节偏移。
-    std::uint64_t size = WHOLE_SIZE; ///< 绑定字节范围，WHOLE_SIZE 表示从 offset 到末尾。
+    u64 offset = 0; ///< 起始字节偏移。
+    u64 size = WHOLE_SIZE; ///< 绑定字节范围，WHOLE_SIZE 表示从 offset 到末尾。
 };
 
 /// texture 绑定到 shader 时的 view。texture 字段可用于后端验证 view 来源。
@@ -956,8 +967,8 @@ struct TextureBinding {
 
 /// 一个实际资源绑定写入项。
 struct ResourceBinding {
-    std::uint32_t binding = 0; ///< 目标绑定槽编号，必须存在于 BindGroupLayoutEntry 中。
-    std::uint32_t arrayElement = 0; ///< 写入资源数组的第几个元素。
+    u32 binding = 0; ///< 目标绑定槽编号，必须存在于 BindGroupLayoutEntry 中。
+    u32 arrayElement = 0; ///< 写入资源数组的第几个元素。
     BindingType type = BindingType::UniformBuffer; ///< 本次写入的资源类型。
     BufferBinding buffer{}; ///< buffer 类型绑定时使用。
     TextureBinding texture{}; ///< texture 类型绑定时使用。
@@ -974,8 +985,8 @@ struct BindGroupDesc {
 /// push constant/root constant 的可见范围。
 struct PushConstantRange {
     ShaderStage stages = ShaderStage::AllGraphics; ///< 哪些 shader stage 可以访问该常量范围。
-    std::uint32_t offset = 0; ///< 字节偏移。
-    std::uint32_t size = 0; ///< 字节大小。
+    u32 offset = 0; ///< 字节偏移。
+    u32 size = 0; ///< 字节大小。
 };
 
 /// 管线资源布局。所有 graphics/compute pipeline 都应该引用一个布局。
@@ -988,20 +999,20 @@ struct PipelineLayoutDesc {
 /// shader 反射得到的资源绑定信息，可用于自动生成 BindGroupLayoutDesc。
 struct ShaderResourceReflection {
     std::string name; ///< shader 中的资源名称。
-    std::uint32_t set = 0; ///< 资源所在 set/space。
-    std::uint32_t binding = 0; ///< 资源 binding/register。
+    u32 set = 0; ///< 资源所在 set/space。
+    u32 binding = 0; ///< 资源 binding/register。
     BindingType type = BindingType::UniformBuffer; ///< 资源类型。
     ShaderStage stages = ShaderStage::None; ///< 使用该资源的 shader stage。
-    std::uint32_t arrayCount = 1; ///< 数组长度。
-    std::uint32_t size = 0; ///< buffer 或 push constant 字节大小，未知时为 0。
+    u32 arrayCount = 1; ///< 数组长度。
+    u32 size = 0; ///< buffer 或 push constant 字节大小，未知时为 0。
 };
 
 /// shader 输入/输出参数反射信息。
 struct ShaderParameterReflection {
     std::string name; ///< 参数名称。
     std::string semanticName; ///< HLSL 语义名，GLSL/Slang 可为空。
-    std::uint32_t semanticIndex = 0; ///< 语义索引。
-    std::uint32_t location = 0; ///< shader location。
+    u32 semanticIndex = 0; ///< 语义索引。
+    u32 location = 0; ///< shader location。
     Format format = Format::Undefined; ///< 参数格式，无法推导时为 Undefined。
 };
 
@@ -1014,7 +1025,7 @@ struct ShaderReflectionDesc {
 };
 
 /// 顶点属性格式，描述单个 attribute 在 vertex buffer 中的存储类型。
-enum class VertexFormat : std::uint8_t {
+enum class VertexFormat : u8 {
     Float32,
     Float32x2,
     Float32x3,
@@ -1040,7 +1051,7 @@ enum class VertexFormat : std::uint8_t {
 };
 
 /// 顶点 buffer 的步进频率，区分逐顶点数据和实例化数据。
-enum class VertexInputRate : std::uint8_t {
+enum class VertexInputRate : u8 {
     PerVertex,
     PerInstance
 };
@@ -1048,24 +1059,24 @@ enum class VertexInputRate : std::uint8_t {
 /// 单个顶点属性描述，例如 position/normal/uv/color。
 struct VertexAttributeDesc {
     std::string semanticName; ///< 语义名，D3D/HLSL 常用；Vulkan/GL 可用于反射和调试。
-    std::uint32_t semanticIndex = 0; ///< 同名语义的索引，例如 TEXCOORD0/TEXCOORD1。
-    std::uint32_t location = 0; ///< shader 输入 location。
-    std::uint32_t binding = 0; ///< 来自哪个 vertex buffer binding。
+    u32 semanticIndex = 0; ///< 同名语义的索引，例如 TEXCOORD0/TEXCOORD1。
+    u32 location = 0; ///< shader 输入 location。
+    u32 binding = 0; ///< 来自哪个 vertex buffer binding。
     VertexFormat format = VertexFormat::Float32x3; ///< 属性格式。
-    std::uint64_t offset = 0; ///< 在单个顶点结构内的字节偏移。
+    u64 offset = 0; ///< 在单个顶点结构内的字节偏移。
 };
 
 /// 一个 vertex buffer binding 的布局，可包含多个属性。
 struct VertexBufferLayoutDesc {
-    std::uint32_t binding = 0; ///< vertex buffer binding 编号。
-    std::uint64_t stride = 0; ///< 相邻顶点/实例数据之间的字节跨度。
+    u32 binding = 0; ///< vertex buffer binding 编号。
+    u64 stride = 0; ///< 相邻顶点/实例数据之间的字节跨度。
     VertexInputRate inputRate = VertexInputRate::PerVertex; ///< 按顶点还是按实例前进。
-    std::uint32_t stepRate = 1; ///< 实例化步进倍率；大多数后端常用 1。
+    u32 stepRate = 1; ///< 实例化步进倍率；大多数后端常用 1。
     std::vector<VertexAttributeDesc> attributes; ///< 该 binding 提供的属性列表。
 };
 
 /// 输入图元拓扑，描述顶点流如何被解释成点、线、三角形或 patch。
-enum class PrimitiveTopology : std::uint8_t {
+enum class PrimitiveTopology : u8 {
     PointList,
     LineList,
     LineStrip,
@@ -1075,14 +1086,14 @@ enum class PrimitiveTopology : std::uint8_t {
 };
 
 /// 多边形栅格化模式。Line/Point 不是所有平台和设备都完全支持。
-enum class PolygonMode : std::uint8_t {
+enum class PolygonMode : u8 {
     Fill,
     Line,
     Point
 };
 
 /// 面剔除模式。
-enum class CullMode : std::uint8_t {
+enum class CullMode : u8 {
     None,
     Front,
     Back,
@@ -1090,13 +1101,13 @@ enum class CullMode : std::uint8_t {
 };
 
 /// 正面三角形绕序。注意不同 API 的 framebuffer 坐标系可能影响最终正反面判断。
-enum class FrontFace : std::uint8_t {
+enum class FrontFace : u8 {
     CounterClockwise,
     Clockwise
 };
 
 /// 模板测试操作。
-enum class StencilOp : std::uint8_t {
+enum class StencilOp : u8 {
     Keep,
     Zero,
     Replace,
@@ -1108,7 +1119,7 @@ enum class StencilOp : std::uint8_t {
 };
 
 /// 混合因子，用于颜色和 alpha blend。
-enum class BlendFactor : std::uint8_t {
+enum class BlendFactor : u8 {
     Zero,
     One,
     SourceColor,
@@ -1126,7 +1137,7 @@ enum class BlendFactor : std::uint8_t {
 };
 
 /// 混合运算。
-enum class BlendOp : std::uint8_t {
+enum class BlendOp : u8 {
     Add,
     Subtract,
     ReverseSubtract,
@@ -1135,7 +1146,7 @@ enum class BlendOp : std::uint8_t {
 };
 
 /// 逻辑颜色运算。现代渲染中较少使用，部分后端可能不支持。
-enum class LogicOp : std::uint8_t {
+enum class LogicOp : u8 {
     Clear,
     And,
     AndReverse,
@@ -1155,7 +1166,7 @@ enum class LogicOp : std::uint8_t {
 };
 
 /// color attachment 写通道掩码。
-enum class ColorWriteMask : std::uint8_t {
+enum class ColorWriteMask : u8 {
     None = 0,
     R = 1u << 0,
     G = 1u << 1,
@@ -1165,11 +1176,11 @@ enum class ColorWriteMask : std::uint8_t {
 };
 
 [[nodiscard]] constexpr ColorWriteMask operator|(ColorWriteMask lhs, ColorWriteMask rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr ColorWriteMask operator&(ColorWriteMask lhs, ColorWriteMask rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr ColorWriteMask& operator|=(ColorWriteMask& lhs, ColorWriteMask rhs) noexcept {
@@ -1178,7 +1189,7 @@ constexpr ColorWriteMask& operator|=(ColorWriteMask& lhs, ColorWriteMask rhs) no
 }
 
 /// 创建管线时不固定、录制命令时动态设置的状态。
-enum class DynamicState : std::uint8_t {
+enum class DynamicState : u8 {
     Viewport,
     Scissor,
     LineWidth,
@@ -1191,7 +1202,7 @@ enum class DynamicState : std::uint8_t {
 struct InputAssemblyState {
     PrimitiveTopology topology = PrimitiveTopology::TriangleList; ///< 图元拓扑，最常见是 TriangleList。
     bool primitiveRestart = false; ///< strip 拓扑中是否允许特殊索引重启图元。
-    std::uint32_t patchControlPoints = 0; ///< PatchList 使用的控制点数量，非曲面细分时为 0。
+    u32 patchControlPoints = 0; ///< PatchList 使用的控制点数量，非曲面细分时为 0。
 };
 
 /// 光栅化阶段状态。
@@ -1213,9 +1224,9 @@ struct StencilFaceState {
     StencilOp passOp = StencilOp::Keep; ///< 模板和深度测试都通过时的操作。
     StencilOp depthFailOp = StencilOp::Keep; ///< 模板通过但深度失败时的操作。
     CompareOp compareOp = CompareOp::Always; ///< 模板比较函数。
-    std::uint32_t compareMask = 0xFFFFFFFFu; ///< 比较时使用的读掩码。
-    std::uint32_t writeMask = 0xFFFFFFFFu; ///< 写入 stencil buffer 时的写掩码。
-    std::uint32_t reference = 0; ///< 模板参考值；也可以通过 DynamicState 动态设置。
+    u32 compareMask = 0xFFFFFFFFu; ///< 比较时使用的读掩码。
+    u32 writeMask = 0xFFFFFFFFu; ///< 写入 stencil buffer 时的写掩码。
+    u32 reference = 0; ///< 模板参考值；也可以通过 DynamicState 动态设置。
 };
 
 /// 深度和模板测试状态。
@@ -1236,7 +1247,7 @@ struct MultisampleState {
     SampleCount samples = SampleCount::Count1; ///< MSAA 采样数，必须与 render target 采样数兼容。
     bool sampleShadingEnable = false; ///< 是否启用 per-sample shading。
     float minSampleShading = 1.0F; ///< per-sample shading 的最小采样比例。
-    std::uint64_t sampleMask = std::numeric_limits<std::uint64_t>::max(); ///< 采样位掩码。
+    u64 sampleMask = std::numeric_limits<u64>::max(); ///< 采样位掩码。
     bool alphaToCoverageEnable = false; ///< 是否把 alpha 转成 coverage，常用于植被边缘。
     bool alphaToOneEnable = false; ///< 是否把 alpha 强制为 1，支持度有限。
 };
@@ -1278,7 +1289,7 @@ struct GraphicsPipelineDesc {
     std::vector<Format> colorFormats; ///< color attachment 格式列表；动态渲染后端可直接使用。
     Format depthStencilFormat = Format::Undefined; ///< depth-stencil attachment 格式，没有深度则为 Undefined。
     RenderPassHandle compatibleRenderPass{}; ///< 传统 render pass 后端的兼容 render pass。
-    std::uint32_t subpass = 0; ///< 使用 compatibleRenderPass 时的 subpass index。
+    u32 subpass = 0; ///< 使用 compatibleRenderPass 时的 subpass index。
 };
 
 /// 计算管线描述。
@@ -1298,14 +1309,14 @@ struct PipelineCacheDesc {
 };
 
 /// GPU 查询类型。
-enum class QueryType : std::uint8_t {
+enum class QueryType : u8 {
     Timestamp,
     Occlusion,
     PipelineStatistics
 };
 
 /// pipeline statistics 查询的统计项位。
-enum class PipelineStatisticFlags : std::uint32_t {
+enum class PipelineStatisticFlags : u32 {
     None = 0,
     InputAssemblyVertices = 1u << 0,
     InputAssemblyPrimitives = 1u << 1,
@@ -1321,11 +1332,11 @@ enum class PipelineStatisticFlags : std::uint32_t {
 };
 
 [[nodiscard]] constexpr PipelineStatisticFlags operator|(PipelineStatisticFlags lhs, PipelineStatisticFlags rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr PipelineStatisticFlags operator&(PipelineStatisticFlags lhs, PipelineStatisticFlags rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr PipelineStatisticFlags& operator|=(PipelineStatisticFlags& lhs, PipelineStatisticFlags rhs) noexcept {
@@ -1337,25 +1348,25 @@ constexpr PipelineStatisticFlags& operator|=(PipelineStatisticFlags& lhs, Pipeli
 struct QueryPoolDesc {
     std::string debugName; ///< 调试名称。
     QueryType type = QueryType::Timestamp; ///< 查询类型。
-    std::uint32_t queryCount = 1; ///< 查询槽数量。
+    u32 queryCount = 1; ///< 查询槽数量。
     PipelineStatisticFlags statistics = PipelineStatisticFlags::None; ///< PipelineStatistics 查询时需要的统计项。
 };
 
 /// 渲染开始时 attachment 内容如何处理。
-enum class LoadOp : std::uint8_t {
+enum class LoadOp : u8 {
     Load,
     Clear,
     DontCare
 };
 
 /// 渲染结束时 attachment 内容如何处理。
-enum class StoreOp : std::uint8_t {
+enum class StoreOp : u8 {
     Store,
     DontCare
 };
 
 /// MSAA resolve 行为。Average 是最常见的颜色 resolve；深度 resolve 后端支持差异较大。
-enum class ResolveMode : std::uint8_t {
+enum class ResolveMode : u8 {
     None,
     Average,
     Min,
@@ -1405,11 +1416,11 @@ struct FramebufferDesc {
     RenderPassHandle renderPass{}; ///< 兼容的 render pass。
     std::vector<TextureViewHandle> attachments; ///< 实际绑定的附件 view。
     Extent2D extent{}; ///< framebuffer 宽高。
-    std::uint32_t layers = 1; ///< framebuffer 层数。
+    u32 layers = 1; ///< framebuffer 层数。
 };
 
 /// swapchain 色彩空间。后端需要根据平台支持选择最接近的实际色彩空间。
-enum class ColorSpace : std::uint8_t {
+enum class ColorSpace : u8 {
     SRGBNonlinear,
     DisplayP3Nonlinear,
     ExtendedSRGBLinear,
@@ -1418,7 +1429,7 @@ enum class ColorSpace : std::uint8_t {
 };
 
 /// swapchain 输出表面变换。移动端或可旋转窗口系统可能会用到。
-enum class SurfaceTransform : std::uint8_t {
+enum class SurfaceTransform : u8 {
     Identity,
     Rotate90,
     Rotate180,
@@ -1431,7 +1442,7 @@ enum class SurfaceTransform : std::uint8_t {
 };
 
 /// swapchain alpha 合成模式，用于透明窗口或系统 compositor。
-enum class CompositeAlphaMode : std::uint8_t {
+enum class CompositeAlphaMode : u8 {
     Opaque,
     PreMultiplied,
     PostMultiplied,
@@ -1442,10 +1453,10 @@ enum class CompositeAlphaMode : std::uint8_t {
 struct SwapchainDesc {
     std::string debugName; ///< 调试名称。
     Extent2D extent{}; ///< drawable 尺寸。
-    Format preferredFormat = Format::BGRA8SRGB; ///< 期望后备缓冲格式，后端可根据平台支持选择最接近格式。
+    Format preferredFormat = Format::BGRA8_SRGB; ///< 期望后备缓冲格式，后端可根据平台支持选择最接近格式。
     ColorSpace colorSpace = ColorSpace::SRGBNonlinear; ///< 期望色彩空间。
     PresentMode presentMode = PresentMode::Fifo; ///< 呈现模式。
-    std::uint32_t imageCount = 2; ///< swapchain image 数量，常见为 2 或 3。
+    u32 imageCount = 2; ///< swapchain image 数量，常见为 2 或 3。
     SurfaceTransform preTransform = SurfaceTransform::Identity; ///< 呈现前表面变换。
     CompositeAlphaMode compositeAlpha = CompositeAlphaMode::Opaque; ///< 与系统 compositor 的 alpha 合成方式。
     bool allowTearing = false; ///< 是否允许无垂直同步撕裂显示，平台不支持时应忽略。
@@ -1456,10 +1467,10 @@ struct SwapchainDesc {
 /// texture 子资源范围，用于 barrier、copy、view 等操作。
 struct TextureSubresourceRange {
     TextureAspect aspect = TextureAspect::All; ///< 覆盖的 aspect，All 表示由格式自动推导。
-    std::uint32_t baseMipLevel = 0; ///< 起始 mip。
-    std::uint32_t mipLevelCount = 1; ///< mip 数量。
-    std::uint32_t baseArrayLayer = 0; ///< 起始数组层。
-    std::uint32_t arrayLayerCount = 1; ///< 数组层数量。
+    u32 baseMipLevel = 0; ///< 起始 mip。
+    u32 mipLevelCount = 1; ///< mip 数量。
+    u32 baseArrayLayer = 0; ///< 起始数组层。
+    u32 arrayLayerCount = 1; ///< 数组层数量。
 };
 
 /// 全局内存 barrier，用于没有特定资源但需要约束前后访问顺序的情况。
@@ -1488,8 +1499,8 @@ struct TextureBarrier {
 /// buffer 状态转换请求。显式 API 会翻译成 buffer/resource barrier。
 struct BufferBarrier {
     BufferHandle buffer{}; ///< 目标 buffer。
-    std::uint64_t offset = 0; ///< 起始字节偏移。
-    std::uint64_t size = WHOLE_SIZE; ///< 覆盖字节范围。
+    u64 offset = 0; ///< 起始字节偏移。
+    u64 size = WHOLE_SIZE; ///< 覆盖字节范围。
     ResourceState before = ResourceState::Undefined; ///< 转换前状态。
     ResourceState after = ResourceState::Common; ///< 转换后状态。
     PipelineStage sourceStages = PipelineStage::AllCommands; ///< 转换前需要等待的管线阶段。
@@ -1510,19 +1521,19 @@ struct ResourceBarriers {
 /// CPU 到 GPU buffer 上传请求。后端负责 staging buffer 和 copy command。
 struct BufferUploadDesc {
     BufferHandle destination{}; ///< 目标 buffer。
-    std::uint64_t destinationOffset = 0; ///< 写入目标 buffer 的字节偏移。
+    u64 destinationOffset = 0; ///< 写入目标 buffer 的字节偏移。
     std::vector<std::byte> data; ///< 待上传的原始字节。
 };
 
 /// CPU 到 GPU texture 上传请求。行对齐要求由后端处理。
 struct TextureUploadDesc {
     TextureHandle destination{}; ///< 目标 texture。
-    std::uint32_t mipLevel = 0; ///< 目标 mip。
-    std::uint32_t arrayLayer = 0; ///< 目标数组层。
+    u32 mipLevel = 0; ///< 目标 mip。
+    u32 arrayLayer = 0; ///< 目标数组层。
     Offset3D offset{}; ///< 写入区域偏移。
     Extent3D extent{}; ///< 写入区域尺寸。
-    std::uint64_t bytesPerRow = 0; ///< 源数据每行字节数；0 表示后端按格式和宽度推导。
-    std::uint64_t rowsPerImage = 0; ///< 3D/array 数据每张 image 行数；0 表示后端推导。
+    u64 bytesPerRow = 0; ///< 源数据每行字节数；0 表示后端按格式和宽度推导。
+    u64 rowsPerImage = 0; ///< 3D/array 数据每张 image 行数；0 表示后端推导。
     std::vector<std::byte> data; ///< 待上传的原始像素字节。
 };
 
@@ -1536,17 +1547,17 @@ struct UploadBatchDesc {
 struct BufferCopyDesc {
     BufferHandle source{}; ///< 源 buffer。
     BufferHandle destination{}; ///< 目标 buffer。
-    std::uint64_t sourceOffset = 0; ///< 源字节偏移。
-    std::uint64_t destinationOffset = 0; ///< 目标字节偏移。
-    std::uint64_t size = 0; ///< 拷贝字节数。
+    u64 sourceOffset = 0; ///< 源字节偏移。
+    u64 destinationOffset = 0; ///< 目标字节偏移。
+    u64 size = 0; ///< 拷贝字节数。
 };
 
 /// texture 拷贝位置，包含 texture 和具体子资源。
 struct TextureCopyLocation {
     TextureHandle texture{}; ///< 目标或源 texture。
     TextureAspect aspect = TextureAspect::Color; ///< 拷贝的 aspect。
-    std::uint32_t mipLevel = 0; ///< mip 层。
-    std::uint32_t arrayLayer = 0; ///< 数组层。
+    u32 mipLevel = 0; ///< mip 层。
+    u32 arrayLayer = 0; ///< 数组层。
     Offset3D offset{}; ///< 子资源内偏移。
 };
 
@@ -1561,9 +1572,9 @@ struct TextureCopyDesc {
 struct BufferTextureCopyDesc {
     BufferHandle buffer{}; ///< 参与拷贝的 buffer。
     TextureCopyLocation texture{}; ///< 参与拷贝的 texture 位置。
-    std::uint64_t bufferOffset = 0; ///< buffer 起始字节偏移。
-    std::uint64_t bytesPerRow = 0; ///< buffer 中每行字节数；0 表示后端按格式推导。
-    std::uint64_t rowsPerImage = 0; ///< buffer 中每张 image 行数；0 表示后端推导。
+    u64 bufferOffset = 0; ///< buffer 起始字节偏移。
+    u64 bytesPerRow = 0; ///< buffer 中每行字节数；0 表示后端按格式推导。
+    u64 rowsPerImage = 0; ///< buffer 中每张 image 行数；0 表示后端推导。
     Extent3D extent{}; ///< 拷贝尺寸。
 };
 
@@ -1580,13 +1591,13 @@ struct TextureBlitDesc {
 struct MipmapGenerationDesc {
     TextureHandle texture{}; ///< 目标 texture。
     TextureAspect aspect = TextureAspect::Color; ///< 生成哪个 aspect 的 mip。
-    std::uint32_t baseArrayLayer = 0; ///< 起始数组层。
-    std::uint32_t arrayLayerCount = 1; ///< 数组层数量。
+    u32 baseArrayLayer = 0; ///< 起始数组层。
+    u32 arrayLayerCount = 1; ///< 数组层数量。
     FilterMode filter = FilterMode::Linear; ///< 下采样过滤方式。
 };
 
 /// index buffer 中索引元素的整数类型。
-enum class IndexType : std::uint8_t {
+enum class IndexType : u8 {
     UInt16,
     UInt32
 };
@@ -1594,17 +1605,17 @@ enum class IndexType : std::uint8_t {
 /// draw call 绑定的单个 vertex stream。
 struct VertexStream {
     BufferHandle buffer{}; ///< 顶点 buffer。
-    std::uint32_t binding = 0; ///< 对应 VertexBufferLayoutDesc::binding。
-    std::uint64_t offset = 0; ///< buffer 起始字节偏移。
-    std::uint64_t stride = 0; ///< 运行期 stride；0 表示使用 pipeline layout 中的 stride。
+    u32 binding = 0; ///< 对应 VertexBufferLayoutDesc::binding。
+    u64 offset = 0; ///< buffer 起始字节偏移。
+    u64 stride = 0; ///< 运行期 stride；0 表示使用 pipeline layout 中的 stride。
 };
 
 /// draw indexed 使用的 index stream。
 struct IndexStream {
     BufferHandle buffer{}; ///< 索引 buffer。
     IndexType indexType = IndexType::UInt32; ///< 索引元素类型。
-    std::uint64_t offset = 0; ///< 起始字节偏移。
-    std::uint32_t indexCount = 0; ///< 可读取索引数量，便于验证 draw 范围。
+    u64 offset = 0; ///< 起始字节偏移。
+    u32 indexCount = 0; ///< 可读取索引数量，便于验证 draw 范围。
 };
 
 /// 轴对齐包围盒，用于视锥裁剪、光源裁剪和加速结构构建。
@@ -1622,13 +1633,13 @@ struct BoundingSphere {
 /// mesh 内的一个可独立绘制部分。
 struct SubmeshDesc {
     std::string name; ///< 子网格名称。
-    std::uint32_t firstVertex = 0; ///< 非索引绘制的起始顶点。
-    std::uint32_t vertexCount = 0; ///< 顶点数量。
-    std::uint32_t firstIndex = 0; ///< 索引绘制的起始索引。
-    std::uint32_t indexCount = 0; ///< 索引数量。
-    std::uint32_t firstInstance = 0; ///< 默认起始实例。
-    std::uint32_t instanceCount = 1; ///< 默认实例数量。
-    std::int32_t materialIndex = -1; ///< 默认材质索引，-1 表示未指定。
+    u32 firstVertex = 0; ///< 非索引绘制的起始顶点。
+    u32 vertexCount = 0; ///< 顶点数量。
+    u32 firstIndex = 0; ///< 索引绘制的起始索引。
+    u32 indexCount = 0; ///< 索引数量。
+    u32 firstInstance = 0; ///< 默认起始实例。
+    u32 instanceCount = 1; ///< 默认实例数量。
+    i32 materialIndex = -1; ///< 默认材质索引，-1 表示未指定。
     glm::vec3 boundsMin{0.0F}; ///< 本地空间 AABB 最小点。
     glm::vec3 boundsMax{0.0F}; ///< 本地空间 AABB 最大点。
     BoundingSphere boundsSphere{}; ///< 本地空间包围球。
@@ -1650,7 +1661,7 @@ struct TextureSlot {
 };
 
 /// 材质参数类型，用于编辑器和自动打包 uniform/push constant 数据。
-enum class MaterialParameterType : std::uint8_t {
+enum class MaterialParameterType : u8 {
     Float,
     Float2,
     Float3,
@@ -1682,10 +1693,10 @@ struct DrawCommand {
     PipelineHandle pipeline{}; ///< 使用的图形管线。
     std::vector<BindGroupHandle> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<VertexStream> vertexStreams; ///< 本次绘制的顶点流，可覆盖 mesh 默认流。
-    std::uint32_t vertexCount = 0; ///< 绘制顶点数。
-    std::uint32_t instanceCount = 1; ///< 实例数量。
-    std::uint32_t firstVertex = 0; ///< 起始顶点。
-    std::uint32_t firstInstance = 0; ///< 起始实例。
+    u32 vertexCount = 0; ///< 绘制顶点数。
+    u32 instanceCount = 1; ///< 实例数量。
+    u32 firstVertex = 0; ///< 起始顶点。
+    u32 firstInstance = 0; ///< 起始实例。
 };
 
 /// 索引绘制命令。
@@ -1694,20 +1705,20 @@ struct DrawIndexedCommand {
     std::vector<BindGroupHandle> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<VertexStream> vertexStreams; ///< 本次绘制的顶点流。
     IndexStream indexStream{}; ///< 索引流。
-    std::uint32_t indexCount = 0; ///< 绘制索引数。
-    std::uint32_t instanceCount = 1; ///< 实例数量。
-    std::uint32_t firstIndex = 0; ///< 起始索引。
-    std::int32_t vertexOffsetElements = 0; ///< 索引值加上的顶点偏移，单位是顶点不是字节。
-    std::uint32_t firstInstance = 0; ///< 起始实例。
+    u32 indexCount = 0; ///< 绘制索引数。
+    u32 instanceCount = 1; ///< 实例数量。
+    u32 firstIndex = 0; ///< 起始索引。
+    i32 vertexOffsetElements = 0; ///< 索引值加上的顶点偏移，单位是顶点不是字节。
+    u32 firstInstance = 0; ///< 起始实例。
 };
 
 /// compute dispatch 命令。
 struct DispatchCommand {
     PipelineHandle pipeline{}; ///< 使用的计算管线。
     std::vector<BindGroupHandle> bindGroups; ///< dispatch 前需要绑定的资源组。
-    std::uint32_t groupCountX = 1; ///< X 方向 workgroup 数量。
-    std::uint32_t groupCountY = 1; ///< Y 方向 workgroup 数量。
-    std::uint32_t groupCountZ = 1; ///< Z 方向 workgroup 数量。
+    u32 groupCountX = 1; ///< X 方向 workgroup 数量。
+    u32 groupCountY = 1; ///< Y 方向 workgroup 数量。
+    u32 groupCountZ = 1; ///< Z 方向 workgroup 数量。
 };
 
 /// 间接非索引绘制命令，参数从 GPU buffer 读取。
@@ -1716,11 +1727,11 @@ struct DrawIndirectCommand {
     std::vector<BindGroupHandle> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<VertexStream> vertexStreams; ///< 本次绘制的顶点流。
     BufferHandle argumentBuffer{}; ///< 间接参数 buffer。
-    std::uint64_t argumentOffset = 0; ///< 第一个间接参数的字节偏移。
-    std::uint32_t drawCount = 1; ///< 执行的间接绘制数量。
-    std::uint32_t stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
+    u64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
+    u32 drawCount = 1; ///< 执行的间接绘制数量。
+    u32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
     BufferHandle countBuffer{}; ///< 可选 draw count buffer；无效句柄表示使用 drawCount。
-    std::uint64_t countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
+    u64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
 };
 
 /// 间接索引绘制命令。
@@ -1730,11 +1741,11 @@ struct DrawIndexedIndirectCommand {
     std::vector<VertexStream> vertexStreams; ///< 本次绘制的顶点流。
     IndexStream indexStream{}; ///< 索引流。
     BufferHandle argumentBuffer{}; ///< 间接参数 buffer。
-    std::uint64_t argumentOffset = 0; ///< 第一个间接参数的字节偏移。
-    std::uint32_t drawCount = 1; ///< 执行的间接绘制数量。
-    std::uint32_t stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
+    u64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
+    u32 drawCount = 1; ///< 执行的间接绘制数量。
+    u32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
     BufferHandle countBuffer{}; ///< 可选 draw count buffer；无效句柄表示使用 drawCount。
-    std::uint64_t countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
+    u64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
 };
 
 /// 间接 compute dispatch 命令，groupCount 从 GPU buffer 读取。
@@ -1742,7 +1753,7 @@ struct DispatchIndirectCommand {
     PipelineHandle pipeline{}; ///< 使用的计算管线。
     std::vector<BindGroupHandle> bindGroups; ///< dispatch 前需要绑定的资源组。
     BufferHandle argumentBuffer{}; ///< 间接参数 buffer。
-    std::uint64_t argumentOffset = 0; ///< 参数字节偏移。
+    u64 argumentOffset = 0; ///< 参数字节偏移。
 };
 
 /// GPU 调试标记，用于 RenderDoc、PIX、Xcode GPU Frame Debugger 等工具分组显示。
@@ -1754,25 +1765,25 @@ struct DebugMarkerDesc {
 /// 写入 timestamp 查询的命令。
 struct TimestampQueryCommand {
     QueryPoolHandle queryPool{}; ///< timestamp 查询池。
-    std::uint32_t queryIndex = 0; ///< 写入的查询槽。
+    u32 queryIndex = 0; ///< 写入的查询槽。
     PipelineStage stage = PipelineStage::BottomOfPipe; ///< 记录时间戳的管线阶段。
 };
 
 /// 重置查询范围的命令。
 struct ResetQueryCommand {
     QueryPoolHandle queryPool{}; ///< 查询池。
-    std::uint32_t firstQuery = 0; ///< 起始查询槽。
-    std::uint32_t queryCount = 1; ///< 查询数量。
+    u32 firstQuery = 0; ///< 起始查询槽。
+    u32 queryCount = 1; ///< 查询数量。
 };
 
 /// 拷贝查询结果到 buffer 的命令，便于 CPU 或后续 GPU pass 读取。
 struct ResolveQueryCommand {
     QueryPoolHandle queryPool{}; ///< 查询池。
-    std::uint32_t firstQuery = 0; ///< 起始查询槽。
-    std::uint32_t queryCount = 1; ///< 查询数量。
+    u32 firstQuery = 0; ///< 起始查询槽。
+    u32 queryCount = 1; ///< 查询数量。
     BufferHandle destination{}; ///< 结果写入的 buffer。
-    std::uint64_t destinationOffset = 0; ///< 目标字节偏移。
-    std::uint64_t stride = sizeof(std::uint64_t); ///< 每个查询结果的字节跨度。
+    u64 destinationOffset = 0; ///< 目标字节偏移。
+    u64 stride = sizeof(u64); ///< 每个查询结果的字节跨度。
     bool waitForResults = true; ///< 是否等待查询结果可用。
 };
 
@@ -1801,7 +1812,7 @@ struct RenderPassWorkload {
 };
 
 /// semaphore 类型。timeline semaphore 能表达递增计数，binary semaphore 只表达一次信号。
-enum class SemaphoreType : std::uint8_t {
+enum class SemaphoreType : u8 {
     Binary,
     Timeline
 };
@@ -1810,7 +1821,7 @@ enum class SemaphoreType : std::uint8_t {
 struct SemaphoreDesc {
     std::string debugName; ///< 调试名称。
     SemaphoreType type = SemaphoreType::Binary; ///< 同步对象类型。
-    std::uint64_t initialValue = 0; ///< timeline semaphore 初始值，binary semaphore 忽略。
+    u64 initialValue = 0; ///< timeline semaphore 初始值，binary semaphore 忽略。
 };
 
 /// fence 创建描述。fence 通常用于 CPU 等待某帧 GPU 工作完成。
@@ -1822,14 +1833,14 @@ struct FenceDesc {
 /// 队列提交前等待的 semaphore。
 struct QueueWaitDesc {
     SemaphoreHandle semaphore{}; ///< 需要等待的 semaphore。
-    std::uint64_t value = 0; ///< timeline semaphore 等待值；binary semaphore 忽略。
+    u64 value = 0; ///< timeline semaphore 等待值；binary semaphore 忽略。
     PipelineStage stages = PipelineStage::AllCommands; ///< 等待影响的管线阶段。
 };
 
 /// 队列提交完成后 signal 的 semaphore。
 struct QueueSignalDesc {
     SemaphoreHandle semaphore{}; ///< 需要 signal 的 semaphore。
-    std::uint64_t value = 0; ///< timeline semaphore signal 值；binary semaphore 忽略。
+    u64 value = 0; ///< timeline semaphore signal 值；binary semaphore 忽略。
 };
 
 /// 一次队列提交描述。后端可把 passNames 映射到实际 command buffer 列表。
@@ -1845,7 +1856,7 @@ struct QueueSubmitDesc {
 /// 呈现请求。窗口系统原生 surface 仍由平台层和后端保存。
 struct PresentDesc {
     SwapchainHandle swapchain{}; ///< 目标 swapchain。
-    std::uint32_t imageIndex = 0; ///< 要呈现的 swapchain image 下标。
+    u32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
     std::vector<SemaphoreHandle> waitSemaphores; ///< present 前需要等待的 semaphore。
     PresentMode presentMode = PresentMode::Fifo; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
     bool allowTearing = false; ///< 本次呈现是否允许 tearing。
@@ -1872,7 +1883,7 @@ struct CameraData {
 };
 
 /// 光源类型。
-enum class LightType : std::uint8_t {
+enum class LightType : u8 {
     Directional,
     Point,
     Spot
@@ -1891,7 +1902,7 @@ struct LightData {
 };
 
 /// 渲染队列，用于粗粒度排序和选择 pass。
-enum class RenderQueue : std::uint8_t {
+enum class RenderQueue : u8 {
     Background,
     Opaque,
     AlphaTest,
@@ -1905,10 +1916,10 @@ struct RenderObjectDesc {
     MeshHandle mesh{}; ///< 使用的 mesh。
     MaterialHandle material{}; ///< 使用的材质。
     TransformData transform{}; ///< 物体变换。
-    std::uint32_t submeshIndex = 0; ///< 绘制 mesh 中的哪个 submesh。
+    u32 submeshIndex = 0; ///< 绘制 mesh 中的哪个 submesh。
     RenderQueue queue = RenderQueue::Opaque; ///< 渲染队列。
-    std::uint64_t sortingKey = 0; ///< 精细排序 key，可编码 pipeline/material/depth 等信息。
-    std::uint32_t layerMask = 0xFFFFFFFFu; ///< 渲染层掩码，供相机/pass 过滤。
+    u64 sortingKey = 0; ///< 精细排序 key，可编码 pipeline/material/depth 等信息。
+    u32 layerMask = 0xFFFFFFFFu; ///< 渲染层掩码，供相机/pass 过滤。
     BoundingBox worldBounds{}; ///< 世界空间包围盒，裁剪阶段可直接使用。
     BoundingSphere worldBoundsSphere{}; ///< 世界空间包围球，粗裁剪和 LOD 可直接使用。
     bool visible = true; ///< 是否参与当前帧可见性处理。
@@ -1935,14 +1946,14 @@ struct RenderSceneDesc {
 };
 
 /// RenderGraph 中声明的资源类型。
-enum class RenderGraphResourceType : std::uint8_t {
+enum class RenderGraphResourceType : u8 {
     Buffer,
     Texture,
     SwapchainImage
 };
 
 /// RenderGraph 资源标志，用于别名、导入导出和临时资源优化。
-enum class RenderGraphResourceFlags : std::uint32_t {
+enum class RenderGraphResourceFlags : u32 {
     None = 0,
     Imported = 1u << 0,
     Exported = 1u << 1,
@@ -1952,11 +1963,11 @@ enum class RenderGraphResourceFlags : std::uint32_t {
 };
 
 [[nodiscard]] constexpr RenderGraphResourceFlags operator|(RenderGraphResourceFlags lhs, RenderGraphResourceFlags rhs) noexcept {
-    return detail::bitOr(lhs, rhs);
+    return renderEnumBitOr(lhs, rhs);
 }
 
 [[nodiscard]] constexpr RenderGraphResourceFlags operator&(RenderGraphResourceFlags lhs, RenderGraphResourceFlags rhs) noexcept {
-    return detail::bitAnd(lhs, rhs);
+    return renderEnumBitAnd(lhs, rhs);
 }
 
 constexpr RenderGraphResourceFlags& operator|=(RenderGraphResourceFlags& lhs, RenderGraphResourceFlags rhs) noexcept {
@@ -1995,15 +2006,15 @@ struct RenderGraphTextureDesc {
 struct RenderGraphAttachmentDesc {
     std::string resourceName; ///< attachment 对应的 graph texture 名称。
     TextureAspect aspect = TextureAspect::Color; ///< attachment 使用的 aspect。
-    std::uint32_t mipLevel = 0; ///< attachment 使用的 mip。
-    std::uint32_t arrayLayer = 0; ///< attachment 使用的数组层。
+    u32 mipLevel = 0; ///< attachment 使用的 mip。
+    u32 arrayLayer = 0; ///< attachment 使用的数组层。
     LoadOp loadOp = LoadOp::Clear; ///< pass 开始行为。
     StoreOp storeOp = StoreOp::Store; ///< pass 结束行为。
     ClearValue clearValue{}; ///< 清屏值。
 };
 
 /// RenderGraph pass 类型，调度器可据此选择命令队列和合法命令集合。
-enum class RenderGraphPassType : std::uint8_t {
+enum class RenderGraphPassType : u8 {
     Raster,
     Compute,
     Copy,
@@ -2036,9 +2047,9 @@ struct FrameRenderSettings {
     Extent2D drawableSize{}; ///< 当前可绘制区域尺寸。
     Viewport viewport{}; ///< 默认 viewport。
     Rect2D scissor{}; ///< 默认 scissor。
-    std::uint64_t frameIndex = 0; ///< 递增帧号，可用于环形 buffer 和 temporal 资源。
+    u64 frameIndex = 0; ///< 递增帧号，可用于环形 buffer 和 temporal 资源。
     float deltaTimeSeconds = 0.0F; ///< 与上一帧的时间差。
-    std::uint32_t maxFramesInFlight = 2; ///< CPU/GPU 并行帧数。
+    u32 maxFramesInFlight = 2; ///< CPU/GPU 并行帧数。
     bool enableVsync = true; ///< 是否希望开启垂直同步。
     bool enableHdr = false; ///< 是否希望使用 HDR swapchain/中间颜色格式。
 };
@@ -2059,23 +2070,23 @@ struct FramePacket {
 struct RenderCapabilities {
     GraphicsApi api = GraphicsApi::Unknown; ///< 当前后端 API。
     std::string adapterName; ///< GPU/适配器名称。
-    std::uint64_t dedicatedVideoMemory = 0; ///< 独立显存字节数；集成显卡可为 0 或估算值。
-    std::uint64_t sharedSystemMemory = 0; ///< 可共享系统内存字节数。
+    u64 dedicatedVideoMemory = 0; ///< 独立显存字节数；集成显卡可为 0 或估算值。
+    u64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
     RenderFeature features = RenderFeature::None; ///< 实际启用的功能位。
-    std::uint32_t maxTexture2DSize = 0; ///< 支持的最大 2D texture 边长。
-    std::uint32_t maxTexture3DSize = 0; ///< 支持的最大 3D texture 边长。
-    std::uint32_t maxTextureCubeSize = 0; ///< 支持的最大 cube texture 边长。
-    std::uint32_t maxTextureArrayLayers = 0; ///< 最大 texture array 层数。
-    std::uint32_t maxColorAttachments = 0; ///< 单个 pass 最大 color attachment 数。
-    std::uint32_t maxBindGroups = 0; ///< 单个 pipeline 最大 bind group 数。
-    std::uint32_t maxBindingsPerGroup = 0; ///< 单个 bind group 最大 binding 数。
-    std::uint32_t maxVertexBuffers = 0; ///< 单次绘制最大 vertex buffer binding 数。
-    std::uint32_t maxVertexAttributes = 0; ///< 单个 pipeline 最大顶点属性数。
-    std::uint32_t maxPushConstantSize = 0; ///< push constant/root constant 最大字节数。
-    std::uint64_t minUniformBufferOffsetAlignment = 0; ///< 动态 uniform buffer offset 对齐。
-    std::uint64_t minStorageBufferOffsetAlignment = 0; ///< 动态 storage buffer offset 对齐。
-    std::uint64_t optimalBufferCopyOffsetAlignment = 0; ///< buffer copy offset 推荐对齐。
-    std::uint64_t optimalBufferCopyRowPitchAlignment = 0; ///< buffer-texture copy 每行 pitch 推荐对齐。
+    u32 maxTexture2DSize = 0; ///< 支持的最大 2D texture 边长。
+    u32 maxTexture3DSize = 0; ///< 支持的最大 3D texture 边长。
+    u32 maxTextureCubeSize = 0; ///< 支持的最大 cube texture 边长。
+    u32 maxTextureArrayLayers = 0; ///< 最大 texture array 层数。
+    u32 maxColorAttachments = 0; ///< 单个 pass 最大 color attachment 数。
+    u32 maxBindGroups = 0; ///< 单个 pipeline 最大 bind group 数。
+    u32 maxBindingsPerGroup = 0; ///< 单个 bind group 最大 binding 数。
+    u32 maxVertexBuffers = 0; ///< 单次绘制最大 vertex buffer binding 数。
+    u32 maxVertexAttributes = 0; ///< 单个 pipeline 最大顶点属性数。
+    u32 maxPushConstantSize = 0; ///< push constant/root constant 最大字节数。
+    u64 minUniformBufferOffsetAlignment = 0; ///< 动态 uniform buffer offset 对齐。
+    u64 minStorageBufferOffsetAlignment = 0; ///< 动态 storage buffer offset 对齐。
+    u64 optimalBufferCopyOffsetAlignment = 0; ///< buffer copy offset 推荐对齐。
+    u64 optimalBufferCopyRowPitchAlignment = 0; ///< buffer-texture copy 每行 pitch 推荐对齐。
     SampleCount maxSampleCount = SampleCount::Count1; ///< 支持的最大 MSAA 采样数。
     float maxSamplerAnisotropy = 1.0F; ///< 最大各向异性等级。
     bool supportsCompute = false; ///< 是否支持 compute shader。
@@ -2098,4 +2109,3 @@ struct RenderCapabilities {
     bool supportsTextureCompressionASTC = false; ///< 是否支持 ASTC 压缩格式。
 };
 
-} // namespace Engine::Render
