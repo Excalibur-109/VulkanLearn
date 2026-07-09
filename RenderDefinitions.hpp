@@ -190,35 +190,35 @@ template <typename Enum>
 
 /// 当前后端使用的图形 API，用于能力查询、日志和后端分支。
 enum class GraphicsApi : u8 {
-    Unknown,
-    Vulkan,
-    Direct3D11,
-    Direct3D12,
-    Metal,
-    OpenGL,
-    WebGPU
+    Unknown, ///< 未指定或无法识别的图形 API；用于默认值、错误回退和日志占位。
+    Vulkan, ///< 使用 Vulkan 后端，适合显式资源状态、跨平台桌面/移动渲染路径。
+    Direct3D11, ///< 使用 Direct3D 11 后端，面向 Windows 兼容路径和较传统的隐式状态模型。
+    Direct3D12, ///< 使用 Direct3D 12 后端，面向 Windows 显式同步、资源状态和现代 GPU 功能。
+    Metal, ///< 使用 Apple Metal 后端，面向 macOS/iOS 平台渲染。
+    OpenGL, ///< 使用 OpenGL 后端，主要用于兼容旧平台或调试路径。
+    WebGPU ///< 使用 WebGPU 后端，面向浏览器或 WebGPU 原生实现。
 };
 
 /// GPU 队列类型。不是所有 API 都公开独立队列，后端可以把多个类型映射到同一个实际队列。
 enum class QueueType : u8 {
-    Graphics,
-    Compute,
-    Transfer,
-    Present
+    Graphics, ///< 图形队列，可执行 draw、render pass，也通常兼容 copy/compute。
+    Compute, ///< 计算队列，可执行 compute dispatch，支持异步计算时可与图形队列并行。
+    Transfer, ///< 传输队列，专用于 buffer/texture copy、upload、blit 等数据搬运。
+    Present ///< 呈现队列，用于把 swapchain image 提交给窗口系统显示。
 };
 
 /// GPU 选择偏好。移动端/笔记本上可用于选择省电或高性能适配器。
 enum class PowerPreference : u8 {
-    Default,
-    LowPower,
-    HighPerformance
+    Default, ///< 不强制选择功耗档位，由后端或操作系统按默认策略选择适配器。
+    LowPower, ///< 偏向低功耗适配器，常用于集显、移动端或省电模式。
+    HighPerformance ///< 偏向高性能适配器，常用于独显和需要最大渲染吞吐的场景。
 };
 
 /// 后端验证层开关级别。
 enum class ValidationMode : u8 {
-    Disabled,
-    Enabled,
-    GpuAssisted
+    Disabled, ///< 关闭验证层/调试层，适合发布版本或性能测试。
+    Enabled, ///< 启用常规 API 验证和调试消息，适合开发期捕获资源和同步错误。
+    GpuAssisted ///< 启用 GPU 辅助验证，额外检查 shader 侧越界等问题，开销更高。
 };
 
 /// 引擎希望启用的渲染特性位。后端初始化时可根据设备能力做裁剪或报错。
@@ -393,13 +393,13 @@ enum class Format : u16 {
 
 /// 多重采样数量，对应 Vulkan sample count / D3D sample count / Metal sampleCount。
 enum class SampleCount : u8 {
-    Count1 = 1,
-    Count2 = 2,
-    Count4 = 4,
-    Count8 = 8,
-    Count16 = 16,
-    Count32 = 32,
-    Count64 = 64
+    Count1 = 1, ///< 单采样，无 MSAA；普通纹理、swapchain 和大多数后处理目标使用。
+    Count2 = 2, ///< 2x MSAA，较低成本的边缘抗锯齿采样数。
+    Count4 = 4, ///< 4x MSAA，质量和成本较常用的平衡点。
+    Count8 = 8, ///< 8x MSAA，更高质量抗锯齿，带宽和存储成本明显增加。
+    Count16 = 16, ///< 16x MSAA，高端或特殊离屏渲染使用，设备支持度有限。
+    Count32 = 32, ///< 32x MSAA，少数设备支持，通常只用于能力完整性表达。
+    Count64 = 64 ///< 64x MSAA，极少实际使用，主要映射底层 API 的完整 sample count。
 };
 
 /**
@@ -408,10 +408,10 @@ enum class SampleCount : u8 {
  * Fifo 是最通用的垂直同步模式；Immediate/Mailbox 可能不被所有平台支持。
  */
 enum class PresentMode : u8 {
-    Immediate,
-    Mailbox,
-    FIFO,
-    FIFORelaxed
+    Immediate, ///< 立即呈现，不等待垂直同步；延迟低但可能产生 tearing。
+    Mailbox, ///< 三缓冲低延迟垂直同步模式，新帧替换等待队列中的旧帧。
+    FIFO, ///< 标准垂直同步队列模式，所有平台通常都支持，避免 tearing。
+    FIFORelaxed ///< FIFO 的宽松模式；错过垂直同步时可立即显示以降低卡顿。
 };
 
 /**
@@ -421,51 +421,51 @@ enum class PresentMode : u8 {
  * 隐式 API（OpenGL/D3D11）可以把它用于调试验证或减少不必要的绑定错误。
  */
 enum class ResourceState : u16 {
-    Undefined,
-    Common,
-    CopySource,
-    CopyDestination,
-    VertexBuffer,
-    IndexBuffer,
-    ConstantBuffer,
-    ShaderRead,
-    ShaderWrite,
-    RenderTarget,
-    DepthRead,
-    DepthWrite,
-    ResolveSource,
-    ResolveDestination,
-    Present,
-    IndirectArgument,
-    AccelerationStructureRead,
-    AccelerationStructureWrite,
-    ShadingRateTexture
+    Undefined, ///< 内容或状态未定义；资源首次使用、丢弃旧内容或无需保留数据时使用。
+    Common, ///< 通用状态；适合作为跨队列/跨 API 的默认可转换状态。
+    CopySource, ///< 作为拷贝源读取，用于 buffer/texture copy、readback 或 blit source。
+    CopyDestination, ///< 作为拷贝目标写入，用于上传、清理、resolve/blit destination。
+    VertexBuffer, ///< 作为顶点缓冲读取，供输入装配阶段获取 vertex attribute。
+    IndexBuffer, ///< 作为索引缓冲读取，供 indexed draw 获取索引数据。
+    ConstantBuffer, ///< 作为常量/uniform buffer 读取，供 shader 访问只读小块参数。
+    ShaderRead, ///< 作为 shader 只读资源访问，例如 sampled texture、SRV 或只读 storage buffer。
+    ShaderWrite, ///< 作为 shader 可写资源访问，例如 UAV、storage texture 或 writable storage buffer。
+    RenderTarget, ///< 作为 color attachment/render target 写入，也可能支持同 pass 内读取。
+    DepthRead, ///< 作为只读 depth-stencil attachment 或 depth texture 读取。
+    DepthWrite, ///< 作为可写 depth-stencil attachment 参与深度/模板测试。
+    ResolveSource, ///< 作为 MSAA resolve 源资源读取。
+    ResolveDestination, ///< 作为 MSAA resolve 目标资源写入。
+    Present, ///< 作为 swapchain image 等待窗口系统呈现。
+    IndirectArgument, ///< 作为 indirect draw/dispatch 参数缓冲由命令处理器读取。
+    AccelerationStructureRead, ///< 作为光追加速结构只读访问，用于 ray tracing 查询。
+    AccelerationStructureWrite, ///< 作为光追加速结构构建或更新目标写入。
+    ShadingRateTexture ///< 作为可变速率着色/VRS 图像读取，控制屏幕区域 shading rate。
 };
 
 /// GPU 管线阶段位。需要精确同步时可配合 AccessFlags 构造 barrier。
 enum class PipelineStage : u64 {
-    None = 0,
-    TopOfPipe = 1ull << 0,
-    DrawIndirect = 1ull << 1,
-    VertexInput = 1ull << 2,
-    VertexShader = 1ull << 3,
-    TessControlShader = 1ull << 4,
-    TessEvaluationShader = 1ull << 5,
-    GeometryShader = 1ull << 6,
-    FragmentShader = 1ull << 7,
-    EarlyFragmentTests = 1ull << 8,
-    LateFragmentTests = 1ull << 9,
-    ColorAttachmentOutput = 1ull << 10,
-    ComputeShader = 1ull << 11,
-    Transfer = 1ull << 12,
-    BottomOfPipe = 1ull << 13,
-    Host = 1ull << 14,
-    RayTracingShader = 1ull << 15,
-    AccelerationStructureBuild = 1ull << 16,
-    TaskShader = 1ull << 17,
-    MeshShader = 1ull << 18,
-    AllGraphics = 1ull << 19,
-    AllCommands = 1ull << 20
+    None = 0, ///< 不指定任何管线阶段；常用于空 barrier 或由状态自动推导。
+    TopOfPipe = 1ull << 0, ///< 管线最开始的同步点，用于等待命令进入 GPU 执行流。
+    DrawIndirect = 1ull << 1, ///< 读取 indirect draw/dispatch 参数的阶段。
+    VertexInput = 1ull << 2, ///< 读取 vertex/index buffer 并装配图元的阶段。
+    VertexShader = 1ull << 3, ///< 执行 vertex shader 的阶段。
+    TessControlShader = 1ull << 4, ///< 执行 tessellation control/hull shader 的阶段。
+    TessEvaluationShader = 1ull << 5, ///< 执行 tessellation evaluation/domain shader 的阶段。
+    GeometryShader = 1ull << 6, ///< 执行 geometry shader 的阶段。
+    FragmentShader = 1ull << 7, ///< 执行 fragment/pixel shader 的阶段。
+    EarlyFragmentTests = 1ull << 8, ///< 早期深度/模板测试阶段，可在片元着色前发生。
+    LateFragmentTests = 1ull << 9, ///< 后期深度/模板测试阶段，可在片元着色后发生。
+    ColorAttachmentOutput = 1ull << 10, ///< color attachment blend、logic op 和写入阶段。
+    ComputeShader = 1ull << 11, ///< 执行 compute shader dispatch 的阶段。
+    Transfer = 1ull << 12, ///< 执行 copy、blit、clear、resolve 等传输命令的阶段。
+    BottomOfPipe = 1ull << 13, ///< 管线末尾同步点，常用于 timestamp 或等待前序命令完成。
+    Host = 1ull << 14, ///< CPU/主机访问阶段，用于 map、readback 或上传内存同步。
+    RayTracingShader = 1ull << 15, ///< 执行 ray generation、hit、miss 等光追 shader 的阶段。
+    AccelerationStructureBuild = 1ull << 16, ///< 构建或更新光追加速结构的阶段。
+    TaskShader = 1ull << 17, ///< 执行 task/amplification shader 的阶段。
+    MeshShader = 1ull << 18, ///< 执行 mesh shader 并生成图元的阶段。
+    AllGraphics = 1ull << 19, ///< 覆盖所有图形管线阶段的聚合标志。
+    AllCommands = 1ull << 20 ///< 覆盖队列中所有命令和阶段的保守同步标志。
 };
 
 [[nodiscard]] constexpr PipelineStage operator|(PipelineStage lhs, PipelineStage rhs) noexcept {
@@ -483,26 +483,26 @@ constexpr PipelineStage& operator|=(PipelineStage& lhs, PipelineStage rhs) noexc
 
 /// GPU 资源访问类型位。比 ResourceState 更接近后端 barrier 所需的 access mask。
 enum class AccessFlags : u64 {
-    None = 0,
-    IndirectCommandRead = 1ull << 0,
-    IndexRead = 1ull << 1,
-    VertexAttributeRead = 1ull << 2,
-    UniformRead = 1ull << 3,
-    InputAttachmentRead = 1ull << 4,
-    ShaderRead = 1ull << 5,
-    ShaderWrite = 1ull << 6,
-    ColorAttachmentRead = 1ull << 7,
-    ColorAttachmentWrite = 1ull << 8,
-    DepthStencilRead = 1ull << 9,
-    DepthStencilWrite = 1ull << 10,
-    TransferRead = 1ull << 11,
-    TransferWrite = 1ull << 12,
-    HostRead = 1ull << 13,
-    HostWrite = 1ull << 14,
-    MemoryRead = 1ull << 15,
-    MemoryWrite = 1ull << 16,
-    AccelerationStructureRead = 1ull << 17,
-    AccelerationStructureWrite = 1ull << 18
+    None = 0, ///< 不指定访问类型；常用于无内存依赖或由 ResourceState 自动推导。
+    IndirectCommandRead = 1ull << 0, ///< GPU 读取 indirect draw/dispatch 参数。
+    IndexRead = 1ull << 1, ///< 输入装配阶段读取 index buffer。
+    VertexAttributeRead = 1ull << 2, ///< 输入装配阶段读取 vertex attribute 数据。
+    UniformRead = 1ull << 3, ///< shader 读取 uniform/constant buffer。
+    InputAttachmentRead = 1ull << 4, ///< fragment shader 读取 input attachment/subpass input。
+    ShaderRead = 1ull << 5, ///< shader 读取 sampled texture、只读 buffer 或其他 SRV 资源。
+    ShaderWrite = 1ull << 6, ///< shader 写入 storage buffer、storage texture 或 UAV 资源。
+    ColorAttachmentRead = 1ull << 7, ///< color attachment 读取，常见于 blending 或 framebuffer fetch。
+    ColorAttachmentWrite = 1ull << 8, ///< color attachment 写入渲染目标。
+    DepthStencilRead = 1ull << 9, ///< depth/stencil attachment 或 depth texture 的只读访问。
+    DepthStencilWrite = 1ull << 10, ///< depth/stencil attachment 的写入访问。
+    TransferRead = 1ull << 11, ///< copy/blit/resolve/clear 等传输命令读取资源。
+    TransferWrite = 1ull << 12, ///< copy/blit/resolve/clear 等传输命令写入资源。
+    HostRead = 1ull << 13, ///< CPU 从映射内存或读回资源读取数据。
+    HostWrite = 1ull << 14, ///< CPU 向映射内存或上传资源写入数据。
+    MemoryRead = 1ull << 15, ///< 泛化内存读取，用于无法细分或需要保守同步的 barrier。
+    MemoryWrite = 1ull << 16, ///< 泛化内存写入，用于无法细分或需要保守同步的 barrier。
+    AccelerationStructureRead = 1ull << 17, ///< ray tracing 或构建过程读取加速结构。
+    AccelerationStructureWrite = 1ull << 18 ///< 构建或更新过程写入加速结构。
 };
 
 [[nodiscard]] constexpr AccessFlags operator|(AccessFlags lhs, AccessFlags rhs) noexcept {
@@ -582,14 +582,14 @@ struct ClearValue {
 
 /// texture 子资源 aspect 位，用于区分 color/depth/stencil/plane。
 enum class TextureAspect : u32 {
-    None = 0,
-    Color = 1u << 0,
-    Depth = 1u << 1,
-    Stencil = 1u << 2,
-    Plane0 = 1u << 3,
-    Plane1 = 1u << 4,
-    Plane2 = 1u << 5,
-    All = 0xFFFFFFFFu
+    None = 0, ///< 不指定任何 aspect；用于空范围或由格式推导前的占位值。
+    Color = 1u << 0, ///< color aspect，适用于普通颜色纹理和 color attachment。
+    Depth = 1u << 1, ///< depth aspect，适用于深度纹理或 depth-stencil 格式中的深度平面。
+    Stencil = 1u << 2, ///< stencil aspect，适用于模板纹理或 depth-stencil 格式中的模板平面。
+    Plane0 = 1u << 3, ///< 多平面格式的第 0 平面，例如 YUV 图像的主亮度平面。
+    Plane1 = 1u << 4, ///< 多平面格式的第 1 平面，例如 YUV 图像的色度平面。
+    Plane2 = 1u << 5, ///< 多平面格式的第 2 平面，用于三平面 YUV 等格式。
+    All = 0xFFFFFFFFu ///< 覆盖资源所有可用 aspect；后端可按实际格式展开。
 };
 
 [[nodiscard]] constexpr TextureAspect operator|(TextureAspect lhs, TextureAspect rhs) noexcept {
@@ -607,15 +607,15 @@ constexpr TextureAspect& operator|=(TextureAspect& lhs, TextureAspect rhs) noexc
 
 /// buffer 的用途位。创建 buffer 时必须声明后续会如何使用，显式 API 会用它设置 usage flags。
 enum class BufferUsage : u32 {
-    None = 0,
-    TransferSource = 1u << 0,
-    TransferDestination = 1u << 1,
-    Vertex = 1u << 2,
-    Index = 1u << 3,
-    Uniform = 1u << 4,
-    Storage = 1u << 5,
-    Indirect = 1u << 6,
-    ShaderDeviceAddress = 1u << 7
+    None = 0, ///< 未声明用途；只适合默认值，真实 buffer 创建通常应指定至少一个用途。
+    TransferSource = 1u << 0, ///< 可作为 copy/blit/readback 的源 buffer。
+    TransferDestination = 1u << 1, ///< 可作为 upload、copy 或清零操作的目标 buffer。
+    Vertex = 1u << 2, ///< 可绑定为 vertex buffer，供输入装配阶段读取顶点数据。
+    Index = 1u << 3, ///< 可绑定为 index buffer，供 indexed draw 读取索引数据。
+    Uniform = 1u << 4, ///< 可绑定为 uniform/constant buffer，供 shader 读取常量参数。
+    Storage = 1u << 5, ///< 可绑定为 storage/UAV buffer，供 shader 读写结构化或原始数据。
+    Indirect = 1u << 6, ///< 可作为 indirect draw/dispatch 参数 buffer 由 GPU 命令处理器读取。
+    ShaderDeviceAddress = 1u << 7 ///< 允许 shader 通过设备地址访问 buffer，常用于 bindless 或光追数据。
 };
 
 [[nodiscard]] constexpr BufferUsage operator|(BufferUsage lhs, BufferUsage rhs) noexcept {
@@ -633,11 +633,11 @@ constexpr BufferUsage& operator|=(BufferUsage& lhs, BufferUsage rhs) noexcept {
 
 /// buffer 创建附加标志，用于表达生命周期和后端内存选择提示。
 enum class BufferCreateFlags : u32 {
-    None = 0,
-    DedicatedMemory = 1u << 0,
-    SparseBinding = 1u << 1,
-    RingBuffer = 1u << 2,
-    Transient = 1u << 3
+    None = 0, ///< 无额外创建要求，使用后端默认分配策略。
+    DedicatedMemory = 1u << 0, ///< 倾向单独分配内存，适合大 buffer 或需要避免与其他资源混用的场景。
+    SparseBinding = 1u << 1, ///< 请求稀疏绑定/虚拟内存能力，允许按页提交 buffer 存储。
+    RingBuffer = 1u << 2, ///< 表示 buffer 用作环形分配区，常用于动态 uniform 或 per-frame 上传。
+    Transient = 1u << 3 ///< 表示短生命周期临时 buffer，资源分配器可优先复用或延迟实际分配。
 };
 
 [[nodiscard]] constexpr BufferCreateFlags operator|(BufferCreateFlags lhs, BufferCreateFlags rhs) noexcept {
@@ -655,15 +655,15 @@ constexpr BufferCreateFlags& operator|=(BufferCreateFlags& lhs, BufferCreateFlag
 
 /// texture/image 的用途位。一个 texture 可以同时是采样贴图、渲染目标或拷贝目标。
 enum class TextureUsage : u32 {
-    None = 0,
-    TransferSource = 1u << 0,
-    TransferDestination = 1u << 1,
-    Sampled = 1u << 2,
-    Storage = 1u << 3,
-    ColorAttachment = 1u << 4,
-    DepthStencilAttachment = 1u << 5,
-    Present = 1u << 6,
-    Transient = 1u << 7
+    None = 0, ///< 未声明用途；只适合默认值，真实 texture 创建通常应指定至少一个用途。
+    TransferSource = 1u << 0, ///< 可作为 copy、blit、resolve 或 readback 的源 texture。
+    TransferDestination = 1u << 1, ///< 可作为 upload、copy、blit、resolve 或 clear 的目标 texture。
+    Sampled = 1u << 2, ///< 可创建 sampled view 并在 shader 中作为只读纹理采样。
+    Storage = 1u << 3, ///< 可创建 storage image/UAV view 并在 shader 中随机读写。
+    ColorAttachment = 1u << 4, ///< 可作为 color render target 写入。
+    DepthStencilAttachment = 1u << 5, ///< 可作为 depth-stencil attachment 参与深度/模板测试。
+    Present = 1u << 6, ///< 可作为 swapchain/backbuffer image 交给窗口系统呈现。
+    Transient = 1u << 7 ///< 表示临时 attachment，后端可使用 lazily allocated 或 RenderGraph 复用策略。
 };
 
 [[nodiscard]] constexpr TextureUsage operator|(TextureUsage lhs, TextureUsage rhs) noexcept {
@@ -681,13 +681,13 @@ constexpr TextureUsage& operator|=(TextureUsage& lhs, TextureUsage rhs) noexcept
 
 /// texture 创建附加标志，用于表达 cube、格式重解释、稀疏资源等需求。
 enum class TextureCreateFlags : u32 {
-    None = 0,
-    CubeCompatible = 1u << 0,
-    MutableFormat = 1u << 1,
-    DedicatedMemory = 1u << 2,
-    SparseBinding = 1u << 3,
-    GenerateMips = 1u << 4,
-    RenderGraphTransient = 1u << 5
+    None = 0, ///< 无额外创建要求，使用普通 texture 创建路径。
+    CubeCompatible = 1u << 0, ///< 允许 2D array texture 创建 cube/cube array view，层数需满足 6 的倍数。
+    MutableFormat = 1u << 1, ///< 允许 view 使用兼容格式重解释底层存储格式。
+    DedicatedMemory = 1u << 2, ///< 倾向为该 texture 单独分配内存，适合大 render target 或特殊资源。
+    SparseBinding = 1u << 3, ///< 请求稀疏纹理绑定能力，允许按 tile/page 提交纹理存储。
+    GenerateMips = 1u << 4, ///< 表示资源创建后需要生成 mipmap，后端可预留必要 usage 和状态。
+    RenderGraphTransient = 1u << 5 ///< 表示 RenderGraph 内部临时纹理，可参与别名和生命周期裁剪。
 };
 
 [[nodiscard]] constexpr TextureCreateFlags operator|(TextureCreateFlags lhs, TextureCreateFlags rhs) noexcept {
@@ -705,74 +705,74 @@ constexpr TextureCreateFlags& operator|=(TextureCreateFlags& lhs, TextureCreateF
 
 /// 资源内存访问方向。后端可据此选择显存、本地可映射内存或读回内存。
 enum class MemoryUsage : u8 {
-    GpuOnly,
-    CpuToGpu,
-    GpuToCpu,
-    CpuOnly
+    GpuOnly, ///< GPU 本地内存，CPU 不直接访问；适合静态贴图、渲染目标和长期驻留资源。
+    CpuToGpu, ///< CPU 写入、GPU 读取的上传内存，适合 staging、动态 uniform 和流式顶点数据。
+    GpuToCpu, ///< GPU 写入、CPU 读取的读回内存，适合截图、查询结果和调试 readback。
+    CpuOnly ///< 仅 CPU 访问的后备内存或模拟资源，通常用于工具、测试或无 GPU 路径。
 };
 
 /// 资源生命周期提示，帮助资源分配器决定是否池化、复用或立即释放。
 enum class ResourceLifetime : u8 {
-    Persistent,
-    PerFrame,
-    Transient
+    Persistent, ///< 长期驻留资源，跨多帧保存内容和句柄，例如材质贴图、mesh buffer。
+    PerFrame, ///< 每帧轮转资源，通常按 frames-in-flight 分配，适合动态常量和临时上传。
+    Transient ///< 单个 pass 或 RenderGraph 生命周期内有效，可被分配器快速复用或别名。
 };
 
 /// 纹理资源本身的维度，不包含 view 维度重解释。
 enum class TextureDimension : u8 {
-    Texture1D,
-    Texture2D,
-    Texture3D
+    Texture1D, ///< 一维纹理资源，常用于 LUT、曲线表或少量线性采样数据。
+    Texture2D, ///< 二维纹理资源，最常用的贴图、render target、depth target 和 cube array 基础维度。
+    Texture3D ///< 三维体纹理资源，常用于体积数据、噪声场、体渲染或 3D LUT。
 };
 
 /// 纹理视图维度。一个 2D array texture 可以被创建为 View2DArray 或单层 View2D。
 enum class TextureViewDimension : u8 {
-    View1D,
-    View1DArray,
-    View2D,
-    View2DArray,
-    View3D,
-    Cube,
-    CubeArray
+    View1D, ///< 暴露单个一维纹理 view。
+    View1DArray, ///< 暴露一维纹理数组 view，可访问多个 array layer。
+    View2D, ///< 暴露单个二维纹理 view，常用于普通采样贴图和 render target。
+    View2DArray, ///< 暴露二维纹理数组 view，常用于 texture array、shadow map array 或 multiview。
+    View3D, ///< 暴露三维体纹理 view。
+    Cube, ///< 暴露 6 层二维数组为单个 cube map view。
+    CubeArray ///< 暴露多个 cube map 组成的 cube array view，层数为 6 的倍数。
 };
 
 /// 纹理采样过滤方式。
 enum class FilterMode : u8 {
-    Nearest,
-    Linear
+    Nearest, ///< 最近点采样，保留硬边像素，适合像素风、整数数据或无需插值的查表。
+    Linear ///< 线性插值采样，适合普通颜色/法线贴图和缩放时的平滑过滤。
 };
 
 /// mip 层级之间的过滤方式。
 enum class MipmapMode : u8 {
-    Nearest,
-    Linear
+    Nearest, ///< 选择最接近的单个 mip 层，不在两个 mip 之间插值。
+    Linear ///< 在相邻 mip 层之间线性插值，减少层级切换带来的闪烁。
 };
 
 /// UVW 坐标越界时的寻址方式。
 enum class AddressMode : u8 {
-    Repeat,
-    MirroredRepeat,
-    ClampToEdge,
-    ClampToBorder
+    Repeat, ///< 坐标越界时按 1.0 周期重复纹理。
+    MirroredRepeat, ///< 坐标越界时镜像重复纹理，减少平铺接缝方向突变。
+    ClampToEdge, ///< 坐标越界时钳制到边缘 texel，常用于 UI、shadow map 和后处理纹理。
+    ClampToBorder ///< 坐标越界时返回指定边框颜色，常用于 shadow map 边界处理。
 };
 
 /// ClampToBorder 模式下采样器返回的边框颜色。
 enum class BorderColor : u8 {
-    TransparentBlack,
-    OpaqueBlack,
-    OpaqueWhite
+    TransparentBlack, ///< 边框返回透明黑色 (0,0,0,0)，适合 alpha 参与裁剪的采样场景。
+    OpaqueBlack, ///< 边框返回不透明黑色 (0,0,0,1)，适合默认无光照或深色边界。
+    OpaqueWhite ///< 边框返回不透明白色 (1,1,1,1)，常用于 shadow compare 的安全边界。
 };
 
 /// 通用比较函数，深度测试、模板测试和 shadow sampler 都会使用。
 enum class CompareOp : u8 {
-    Never,
-    Less,
-    Equal,
-    LessOrEqual,
-    Greater,
-    NotEqual,
-    GreaterOrEqual,
-    Always
+    Never, ///< 比较永远失败，用于禁用通过路径或特殊模板写入控制。
+    Less, ///< 输入值小于参考值时通过，常用于标准深度测试。
+    Equal, ///< 输入值等于参考值时通过，常用于模板标记或精确深度匹配。
+    LessOrEqual, ///< 输入值小于等于参考值时通过，常用于 skybox、shadow compare 或反转差异适配。
+    Greater, ///< 输入值大于参考值时通过，常用于 reversed-Z 深度测试。
+    NotEqual, ///< 输入值不等于参考值时通过，常用于模板轮廓或遮罩反选。
+    GreaterOrEqual, ///< 输入值大于等于参考值时通过，常用于 reversed-Z 的宽松比较。
+    Always ///< 比较永远通过，用于关闭比较约束但保留对应测试/写入流程。
 };
 
 /// GPU buffer 创建描述，不包含初始数据；初始数据通过 UploadBatchDesc 提交。
@@ -835,17 +835,17 @@ struct SamplerDesc {
 
 /// shader 阶段位掩码，用于描述 shader 自身阶段和资源可见性。
 enum class ShaderStage : u32 {
-    None = 0,
-    Vertex = 1u << 0,
-    TessControl = 1u << 1,
-    TessEvaluation = 1u << 2,
-    Geometry = 1u << 3,
-    Fragment = 1u << 4,
-    Compute = 1u << 5,
-    Task = 1u << 6,
-    Mesh = 1u << 7,
-    AllGraphics = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 6) | (1u << 7),
-    All = 0xFFFFFFFFu
+    None = 0, ///< 不指定 shader 阶段；用于空可见性、默认值或反射失败占位。
+    Vertex = 1u << 0, ///< vertex shader 阶段，处理顶点输入并输出裁剪空间位置。
+    TessControl = 1u << 1, ///< tessellation control/hull shader 阶段，生成 patch 细分控制数据。
+    TessEvaluation = 1u << 2, ///< tessellation evaluation/domain shader 阶段，计算细分后的顶点位置。
+    Geometry = 1u << 3, ///< geometry shader 阶段，可按图元生成、扩展或丢弃几何。
+    Fragment = 1u << 4, ///< fragment/pixel shader 阶段，计算片元颜色、深度或其他输出。
+    Compute = 1u << 5, ///< compute shader 阶段，用于通用 GPU 计算和非图形 pass。
+    Task = 1u << 6, ///< task/amplification shader 阶段，用于 mesh shader 前的工作生成。
+    Mesh = 1u << 7, ///< mesh shader 阶段，直接生成图元并替代传统 vertex input 管线。
+    AllGraphics = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 6) | (1u << 7), ///< 覆盖所有图形 shader 阶段，不包含 compute。
+    All = 0xFFFFFFFFu ///< 覆盖所有 shader 阶段，适合全局资源可见性或保守绑定布局。
 };
 
 [[nodiscard]] constexpr ShaderStage operator|(ShaderStage lhs, ShaderStage rhs) noexcept {
@@ -863,13 +863,13 @@ constexpr ShaderStage& operator|=(ShaderStage& lhs, ShaderStage rhs) noexcept {
 
 /// shader 源码或字节码的语言/中间格式。
 enum class ShaderLanguage : u8 {
-    Unknown,
-    GLSL,
-    HLSL,
-    Slang,
-    MSL,
-    SPIRV,
-    DXIL
+    Unknown, ///< 未指定 shader 语言或字节码格式；后端需根据文件扩展名或配置推导。
+    GLSL, ///< GLSL 源码，常用于 OpenGL/Vulkan 开发期编译路径。
+    HLSL, ///< HLSL 源码，常用于 Direct3D 或跨编译到 SPIR-V 的路径。
+    Slang, ///< Slang 源码，适合多后端 shader 生成和高级参数化。
+    MSL, ///< Metal Shading Language 源码，供 Metal 后端直接编译或加载。
+    SPIRV, ///< SPIR-V 字节码，通常供 Vulkan 后端直接创建 shader module。
+    DXIL ///< DXIL 字节码，通常供 Direct3D 12 或 DXC 编译路径使用。
 };
 
 /// shader 宏定义，用于同一份源码生成不同变体。
@@ -914,23 +914,23 @@ struct ShaderSpecializationConstant {
 
 /// 资源绑定槽类型，描述 shader 看到的资源类别。
 enum class BindingType : u8 {
-    UniformBuffer,
-    StorageBuffer,
-    SampledTexture,
-    StorageTexture,
-    Sampler,
-    CombinedTextureSampler,
-    PushConstant,
-    AccelerationStructure
+    UniformBuffer, ///< 只读常量/uniform buffer 绑定，适合小块频繁读取参数。
+    StorageBuffer, ///< storage/UAV buffer 绑定，允许 shader 读取或写入结构化数据。
+    SampledTexture, ///< 只读 sampled texture view，需配合 sampler 或独立采样器使用。
+    StorageTexture, ///< storage image/UAV texture 绑定，允许 shader 随机读写像素。
+    Sampler, ///< 独立 sampler 状态绑定，只描述过滤、寻址和比较规则。
+    CombinedTextureSampler, ///< texture 与 sampler 组合绑定，适配 GLSL combined image sampler 模型。
+    PushConstant, ///< push constant/root constant 小块数据绑定，适合高频少量参数。
+    AccelerationStructure ///< ray tracing acceleration structure 绑定，供光追 shader 查询场景几何。
 };
 
 /// sampled texture 在 shader 中的采样数据类型。
 enum class TextureSampleType : u8 {
-    Float,
-    UnfilterableFloat,
-    SignedInteger,
-    UnsignedInteger,
-    Depth
+    Float, ///< 可过滤浮点/归一化纹理采样类型，支持普通线性过滤。
+    UnfilterableFloat, ///< 不可过滤浮点纹理采样类型，例如部分高精度 float 格式。
+    SignedInteger, ///< 有符号整数纹理采样类型，shader 读取 int 值且不可线性过滤。
+    UnsignedInteger, ///< 无符号整数纹理采样类型，shader 读取 uint 值且不可线性过滤。
+    Depth ///< 深度纹理采样类型，可用于 depth compare 或读取 depth 值。
 };
 
 /// 单个绑定槽的布局信息，相当于 descriptor binding/root parameter/argument entry。
@@ -1026,34 +1026,34 @@ struct ShaderReflectionDesc {
 
 /// 顶点属性格式，描述单个 attribute 在 vertex buffer 中的存储类型。
 enum class VertexFormat : u8 {
-    Float32,
-    Float32x2,
-    Float32x3,
-    Float32x4,
-    UInt32,
-    UInt32x2,
-    UInt32x3,
-    UInt32x4,
-    SInt32,
-    SInt32x2,
-    SInt32x3,
-    SInt32x4,
-    UNorm8x4,
-    SNorm8x4,
-    UInt16x2,
-    UInt16x4,
-    SInt16x2,
-    SInt16x4,
-    UNorm16x2,
-    UNorm16x4,
-    SNorm16x2,
-    SNorm16x4
+    Float32, ///< 单个 32 位浮点属性，常用于标量权重或自定义数据。
+    Float32x2, ///< 两个 32 位浮点属性，常用于 UV、屏幕坐标或二维向量。
+    Float32x3, ///< 三个 32 位浮点属性，常用于 position、normal、tangent.xyz。
+    Float32x4, ///< 四个 32 位浮点属性，常用于 tangent、color 或矩阵列。
+    UInt32, ///< 单个 32 位无符号整数属性，shader 以 uint 读取。
+    UInt32x2, ///< 两个 32 位无符号整数属性，适合 ID、索引或压缩数据。
+    UInt32x3, ///< 三个 32 位无符号整数属性，适合自定义整数向量。
+    UInt32x4, ///< 四个 32 位无符号整数属性，常用于 bone indices 的高精度存储。
+    SInt32, ///< 单个 32 位有符号整数属性，shader 以 int 读取。
+    SInt32x2, ///< 两个 32 位有符号整数属性。
+    SInt32x3, ///< 三个 32 位有符号整数属性。
+    SInt32x4, ///< 四个 32 位有符号整数属性。
+    UNorm8x4, ///< 四个 8 位无符号归一化属性，常用于顶点颜色或 packed weights。
+    SNorm8x4, ///< 四个 8 位有符号归一化属性，常用于压缩法线/切线向量。
+    UInt16x2, ///< 两个 16 位无符号整数属性，shader 以 uint 分量读取。
+    UInt16x4, ///< 四个 16 位无符号整数属性，常用于压缩索引或骨骼编号。
+    SInt16x2, ///< 两个 16 位有符号整数属性。
+    SInt16x4, ///< 四个 16 位有符号整数属性。
+    UNorm16x2, ///< 两个 16 位无符号归一化属性，适合高精度 UV 或权重。
+    UNorm16x4, ///< 四个 16 位无符号归一化属性，适合高精度颜色或权重。
+    SNorm16x2, ///< 两个 16 位有符号归一化属性，适合压缩二维方向数据。
+    SNorm16x4 ///< 四个 16 位有符号归一化属性，适合高精度压缩切线/法线数据。
 };
 
 /// 顶点 buffer 的步进频率，区分逐顶点数据和实例化数据。
 enum class VertexInputRate : u8 {
-    PerVertex,
-    PerInstance
+    PerVertex, ///< 每个顶点前进一次，适用于 position、normal、uv 等网格顶点数据。
+    PerInstance ///< 每个实例前进一次，适用于 instance transform、颜色或自定义实例参数。
 };
 
 /// 单个顶点属性描述，例如 position/normal/uv/color。
@@ -1077,102 +1077,102 @@ struct VertexBufferLayoutDesc {
 
 /// 输入图元拓扑，描述顶点流如何被解释成点、线、三角形或 patch。
 enum class PrimitiveTopology : u8 {
-    PointList,
-    LineList,
-    LineStrip,
-    TriangleList,
-    TriangleStrip,
-    PatchList
+    PointList, ///< 每个顶点生成一个点图元，常用于粒子、调试点或点云。
+    LineList, ///< 每两个顶点生成一条独立线段，常用于调试线框和辅助线。
+    LineStrip, ///< 顶点按顺序连接为连续折线，可用 primitive restart 分段。
+    TriangleList, ///< 每三个顶点生成一个独立三角形，最常用的网格拓扑。
+    TriangleStrip, ///< 顶点按条带生成连续三角形，减少顶点数量但排序约束更强。
+    PatchList ///< patch 图元，用于 tessellation 阶段，控制点数量由管线状态指定。
 };
 
 /// 多边形栅格化模式。Line/Point 不是所有平台和设备都完全支持。
 enum class PolygonMode : u8 {
-    Fill,
-    Line,
-    Point
+    Fill, ///< 填充三角形内部，标准实体渲染模式。
+    Line, ///< 只栅格化多边形边线，用于线框显示或调试。
+    Point ///< 只栅格化多边形顶点，用于特殊调试或点模式渲染。
 };
 
 /// 面剔除模式。
 enum class CullMode : u8 {
-    None,
-    Front,
-    Back,
-    FrontAndBack
+    None, ///< 不剔除任何面，双面材质或调试时使用。
+    Front, ///< 剔除正面三角形，常用于特殊 shadow 或反面渲染技巧。
+    Back, ///< 剔除背面三角形，实体网格最常用的模式。
+    FrontAndBack ///< 同时剔除正面和背面，通常只用于禁用光栅输出的特殊路径。
 };
 
 /// 正面三角形绕序。注意不同 API 的 framebuffer 坐标系可能影响最终正反面判断。
 enum class FrontFace : u8 {
-    CounterClockwise,
-    Clockwise
+    CounterClockwise, ///< 顶点在屏幕空间逆时针排列时视为正面。
+    Clockwise ///< 顶点在屏幕空间顺时针排列时视为正面。
 };
 
 /// 模板测试操作。
 enum class StencilOp : u8 {
-    Keep,
-    Zero,
-    Replace,
-    IncrementClamp,
-    DecrementClamp,
-    Invert,
-    IncrementWrap,
-    DecrementWrap
+    Keep, ///< 保留当前 stencil 值不变。
+    Zero, ///< 将 stencil 值写为 0。
+    Replace, ///< 将 stencil 值替换为 reference 值。
+    IncrementClamp, ///< stencil 值加 1，并在最大值处饱和。
+    DecrementClamp, ///< stencil 值减 1，并在 0 处饱和。
+    Invert, ///< 按位反转 stencil 值。
+    IncrementWrap, ///< stencil 值加 1，超过最大值后回绕到 0。
+    DecrementWrap ///< stencil 值减 1，低于 0 后回绕到最大值。
 };
 
 /// 混合因子，用于颜色和 alpha blend。
 enum class BlendFactor : u8 {
-    Zero,
-    One,
-    SourceColor,
-    OneMinusSourceColor,
-    DestinationColor,
-    OneMinusDestinationColor,
-    SourceAlpha,
-    OneMinusSourceAlpha,
-    DestinationAlpha,
-    OneMinusDestinationAlpha,
-    ConstantColor,
-    OneMinusConstantColor,
-    ConstantAlpha,
-    OneMinusConstantAlpha
+    Zero, ///< 混合因子为 0，完全忽略对应输入。
+    One, ///< 混合因子为 1，完整保留对应输入。
+    SourceColor, ///< 使用源颜色 RGB 作为混合因子。
+    OneMinusSourceColor, ///< 使用 1 - 源颜色 RGB 作为混合因子。
+    DestinationColor, ///< 使用目标颜色 RGB 作为混合因子。
+    OneMinusDestinationColor, ///< 使用 1 - 目标颜色 RGB 作为混合因子。
+    SourceAlpha, ///< 使用源 alpha 作为混合因子，常用于普通透明混合。
+    OneMinusSourceAlpha, ///< 使用 1 - 源 alpha 作为混合因子，常用于普通透明混合目标项。
+    DestinationAlpha, ///< 使用目标 alpha 作为混合因子。
+    OneMinusDestinationAlpha, ///< 使用 1 - 目标 alpha 作为混合因子。
+    ConstantColor, ///< 使用 BlendState::blendConstants 的 RGB 作为混合因子。
+    OneMinusConstantColor, ///< 使用 1 - 常量颜色 RGB 作为混合因子。
+    ConstantAlpha, ///< 使用 BlendState::blendConstants 的 alpha 作为混合因子。
+    OneMinusConstantAlpha ///< 使用 1 - 常量 alpha 作为混合因子。
 };
 
 /// 混合运算。
 enum class BlendOp : u8 {
-    Add,
-    Subtract,
-    ReverseSubtract,
-    Min,
-    Max
+    Add, ///< 源项加目标项，最常用的颜色/alpha 混合运算。
+    Subtract, ///< 源项减目标项，用于特殊合成效果。
+    ReverseSubtract, ///< 目标项减源项，用于反向差值合成。
+    Min, ///< 取源项和目标项的逐分量最小值。
+    Max ///< 取源项和目标项的逐分量最大值。
 };
 
 /// 逻辑颜色运算。现代渲染中较少使用，部分后端可能不支持。
 enum class LogicOp : u8 {
-    Clear,
-    And,
-    AndReverse,
-    Copy,
-    AndInverted,
-    NoOp,
-    Xor,
-    Or,
-    Nor,
-    Equivalent,
-    Invert,
-    OrReverse,
-    CopyInverted,
-    OrInverted,
-    Nand,
-    Set
+    Clear, ///< 输出全 0，忽略源和目标颜色。
+    And, ///< 输出 source AND destination。
+    AndReverse, ///< 输出 source AND (NOT destination)。
+    Copy, ///< 输出 source，等价于直接写入源颜色。
+    AndInverted, ///< 输出 (NOT source) AND destination。
+    NoOp, ///< 保留 destination，不写入源颜色。
+    Xor, ///< 输出 source XOR destination。
+    Or, ///< 输出 source OR destination。
+    Nor, ///< 输出 NOT (source OR destination)。
+    Equivalent, ///< 输出 NOT (source XOR destination)，即逐位等价。
+    Invert, ///< 输出 NOT destination，反转目标颜色位。
+    OrReverse, ///< 输出 source OR (NOT destination)。
+    CopyInverted, ///< 输出 NOT source。
+    OrInverted, ///< 输出 (NOT source) OR destination。
+    Nand, ///< 输出 NOT (source AND destination)。
+    Set ///< 输出全 1，忽略源和目标颜色。
 };
 
 /// color attachment 写通道掩码。
 enum class ColorWriteMask : u8 {
-    None = 0,
-    R = 1u << 0,
-    G = 1u << 1,
-    B = 1u << 2,
-    A = 1u << 3,
-    All = 0x0F
+    None = 0, ///< 不写入任何颜色通道，适合只写深度/模板的 pass。
+    R = 1u << 0, ///< 允许写入红色通道。
+    G = 1u << 1, ///< 允许写入绿色通道。
+    B = 1u << 2, ///< 允许写入蓝色通道。
+    A = 1u << 3, ///< 允许写入 alpha 通道。
+    All = 0x0F ///< 允许写入 RGBA 四个颜色通道。
 };
 
 [[nodiscard]] constexpr ColorWriteMask operator|(ColorWriteMask lhs, ColorWriteMask rhs) noexcept {
@@ -1190,12 +1190,12 @@ constexpr ColorWriteMask& operator|=(ColorWriteMask& lhs, ColorWriteMask rhs) no
 
 /// 创建管线时不固定、录制命令时动态设置的状态。
 enum class DynamicState : u8 {
-    Viewport,
-    Scissor,
-    LineWidth,
-    DepthBias,
-    BlendConstants,
-    StencilReference
+    Viewport, ///< viewport 在命令录制时设置，而不是固定在 pipeline 中。
+    Scissor, ///< scissor 矩形在命令录制时设置，便于不同 pass 或窗口尺寸复用管线。
+    LineWidth, ///< line width 在命令录制时设置，主要用于线框或调试绘制。
+    DepthBias, ///< depth bias 在命令录制时设置，常用于 shadow map 按 pass 调整偏移。
+    BlendConstants, ///< blend constant 在命令录制时设置，供 ConstantColor/ConstantAlpha 因子使用。
+    StencilReference ///< stencil reference 在命令录制时设置，便于不同对象使用不同模板值。
 };
 
 /// 输入装配阶段状态，描述顶点如何组成图元。
@@ -1310,25 +1310,25 @@ struct PipelineCacheDesc {
 
 /// GPU 查询类型。
 enum class QueryType : u8 {
-    Timestamp,
-    Occlusion,
-    PipelineStatistics
+    Timestamp, ///< GPU 时间戳查询，用于测量 pass 或命令区间的 GPU 执行时间。
+    Occlusion, ///< 遮挡查询，用于统计通过深度/模板测试的样本数或可见性。
+    PipelineStatistics ///< 管线统计查询，用于统计 shader 调用、图元数量等性能计数。
 };
 
 /// pipeline statistics 查询的统计项位。
 enum class PipelineStatisticFlags : u32 {
-    None = 0,
-    InputAssemblyVertices = 1u << 0,
-    InputAssemblyPrimitives = 1u << 1,
-    VertexShaderInvocations = 1u << 2,
-    GeometryShaderInvocations = 1u << 3,
-    GeometryShaderPrimitives = 1u << 4,
-    ClippingInvocations = 1u << 5,
-    ClippingPrimitives = 1u << 6,
-    FragmentShaderInvocations = 1u << 7,
-    TessControlShaderPatches = 1u << 8,
-    TessEvaluationShaderInvocations = 1u << 9,
-    ComputeShaderInvocations = 1u << 10
+    None = 0, ///< 不启用任何管线统计项。
+    InputAssemblyVertices = 1u << 0, ///< 统计输入装配阶段读取的顶点数量。
+    InputAssemblyPrimitives = 1u << 1, ///< 统计输入装配阶段生成的图元数量。
+    VertexShaderInvocations = 1u << 2, ///< 统计 vertex shader 调用次数。
+    GeometryShaderInvocations = 1u << 3, ///< 统计 geometry shader 调用次数。
+    GeometryShaderPrimitives = 1u << 4, ///< 统计 geometry shader 输出的图元数量。
+    ClippingInvocations = 1u << 5, ///< 统计进入裁剪阶段的图元数量。
+    ClippingPrimitives = 1u << 6, ///< 统计通过裁剪并继续光栅化的图元数量。
+    FragmentShaderInvocations = 1u << 7, ///< 统计 fragment/pixel shader 调用次数。
+    TessControlShaderPatches = 1u << 8, ///< 统计 tessellation control shader 处理的 patch 数量。
+    TessEvaluationShaderInvocations = 1u << 9, ///< 统计 tessellation evaluation shader 调用次数。
+    ComputeShaderInvocations = 1u << 10 ///< 统计 compute shader invocation 数量。
 };
 
 [[nodiscard]] constexpr PipelineStatisticFlags operator|(PipelineStatisticFlags lhs, PipelineStatisticFlags rhs) noexcept {
@@ -1354,24 +1354,24 @@ struct QueryPoolDesc {
 
 /// 渲染开始时 attachment 内容如何处理。
 enum class LoadOp : u8 {
-    Load,
-    Clear,
-    DontCare
+    Load, ///< pass 开始时保留并读取 attachment 原有内容。
+    Clear, ///< pass 开始时使用 clear value 清除 attachment。
+    DontCare ///< pass 开始时不关心 attachment 原有内容，后端可丢弃以节省带宽。
 };
 
 /// 渲染结束时 attachment 内容如何处理。
 enum class StoreOp : u8 {
-    Store,
-    DontCare
+    Store, ///< pass 结束时保留 attachment 内容，供后续 pass、采样或呈现使用。
+    DontCare ///< pass 结束时不需要保留 attachment 内容，后端可丢弃或不写回内存。
 };
 
 /// MSAA resolve 行为。Average 是最常见的颜色 resolve；深度 resolve 后端支持差异较大。
 enum class ResolveMode : u8 {
-    None,
-    Average,
-    Min,
-    Max,
-    SampleZero
+    None, ///< 不执行 resolve，MSAA attachment 内容保持多采样形式。
+    Average, ///< 对多个 sample 求平均，最常见的颜色 MSAA resolve 模式。
+    Min, ///< 取多个 sample 的最小值，常用于特定深度 resolve 策略。
+    Max, ///< 取多个 sample 的最大值，常用于 reversed-Z 或特殊深度 resolve 策略。
+    SampleZero ///< 直接取第 0 个 sample，成本低但质量取决于采样位置。
 };
 
 /// 单个 color render target 的绑定和 load/store 行为。
@@ -1421,32 +1421,32 @@ struct FramebufferDesc {
 
 /// swapchain 色彩空间。后端需要根据平台支持选择最接近的实际色彩空间。
 enum class ColorSpace : u8 {
-    SRGBNonlinear,
-    DisplayP3Nonlinear,
-    ExtendedSRGBLinear,
-    HDR10ST2084,
-    HDR10HLG
+    SRGBNonlinear, ///< 标准 sRGB 非线性色彩空间，普通 SDR swapchain 默认选择。
+    DisplayP3Nonlinear, ///< Display P3 非线性色彩空间，适合广色域 SDR 输出。
+    ExtendedSRGBLinear, ///< 扩展 sRGB 线性色彩空间，适合宽范围线性颜色输出。
+    HDR10ST2084, ///< HDR10 PQ/ST2084 色彩空间，适合 HDR10 显示链路。
+    HDR10HLG ///< HDR HLG 色彩空间，适合广播或 HLG HDR 输出。
 };
 
 /// swapchain 输出表面变换。移动端或可旋转窗口系统可能会用到。
 enum class SurfaceTransform : u8 {
-    Identity,
-    Rotate90,
-    Rotate180,
-    Rotate270,
-    HorizontalMirror,
-    HorizontalMirrorRotate90,
-    HorizontalMirrorRotate180,
-    HorizontalMirrorRotate270,
-    Inherit
+    Identity, ///< 不对 swapchain 输出做额外旋转或镜像。
+    Rotate90, ///< 输出图像顺时针旋转 90 度后呈现。
+    Rotate180, ///< 输出图像旋转 180 度后呈现。
+    Rotate270, ///< 输出图像顺时针旋转 270 度后呈现。
+    HorizontalMirror, ///< 输出图像水平镜像后呈现。
+    HorizontalMirrorRotate90, ///< 输出图像水平镜像并旋转 90 度后呈现。
+    HorizontalMirrorRotate180, ///< 输出图像水平镜像并旋转 180 度后呈现。
+    HorizontalMirrorRotate270, ///< 输出图像水平镜像并旋转 270 度后呈现。
+    Inherit ///< 继承窗口系统当前 surface transform，由平台决定最终变换。
 };
 
 /// swapchain alpha 合成模式，用于透明窗口或系统 compositor。
 enum class CompositeAlphaMode : u8 {
-    Opaque,
-    PreMultiplied,
-    PostMultiplied,
-    Inherit
+    Opaque, ///< swapchain alpha 被视为不透明，窗口内容不参与透明合成。
+    PreMultiplied, ///< 颜色已预乘 alpha，交给系统 compositor 做预乘透明合成。
+    PostMultiplied, ///< 颜色未预乘 alpha，交给系统 compositor 做后乘透明合成。
+    Inherit ///< 继承窗口系统默认 alpha 合成模式。
 };
 
 /// 交换链描述。窗口系统相关 handle 不放在这里，由平台层交给具体后端。
@@ -1598,8 +1598,8 @@ struct MipmapGenerationDesc {
 
 /// index buffer 中索引元素的整数类型。
 enum class IndexType : u8 {
-    UInt16,
-    UInt32
+    UInt16, ///< 16 位无符号索引，节省显存和带宽，单个 draw 可引用最多 65536 个顶点。
+    UInt32 ///< 32 位无符号索引，支持大型 mesh，显存和带宽成本高于 UInt16。
 };
 
 /// draw call 绑定的单个 vertex stream。
@@ -1662,13 +1662,13 @@ struct TextureSlot {
 
 /// 材质参数类型，用于编辑器和自动打包 uniform/push constant 数据。
 enum class MaterialParameterType : u8 {
-    Float,
-    Float2,
-    Float3,
-    Float4,
-    Int,
-    UInt,
-    Bool
+    Float, ///< 单个浮点参数，存放在 value.x，例如 roughness、metallic、exposure。
+    Float2, ///< 二维浮点参数，存放在 value.xy，例如 tiling、offset 或屏幕尺寸。
+    Float3, ///< 三维浮点参数，存放在 value.xyz，例如颜色、方向或位置。
+    Float4, ///< 四维浮点参数，使用完整 value，例如 RGBA、向量或 packed 参数。
+    Int, ///< 有符号整数参数，通过 value.x 转换读取，适合模式枚举或索引。
+    UInt, ///< 无符号整数参数，通过 value.x 转换读取，适合 bitmask、ID 或计数。
+    Bool ///< 布尔参数，通过 value.x 是否非 0 读取，适合开关型材质选项。
 };
 
 /// 命名材质参数。数值统一存放在 value 中，具体读取方式由 type 决定。
@@ -1813,8 +1813,8 @@ struct RenderPassWorkload {
 
 /// semaphore 类型。timeline semaphore 能表达递增计数，binary semaphore 只表达一次信号。
 enum class SemaphoreType : u8 {
-    Binary,
-    Timeline
+    Binary, ///< 二值 semaphore，只表达一次 wait/signal，同步单个提交或 present 依赖。
+    Timeline ///< 时间线 semaphore，使用递增 u64 值表达多个提交之间的有序同步。
 };
 
 /// semaphore 创建描述。
@@ -1884,9 +1884,9 @@ struct CameraData {
 
 /// 光源类型。
 enum class LightType : u8 {
-    Directional,
-    Point,
-    Spot
+    Directional, ///< 方向光，只有方向无位置，适合太阳光等无限远平行光源。
+    Point, ///< 点光源，从世界位置向四周发光，受 range 控制影响半径。
+    Spot ///< 聚光灯，从位置沿方向发光，并由内外锥角控制照射范围。
 };
 
 /// CPU 侧光源描述，后续可打包进 uniform/storage buffer。
@@ -1903,11 +1903,11 @@ struct LightData {
 
 /// 渲染队列，用于粗粒度排序和选择 pass。
 enum class RenderQueue : u8 {
-    Background,
-    Opaque,
-    AlphaTest,
-    Transparent,
-    Overlay
+    Background, ///< 背景队列，通常最先绘制 sky、远景或清屏后背景内容。
+    Opaque, ///< 不透明队列，通常按材质/管线优化排序并开启深度写入。
+    AlphaTest, ///< Alpha 裁剪队列，用于植被、栅栏等需要 discard 但仍可深度写入的物体。
+    Transparent, ///< 半透明队列，通常关闭深度写入并按深度从远到近排序。
+    Overlay ///< 叠加队列，用于 UI、调试绘制、gizmo 或最后覆盖到画面的内容。
 };
 
 /// 场景中的一个可渲染物体实例。
@@ -1955,19 +1955,19 @@ struct RenderObjectSetDesc {
 
 /// RenderGraph 中声明的资源类型。
 enum class RenderGraphResourceType : u8 {
-    Buffer,
-    Texture,
-    SwapchainImage
+    Buffer, ///< RenderGraph 管理或引用的 buffer 资源。
+    Texture, ///< RenderGraph 管理或引用的普通 texture/image 资源。
+    SwapchainImage ///< 外部导入的 swapchain image，通常作为最终 present 目标。
 };
 
 /// RenderGraph 资源标志，用于别名、导入导出和临时资源优化。
 enum class RenderGraphResourceFlags : u32 {
-    None = 0,
-    Imported = 1u << 0,
-    Exported = 1u << 1,
-    Transient = 1u << 2,
-    AllowAliasing = 1u << 3,
-    NeverCull = 1u << 4
+    None = 0, ///< 无特殊 RenderGraph 行为，按普通内部资源处理。
+    Imported = 1u << 0, ///< 资源由外部创建并传入 graph，graph 不负责创建和销毁。
+    Exported = 1u << 1, ///< 资源结果需要在 graph 外继续使用，不能在最后一次内部读取后立即释放。
+    Transient = 1u << 2, ///< 资源只在 graph 内短期使用，可参与池化和生命周期压缩。
+    AllowAliasing = 1u << 3, ///< 允许与生命周期不重叠的其他资源共享底层内存。
+    NeverCull = 1u << 4 ///< 即使看起来未被读取也不能裁剪，适合有调试、读回或外部副作用的资源。
 };
 
 [[nodiscard]] constexpr RenderGraphResourceFlags operator|(RenderGraphResourceFlags lhs, RenderGraphResourceFlags rhs) noexcept {
@@ -2023,10 +2023,10 @@ struct RenderGraphAttachmentDesc {
 
 /// RenderGraph pass 类型，调度器可据此选择命令队列和合法命令集合。
 enum class RenderGraphPassType : u8 {
-    Raster,
-    Compute,
-    Copy,
-    Present
+    Raster, ///< 图形渲染 pass，可使用 color/depth attachments 并执行 draw 命令。
+    Compute, ///< 计算 pass，执行 compute dispatch，可选择异步 compute 队列。
+    Copy, ///< 传输 pass，执行 buffer/texture copy、blit、resolve 或 mipmap 生成。
+    Present ///< 呈现 pass，把 swapchain image 提交给窗口系统显示。
 };
 
 /// RenderGraph 中的一个 pass 声明，只描述依赖和附件，不直接包含 draw call。
