@@ -548,22 +548,35 @@ DrawIndexedCommand makeDraw(const ExampleResources& resources, const SubmeshDesc
     return draw;
 }
 
-RenderSceneDesc makeSceneDesc(const ExampleResources& resources) {
-    RenderSceneDesc scene{};
-    scene.camera.view = resources.sceneUniforms.view;
-    scene.camera.projection = resources.sceneUniforms.projection;
-    scene.camera.viewProjection = resources.sceneUniforms.viewProjection;
-    scene.camera.position = glm::vec3(resources.sceneUniforms.cameraPosition);
-    scene.environment.ambientColor = glm::vec3(resources.sceneUniforms.ambientColorExposure);
-    scene.environment.exposure = resources.sceneUniforms.ambientColorExposure.w;
+RenderCameraSetDesc makeCameraSetDesc(const ExampleResources& resources) {
+    RenderCameraSetDesc cameras{};
+    cameras.main.view = resources.sceneUniforms.view;
+    cameras.main.projection = resources.sceneUniforms.projection;
+    cameras.main.viewProjection = resources.sceneUniforms.viewProjection;
+    cameras.main.position = glm::vec3(resources.sceneUniforms.cameraPosition);
+    return cameras;
+}
 
+SceneEnvironmentDesc makeEnvironmentDesc(const ExampleResources& resources) {
+    SceneEnvironmentDesc environment{};
+    environment.ambientColor = glm::vec3(resources.sceneUniforms.ambientColorExposure);
+    environment.exposure = resources.sceneUniforms.ambientColorExposure.w;
+    return environment;
+}
+
+RenderLightSetDesc makeLightSetDesc(const ExampleResources& resources) {
+    RenderLightSetDesc lights{};
     LightData light{};
     light.type = LightType::Directional;
     light.direction = glm::vec3(resources.lightUniforms.directionIntensity);
     light.color = glm::vec3(resources.lightUniforms.colorShadowBias);
     light.intensity = resources.lightUniforms.directionIntensity.w;
-    scene.lights.push_back(light);
+    lights.items.push_back(light);
+    return lights;
+}
 
+RenderObjectSetDesc makeObjectSetDesc(const ExampleResources& resources) {
+    RenderObjectSetDesc objects{};
     RenderObjectDesc plane{};
     plane.debugName = "Plane";
     plane.mesh = MeshHandle(1);
@@ -584,8 +597,8 @@ RenderSceneDesc makeSceneDesc(const ExampleResources& resources) {
     sphere.worldBounds = {resources.cpuMesh.sphereSubmesh.boundsMin, resources.cpuMesh.sphereSubmesh.boundsMax};
     sphere.worldBoundsSphere = resources.cpuMesh.sphereSubmesh.boundsSphere;
 
-    scene.objects = {plane, sphere};
-    return scene;
+    objects.items = {plane, sphere};
+    return objects;
 }
 
 FramePacket buildFramePacket(
@@ -604,7 +617,10 @@ FramePacket buildFramePacket(
     packet.swapchain.extent = targets.extent;
     packet.swapchain.preferredFormat = targets.colorFormat;
     packet.uploads = makeUploadBatch(resources);
-    packet.scene = makeSceneDesc(resources);
+    packet.cameras = makeCameraSetDesc(resources);
+    packet.environment = makeEnvironmentDesc(resources);
+    packet.lights = makeLightSetDesc(resources);
+    packet.objects = makeObjectSetDesc(resources);
 
     RenderGraphTextureDesc shadowMap{};
     shadowMap.name = "ShadowMap";

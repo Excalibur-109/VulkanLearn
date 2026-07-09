@@ -1937,12 +1937,20 @@ struct SceneEnvironmentDesc {
     TextureViewHandle brdfLut{}; ///< 可选 BRDF LUT。
 };
 
-/// 当前帧参与渲染的高层场景数据。
-struct RenderSceneDesc {
-    CameraData camera{}; ///< 主相机。
-    SceneEnvironmentDesc environment{}; ///< 场景环境和后处理基础参数。
-    std::vector<LightData> lights; ///< 光源列表。
-    std::vector<RenderObjectDesc> objects; ///< 可渲染物体列表。
+/// 当前帧参与渲染的相机集合。相机由相机系统/视图系统单独提交。
+struct RenderCameraSetDesc {
+    CameraData main{}; ///< 主视图相机。
+    std::vector<CameraData> additional; ///< 反射、调试视图、离屏渲染等额外相机。
+};
+
+/// 当前帧参与渲染的光源集合。光源由灯光系统单独提交。
+struct RenderLightSetDesc {
+    std::vector<LightData> items; ///< 光源列表。
+};
+
+/// 当前帧参与渲染的物体集合。物体由场景/ECS 可见性阶段单独提交。
+struct RenderObjectSetDesc {
+    std::vector<RenderObjectDesc> items; ///< 可渲染物体列表。
 };
 
 /// RenderGraph 中声明的资源类型。
@@ -2059,7 +2067,10 @@ struct FramePacket {
     FrameRenderSettings settings{}; ///< 当前帧设置。
     SwapchainDesc swapchain{}; ///< 当前帧目标 swapchain 需求。
     UploadBatchDesc uploads{}; ///< 本帧开始前需要执行的资源上传。
-    RenderSceneDesc scene{}; ///< 高层场景数据，可用于自动生成 draw 列表。
+    RenderCameraSetDesc cameras{}; ///< 相机输入，和物体/光源解耦。
+    SceneEnvironmentDesc environment{}; ///< 场景环境和后处理基础参数。
+    RenderLightSetDesc lights{}; ///< 光源输入，和物体/相机解耦。
+    RenderObjectSetDesc objects{}; ///< 可渲染物体输入，和相机/光源解耦。
     RenderGraphDesc graph{}; ///< pass 和资源依赖图。
     std::vector<RenderPassWorkload> workloads; ///< 每个 pass 的具体 draw/dispatch 命令。
     std::vector<QueueSubmitDesc> submissions; ///< 队列提交计划；为空时后端可按 graph 自动生成。

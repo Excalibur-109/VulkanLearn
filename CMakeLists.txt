@@ -1,56 +1,67 @@
-cmake_minimum_required(VERSION 3.20)
-project(VulkanTutorial LANGUAGES CXX)
+find_package(Vulkan REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+find_program(GLSLANG_VALIDATOR
+    NAMES glslangValidator
+    HINTS "$ENV{VULKAN_SDK}/Bin"
+)
 
-if(MSVC)
-    # 源码里有中文注释，MSVC 需要明确按 UTF-8 读取，避免本地代码页误解析。
-    add_compile_options(/W4 /permissive- /Zc:__cplusplus /utf-8)
-    add_compile_definitions(NOMINMAX)
+if(NOT GLSLANG_VALIDATOR)
+    message(FATAL_ERROR "PbrShadowExample 需要 glslangValidator，请确认 Vulkan SDK 已安装并设置 VULKAN_SDK。")
 endif()
 
-# main.cpp 是现有教程入口，RenderVulkan.cpp 是基于 RenderDefinitions.hpp 的 Vulkan 后端实现。
-add_executable(VulkanTutorial
-    main.cpp
+set(PBR_SHADOW_SHADER_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/Shaders/shadow_depth.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/Shaders/shadow_depth.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/Shaders/pbr_lit.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/Shaders/pbr_lit.frag
+)
+
+set(PBR_SHADOW_SHADER_OUTPUTS)
+foreach(SHADER_SOURCE IN LISTS PBR_SHADOW_SHADER_SOURCES)
+    get_filename_component(SHADER_FILE_NAME ${SHADER_SOURCE} NAME)
+    set(SHADER_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Shaders/${SHADER_FILE_NAME}.spv)
+    add_custom_command(
+        OUTPUT ${SHADER_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Shaders
+        COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_SOURCE} -o ${SHADER_OUTPUT}
+        DEPENDS ${SHADER_SOURCE}
+        COMMENT "Compile GLSL shader ${SHADER_FILE_NAME}"
+        VERBATIM
+    )
+    list(APPEND PBR_SHADOW_SHADER_OUTPUTS ${SHADER_OUTPUT})
+endforeach()
+
+add_custom_target(PbrShadowExampleShaders DEPENDS ${PBR_SHADOW_SHADER_OUTPUTS})
+
+add_executable(PbrShadowExample
+    PbrShadowExample.cpp
     RenderDefinitions.hpp
     RenderVulkan.hpp
     RenderVulkan.cpp
 )
 
-find_package(Vulkan        REQUIRED)         # Module 模式：CMake 自带 FindVulkan 模块，依赖 VULKAN_SDK 环境变量
-find_package(glfw3         CONFIG REQUIRED)
-find_package(glm           CONFIG REQUIRED)
-find_package(stb           REQUIRED)         # Module 模式：vcpkg 的 stb 只提供 FindStb.cmake，且是 header-only
-find_package(tinyobjloader REQUIRED)
+add_dependencies(PbrShadowExample PbrShadowExampleShaders)
 
-option(VULKANLEARN_BUILD_EXAMPLES "Build RenderVulkan example programs." ON)
-
-target_include_directories(VulkanTutorial PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}           # main.cpp 在当前目录
-    ${GLM_INCLUDE_DIRS}
-    ${Stb_INCLUDE_DIR}                    # stb 头文件目录（FindStb 提供的变量）
+target_include_directories(PbrShadowExample PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(VulkanTutorial PRIVATE
+target_compile_definitions(PbrShadowExample PRIVATE
+    PBR_SHADOW_EXAMPLE_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/Shaders\"
+)
+
+target_link_libraries(PbrShadowExample PRIVATE
     Vulkan::Vulkan
     glfw
     glm::glm
-    tinyobjloader::tinyobjloader
-    # stb 是 header-only，已经在 include 目录里，不要再 link target
 )
 
-if(WIN32)
-    # glfw3.dll 来自 vcpkg（按 $<CONFIG> 选 debug/release 子目录）
-    # vulkan-1.dll 不需要 copy：Windows 显卡驱动已部署在 C:\Windows\System32\
-    add_custom_command(TARGET VulkanTutorial POST_BUILD
+if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    add_custom_command(TARGET PbrShadowExample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
-            $<TARGET_FILE_DIR:VulkanTutorial>
+            $<TARGET_FILE_DIR:PbrShadowExample>
     )
-endif()
-
-if(VULKANLEARN_BUILD_EXAMPLES)
-    add_subdirectory(Examples)
 endif()
