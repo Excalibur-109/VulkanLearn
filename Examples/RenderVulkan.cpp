@@ -8,6 +8,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -518,6 +519,23 @@ static VkDynamicState toVkDynamicState(DynamicState state) {
     return VK_DYNAMIC_STATE_VIEWPORT;
 }
 
+static VkAttachmentLoadOp toVkLoadOp(LoadOp loadOp) {
+    switch (loadOp) {
+    case LoadOp::Load: return VK_ATTACHMENT_LOAD_OP_LOAD;
+    case LoadOp::Clear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
+    case LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    }
+    return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+}
+
+static VkAttachmentStoreOp toVkStoreOp(StoreOp storeOp) {
+    switch (storeOp) {
+    case StoreOp::Store: return VK_ATTACHMENT_STORE_OP_STORE;
+    case StoreOp::DontCare: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    }
+    return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+}
+
 static VkPresentModeKHR toVkPresentMode(PresentMode mode) {
     switch (mode) {
     case PresentMode::Immediate: return VK_PRESENT_MODE_IMMEDIATE_KHR;
@@ -666,6 +684,7 @@ struct VulkanRenderer::Impl {
         TextureDesc desc{};
         VkImage image = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
+        ResourceState currentState = ResourceState::Undefined;
         bool ownsImage = true;
     };
 
@@ -701,6 +720,7 @@ struct VulkanRenderer::Impl {
 
     struct PipelineResource {
         VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     };
 
@@ -740,6 +760,7 @@ struct VulkanRenderer::Impl {
 
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
     PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectName = nullptr;
+    VkCommandPool graphicsCommandPool = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     bool ownsSurface = false;
     bool supportsTimelineSemaphore = false;
@@ -1075,6 +1096,14 @@ bool VulkanRenderer::initialize(const VulkanRendererDesc& desc, std::string* err
             createDebugMessenger(impl_->native.instance, &debugCreateInfo, nullptr, &impl_->debugMessenger);
         }
 
+        if (impl_->native.surface == VK_NULL_HANDLE && desc.surface.createSurface) {
+            // GLFW 等窗口库必须等 VkInstance 创建后才能创建 VkSurfaceKHR。
+            impl_->native.surface = desc.surface.createSurface(impl_->native.instance);
+            if (impl_->native.surface == VK_NULL_HANDLE) {
+                throw std::runtime_error("Vulkan surface 工厂返回了空 VkSurfaceKHR");
+            }
+        }
+
         u32 physicalDeviceCount = 0;
         vkEnumeratePhysicalDevices(impl_->native.instance, &physicalDeviceCount, nullptr);
         if (physicalDeviceCount == 0) {
@@ -1183,6 +1212,14 @@ bool VulkanRenderer::initialize(const VulkanRendererDesc& desc, std::string* err
         impl_->setDebugUtilsObjectName = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
             vkGetInstanceProcAddr(impl_->native.instance, "vkSetDebugUtilsObjectNameEXT"));
 
+        VkCommandPoolCreateInfo commandPoolInfo{};
+        commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        commandPoolInfo.queueFamilyIndex = impl_->queueFamilies.graphics;
+        if (vkCreateCommandPool(impl_->native.device, &commandPoolInfo, nullptr, &impl_->graphicsCommandPool) != VK_SUCCESS) {
+            throw std::runtime_error("vkCreateCommandPool(graphics) 失败");
+        }
+
         std::array<VkDescriptorPoolSize, 6> poolSizes{{
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4096},
             {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096},
@@ -1269,10 +1306,28 @@ bool VulkanRenderer::initialize(const VulkanRendererDesc& desc, std::string* err
 }
 
 void VulkanRenderer::shutdown() noexcept {
-    if (!impl_ || impl_->native.device == VK_NULL_HANDLE) {
-        if (impl_ && impl_->native.instance != VK_NULL_HANDLE && impl_->ownsSurface && impl_->native.surface != VK_NULL_HANDLE) {
+    if (!impl_) {
+        return;
+    }
+
+    if (impl_->native.device == VK_NULL_HANDLE) {
+        if (impl_->debugMessenger != VK_NULL_HANDLE) {
+            auto destroyDebugMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+                vkGetInstanceProcAddr(impl_->native.instance, "vkDestroyDebugUtilsMessengerEXT"));
+            if (destroyDebugMessenger != nullptr) {
+                destroyDebugMessenger(impl_->native.instance, impl_->debugMessenger, nullptr);
+            }
+            impl_->debugMessenger = VK_NULL_HANDLE;
+        }
+
+        if (impl_->native.instance != VK_NULL_HANDLE && impl_->ownsSurface && impl_->native.surface != VK_NULL_HANDLE) {
             vkDestroySurfaceKHR(impl_->native.instance, impl_->native.surface, nullptr);
             impl_->native.surface = VK_NULL_HANDLE;
+        }
+
+        if (impl_->native.instance != VK_NULL_HANDLE) {
+            vkDestroyInstance(impl_->native.instance, nullptr);
+            impl_->native.instance = VK_NULL_HANDLE;
         }
         return;
     }
@@ -1293,6 +1348,11 @@ void VulkanRenderer::shutdown() noexcept {
     for (u64 i = impl_->textureViews.size(); i > 0; --i) destroy(TextureViewHandle(i));
     for (u64 i = impl_->textures.size(); i > 0; --i) destroy(TextureHandle(i));
     for (u64 i = impl_->buffers.size(); i > 0; --i) destroy(BufferHandle(i));
+
+    if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);
+        impl_->graphicsCommandPool = VK_NULL_HANDLE;
+    }
 
     if (impl_->descriptorPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(impl_->native.device, impl_->descriptorPool, nullptr);
@@ -1388,6 +1448,7 @@ TextureHandle VulkanRenderer::createTexture(const TextureDesc& desc) {
 
     Impl::TextureResource resource{};
     resource.desc = desc;
+    resource.currentState = desc.initialState;
     resource.ownsImage = true;
 
     VkImageCreateInfo imageInfo{};
@@ -1924,6 +1985,7 @@ PipelineHandle VulkanRenderer::createGraphicsPipeline(const GraphicsPipelineDesc
 
     Impl::PipelineResource resource{};
     resource.bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    resource.layout = layout->layout;
     if (vkCreateGraphicsPipelines(impl_->native.device, cache, 1, &pipelineInfo, nullptr, &resource.pipeline) != VK_SUCCESS) {
         destroyTemporaryShaderModules();
         throw std::runtime_error("vkCreateGraphicsPipelines 失败");
@@ -1963,6 +2025,7 @@ PipelineHandle VulkanRenderer::createComputePipeline(const ComputePipelineDesc& 
 
     Impl::PipelineResource resource{};
     resource.bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+    resource.layout = layout->layout;
     if (vkCreateComputePipelines(impl_->native.device, cache, 1, &pipelineInfo, nullptr, &resource.pipeline) != VK_SUCCESS) {
         vkDestroyShaderModule(impl_->native.device, shader->module, nullptr);
         shader->module = VK_NULL_HANDLE;
@@ -2166,6 +2229,7 @@ SwapchainHandle VulkanRenderer::createSwapchain(const SwapchainDesc& desc) {
         Impl::TextureResource texture{};
         texture.ownsImage = false;
         texture.image = images[index];
+        texture.currentState = ResourceState::Undefined;
         texture.desc.debugName = desc.debugName + ".Image" + std::to_string(index);
         texture.desc.dimension = TextureDimension::Texture2D;
         texture.desc.extent = {extent.width, extent.height, 1};
@@ -2203,6 +2267,20 @@ std::vector<TextureHandle> VulkanRenderer::getSwapchainImages(SwapchainHandle ha
 std::vector<TextureViewHandle> VulkanRenderer::getSwapchainImageViews(SwapchainHandle handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
+    }
+    return {};
+}
+
+Format VulkanRenderer::getSwapchainFormat(SwapchainHandle handle) const {
+    if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
+        return fromVkFormat(swapchain->format);
+    }
+    return Format::Undefined;
+}
+
+Extent2D VulkanRenderer::getSwapchainExtent(SwapchainHandle handle) const {
+    if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
+        return {swapchain->extent.width, swapchain->extent.height};
     }
     return {};
 }
@@ -2338,7 +2416,463 @@ bool VulkanRenderer::present(const PresentDesc& desc, std::string* errorMessage)
     return true;
 }
 
+bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string* errorMessage) {
+    struct StagingResource {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+    };
+
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkFence submitFence = VK_NULL_HANDLE;
+    std::vector<StagingResource> stagingResources;
+
+    const auto cleanup = [&]() noexcept {
+        if (submitFence != VK_NULL_HANDLE) {
+            vkDestroyFence(impl_->native.device, submitFence, nullptr);
+        }
+        if (commandBuffer != VK_NULL_HANDLE) {
+            vkFreeCommandBuffers(impl_->native.device, impl_->graphicsCommandPool, 1, &commandBuffer);
+        }
+        for (const StagingResource& staging : stagingResources) {
+            if (staging.buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(impl_->native.device, staging.buffer, nullptr);
+            }
+            if (staging.memory != VK_NULL_HANDLE) {
+                vkFreeMemory(impl_->native.device, staging.memory, nullptr);
+            }
+        }
+    };
+
+    try {
+        if (!isInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
+            throw std::runtime_error("VulkanRenderer 尚未初始化或缺少 graphics command pool");
+        }
+
+        VkCommandBufferAllocateInfo allocateInfo{};
+        allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocateInfo.commandPool = impl_->graphicsCommandPool;
+        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocateInfo.commandBufferCount = 1;
+        if (vkAllocateCommandBuffers(impl_->native.device, &allocateInfo, &commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("vkAllocateCommandBuffers 失败");
+        }
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("vkBeginCommandBuffer 失败");
+        }
+
+        const auto bufferDstAccess = [](BufferUsage usage) {
+            VkAccessFlags access = 0;
+            if (hasAny(usage, BufferUsage::Vertex)) access |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            if (hasAny(usage, BufferUsage::Index)) access |= VK_ACCESS_INDEX_READ_BIT;
+            if (hasAny(usage, BufferUsage::Uniform)) access |= VK_ACCESS_UNIFORM_READ_BIT;
+            if (hasAny(usage, BufferUsage::Storage)) access |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            if (hasAny(usage, BufferUsage::Indirect)) access |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            return access == 0 ? VK_ACCESS_MEMORY_READ_BIT : access;
+        };
+
+        std::vector<VkBufferMemoryBarrier> uploadBarriers;
+        for (const BufferUploadDesc& upload : packet.uploads.buffers) {
+            if (upload.data.empty()) {
+                continue;
+            }
+
+            Impl::BufferResource* destination = getRenderResource(impl_->buffers, upload.destination);
+            if (destination == nullptr || destination->buffer == VK_NULL_HANDLE) {
+                throw std::runtime_error("FramePacket uploads 包含无效 destination buffer");
+            }
+
+            StagingResource staging{};
+            VkBufferCreateInfo stagingInfo{};
+            stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            stagingInfo.size = static_cast<VkDeviceSize>(upload.data.size());
+            stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            if (vkCreateBuffer(impl_->native.device, &stagingInfo, nullptr, &staging.buffer) != VK_SUCCESS) {
+                throw std::runtime_error("vkCreateBuffer(staging) 失败");
+            }
+
+            VkMemoryRequirements requirements{};
+            vkGetBufferMemoryRequirements(impl_->native.device, staging.buffer, &requirements);
+            VkMemoryAllocateInfo memoryInfo{};
+            memoryInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memoryInfo.allocationSize = requirements.size;
+            memoryInfo.memoryTypeIndex = impl_->findMemoryType(
+                requirements.memoryTypeBits,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            if (vkAllocateMemory(impl_->native.device, &memoryInfo, nullptr, &staging.memory) != VK_SUCCESS) {
+                throw std::runtime_error("vkAllocateMemory(staging) 失败");
+            }
+            vkBindBufferMemory(impl_->native.device, staging.buffer, staging.memory, 0);
+
+            void* mapped = nullptr;
+            vkMapMemory(impl_->native.device, staging.memory, 0, stagingInfo.size, 0, &mapped);
+            std::memcpy(mapped, upload.data.data(), upload.data.size());
+            vkUnmapMemory(impl_->native.device, staging.memory);
+
+            VkBufferCopy copy{};
+            copy.srcOffset = 0;
+            copy.dstOffset = static_cast<VkDeviceSize>(upload.destinationOffset);
+            copy.size = static_cast<VkDeviceSize>(upload.data.size());
+            vkCmdCopyBuffer(commandBuffer, staging.buffer, destination->buffer, 1, &copy);
+            stagingResources.push_back(staging);
+
+            VkBufferMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = bufferDstAccess(destination->desc.usage);
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = destination->buffer;
+            barrier.offset = upload.destinationOffset;
+            barrier.size = upload.data.size();
+            uploadBarriers.push_back(barrier);
+        }
+
+        if (!uploadBarriers.empty()) {
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0,
+                0,
+                nullptr,
+                static_cast<u32>(uploadBarriers.size()),
+                uploadBarriers.data(),
+                0,
+                nullptr);
+        }
+
+        std::unordered_map<std::string, TextureHandle> textureResources;
+        textureResources.reserve(packet.graph.textures.size());
+        for (const RenderGraphTextureDesc& texture : packet.graph.textures) {
+            if (texture.imported && texture.externalHandle) {
+                textureResources[texture.name] = texture.externalHandle;
+            }
+        }
+
+        const auto textureForName = [&](const std::string& name) -> TextureHandle {
+            const auto it = textureResources.find(name);
+            return it == textureResources.end() ? TextureHandle{} : it->second;
+        };
+
+        const auto findViewForTexture = [&](TextureHandle texture, TextureAspect aspect) -> TextureViewHandle {
+            for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
+                const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
+                if (view.view != VK_NULL_HANDLE && view.desc.texture == texture &&
+                    (aspect == TextureAspect::All || view.desc.aspect == aspect || view.desc.aspect == TextureAspect::All)) {
+                    return TextureViewHandle(index + 1);
+                }
+            }
+            return {};
+        };
+
+        const auto transitionTexture = [&](TextureHandle handle, ResourceState after) {
+            Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
+            if (texture == nullptr || texture->image == VK_NULL_HANDLE || texture->currentState == after) {
+                return;
+            }
+
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.srcAccessMask = accessFromResourceState(texture->currentState);
+            barrier.dstAccessMask = accessFromResourceState(after);
+            barrier.oldLayout = toVkImageLayout(texture->currentState);
+            barrier.newLayout = toVkImageLayout(after);
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = texture->image;
+            barrier.subresourceRange.aspectMask = toVkImageAspect(TextureAspect::All, texture->desc.format);
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = texture->desc.mipLevels;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = texture->desc.arrayLayers;
+
+            const VkPipelineStageFlags sourceStage =
+                texture->currentState == ResourceState::Undefined ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                sourceStage,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0,
+                0,
+                nullptr,
+                0,
+                nullptr,
+                1,
+                &barrier);
+            texture->currentState = after;
+        };
+
+        const auto findWorkload = [&](const std::string& passName) -> const RenderPassWorkload* {
+            const auto it = std::find_if(packet.workloads.begin(), packet.workloads.end(), [&](const RenderPassWorkload& workload) {
+                return workload.passName == passName;
+            });
+            return it == packet.workloads.end() ? nullptr : &*it;
+        };
+
+        const auto vkClearColor = [](const ClearColor& color) {
+            VkClearValue value{};
+            value.color.float32[0] = color.r;
+            value.color.float32[1] = color.g;
+            value.color.float32[2] = color.b;
+            value.color.float32[3] = color.a;
+            return value;
+        };
+
+        const auto vkClearDepthStencil = [](const ClearDepthStencil& clear) {
+            VkClearValue value{};
+            value.depthStencil.depth = clear.depth;
+            value.depthStencil.stencil = clear.stencil;
+            return value;
+        };
+
+        for (const RenderGraphPassDesc& pass : packet.graph.passes) {
+            for (const RenderGraphResourceRef& read : pass.reads) {
+                if (read.type == RenderGraphResourceType::Texture || read.type == RenderGraphResourceType::SwapchainImage) {
+                    transitionTexture(textureForName(read.name), read.state);
+                }
+            }
+            for (const RenderGraphResourceRef& write : pass.writes) {
+                if (write.type == RenderGraphResourceType::Texture || write.type == RenderGraphResourceType::SwapchainImage) {
+                    transitionTexture(textureForName(write.name), write.state);
+                }
+            }
+
+            const RenderPassWorkload* workload = findWorkload(pass.name);
+            if (workload == nullptr || (pass.colorAttachments.empty() && !pass.depthStencilAttachment.has_value())) {
+                continue;
+            }
+
+            std::vector<VkRenderingAttachmentInfo> colorAttachments;
+            std::vector<VkClearValue> colorClearValues;
+            colorAttachments.reserve(pass.colorAttachments.size());
+            colorClearValues.reserve(pass.colorAttachments.size());
+            for (const RenderGraphAttachmentDesc& attachment : pass.colorAttachments) {
+                const TextureHandle texture = textureForName(attachment.resourceName);
+                const TextureViewHandle viewHandle = findViewForTexture(texture, TextureAspect::Color);
+                const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
+                if (view == nullptr || view->view == VK_NULL_HANDLE) {
+                    throw std::runtime_error("RenderGraph color attachment 缺少有效 texture view");
+                }
+
+                colorClearValues.push_back(vkClearColor(attachment.clearValue.color));
+                VkRenderingAttachmentInfo colorAttachment{};
+                colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                colorAttachment.imageView = view->view;
+                colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                colorAttachment.loadOp = toVkLoadOp(attachment.loadOp);
+                colorAttachment.storeOp = toVkStoreOp(attachment.storeOp);
+                colorAttachment.clearValue = colorClearValues.back();
+                colorAttachments.push_back(colorAttachment);
+            }
+
+            VkRenderingAttachmentInfo depthAttachment{};
+            VkClearValue depthClear{};
+            if (pass.depthStencilAttachment.has_value()) {
+                const RenderGraphAttachmentDesc& attachment = *pass.depthStencilAttachment;
+                const TextureHandle texture = textureForName(attachment.resourceName);
+                const TextureViewHandle viewHandle = findViewForTexture(texture, TextureAspect::Depth);
+                const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
+                if (view == nullptr || view->view == VK_NULL_HANDLE) {
+                    throw std::runtime_error("RenderGraph depth attachment 缺少有效 texture view");
+                }
+
+                depthClear = vkClearDepthStencil(attachment.clearValue.depthStencil);
+                depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                depthAttachment.imageView = view->view;
+                depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                depthAttachment.loadOp = toVkLoadOp(attachment.loadOp);
+                depthAttachment.storeOp = toVkStoreOp(attachment.storeOp);
+                depthAttachment.clearValue = depthClear;
+            }
+
+            Rect2D renderArea = workload->scissor.extent.width == 0 || workload->scissor.extent.height == 0
+                ? packet.settings.scissor
+                : workload->scissor;
+            VkRenderingInfo renderingInfo{};
+            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            renderingInfo.renderArea.offset = {renderArea.offset.x, renderArea.offset.y};
+            renderingInfo.renderArea.extent = {renderArea.extent.width, renderArea.extent.height};
+            renderingInfo.layerCount = 1;
+            renderingInfo.colorAttachmentCount = static_cast<u32>(colorAttachments.size());
+            renderingInfo.pColorAttachments = colorAttachments.data();
+            renderingInfo.pDepthAttachment = pass.depthStencilAttachment.has_value() ? &depthAttachment : nullptr;
+
+            vkCmdBeginRendering(commandBuffer, &renderingInfo);
+
+            Viewport viewport = workload->viewport.width == 0.0F || workload->viewport.height == 0.0F
+                ? packet.settings.viewport
+                : workload->viewport;
+            VkViewport vkViewport{};
+            vkViewport.x = viewport.x;
+            vkViewport.y = viewport.y;
+            vkViewport.width = viewport.width;
+            vkViewport.height = viewport.height;
+            vkViewport.minDepth = viewport.minDepth;
+            vkViewport.maxDepth = viewport.maxDepth;
+            vkCmdSetViewport(commandBuffer, 0, 1, &vkViewport);
+
+            VkRect2D vkScissor{};
+            vkScissor.offset = {renderArea.offset.x, renderArea.offset.y};
+            vkScissor.extent = {renderArea.extent.width, renderArea.extent.height};
+            vkCmdSetScissor(commandBuffer, 0, 1, &vkScissor);
+
+            const auto recordDraw = [&](const DrawIndexedCommand& draw) {
+                const Impl::PipelineResource* pipeline = getRenderResource(impl_->pipelines, draw.pipeline);
+                if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE) {
+                    throw std::runtime_error("DrawIndexedCommand pipeline 无效");
+                }
+                vkCmdBindPipeline(commandBuffer, pipeline->bindPoint, pipeline->pipeline);
+
+                std::vector<VkDescriptorSet> descriptorSets;
+                descriptorSets.reserve(draw.bindGroups.size());
+                for (BindGroupHandle bindGroupHandle : draw.bindGroups) {
+                    const Impl::BindGroupResource* bindGroup = getRenderResource(impl_->bindGroups, bindGroupHandle);
+                    if (bindGroup == nullptr || bindGroup->set == VK_NULL_HANDLE) {
+                        throw std::runtime_error("DrawIndexedCommand bind group 无效");
+                    }
+                    descriptorSets.push_back(bindGroup->set);
+                }
+                if (!descriptorSets.empty()) {
+                    vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        pipeline->bindPoint,
+                        pipeline->layout,
+                        0,
+                        static_cast<u32>(descriptorSets.size()),
+                        descriptorSets.data(),
+                        0,
+                        nullptr);
+                }
+
+                for (const VertexStream& stream : draw.vertexStreams) {
+                    const Impl::BufferResource* vertexBuffer = getRenderResource(impl_->buffers, stream.buffer);
+                    if (vertexBuffer == nullptr || vertexBuffer->buffer == VK_NULL_HANDLE) {
+                        throw std::runtime_error("DrawIndexedCommand vertex buffer 无效");
+                    }
+                    VkBuffer buffer = vertexBuffer->buffer;
+                    VkDeviceSize offset = static_cast<VkDeviceSize>(stream.offset);
+                    vkCmdBindVertexBuffers(commandBuffer, stream.binding, 1, &buffer, &offset);
+                }
+
+                const Impl::BufferResource* indexBuffer = getRenderResource(impl_->buffers, draw.indexStream.buffer);
+                if (indexBuffer == nullptr || indexBuffer->buffer == VK_NULL_HANDLE) {
+                    throw std::runtime_error("DrawIndexedCommand index buffer 无效");
+                }
+                const VkIndexType indexType = draw.indexStream.indexType == IndexType::UInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+                vkCmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, static_cast<VkDeviceSize>(draw.indexStream.offset), indexType);
+                vkCmdDrawIndexed(
+                    commandBuffer,
+                    draw.indexCount,
+                    draw.instanceCount,
+                    draw.firstIndex,
+                    draw.vertexOffsetElements,
+                    draw.firstInstance);
+            };
+
+            for (const DrawIndexedCommand& draw : workload->indexedDraws) {
+                recordDraw(draw);
+            }
+
+            vkCmdEndRendering(commandBuffer);
+        }
+
+        if (packet.present.has_value()) {
+            const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, packet.present->swapchain);
+            if (swapchain != nullptr && packet.present->imageIndex < swapchain->images.size()) {
+                transitionTexture(swapchain->images[packet.present->imageIndex], ResourceState::Present);
+            }
+        }
+
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("vkEndCommandBuffer 失败");
+        }
+
+        std::vector<VkSemaphore> waitSemaphores;
+        std::vector<VkPipelineStageFlags> waitStages;
+        std::vector<VkSemaphore> signalSemaphores;
+        std::vector<u64> waitValues;
+        std::vector<u64> signalValues;
+        bool usesTimelineSemaphore = false;
+
+        for (const QueueSubmitDesc& submitDesc : packet.submissions) {
+            for (const QueueWaitDesc& wait : submitDesc.waits) {
+                const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
+                if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
+                    throw std::runtime_error("FramePacket submission 包含无效 wait semaphore");
+                }
+                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == SemaphoreType::Timeline;
+                waitSemaphores.push_back(semaphore->semaphore);
+                waitStages.push_back(toVkPipelineStages(wait.stages));
+                waitValues.push_back(wait.value);
+            }
+            for (const QueueSignalDesc& signal : submitDesc.signals) {
+                const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signal.semaphore);
+                if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
+                    throw std::runtime_error("FramePacket submission 包含无效 signal semaphore");
+                }
+                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == SemaphoreType::Timeline;
+                signalSemaphores.push_back(semaphore->semaphore);
+                signalValues.push_back(signal.value);
+            }
+        }
+
+        VkTimelineSemaphoreSubmitInfo timelineInfo{};
+        timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        timelineInfo.waitSemaphoreValueCount = static_cast<u32>(waitValues.size());
+        timelineInfo.pWaitSemaphoreValues = waitValues.data();
+        timelineInfo.signalSemaphoreValueCount = static_cast<u32>(signalValues.size());
+        timelineInfo.pSignalSemaphoreValues = signalValues.data();
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
+        submitInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
+        submitInfo.pWaitSemaphores = waitSemaphores.data();
+        submitInfo.pWaitDstStageMask = waitStages.data();
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+        submitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
+        submitInfo.pSignalSemaphores = signalSemaphores.data();
+
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &submitFence) != VK_SUCCESS) {
+            throw std::runtime_error("vkCreateFence(submit) 失败");
+        }
+
+        if (vkQueueSubmit(impl_->native.graphicsQueue, 1, &submitInfo, submitFence) != VK_SUCCESS) {
+            throw std::runtime_error("vkQueueSubmit(recorded frame) 失败");
+        }
+        vkWaitForFences(impl_->native.device, 1, &submitFence, VK_TRUE, std::numeric_limits<u64>::max());
+
+        cleanup();
+        commandBuffer = VK_NULL_HANDLE;
+        submitFence = VK_NULL_HANDLE;
+        stagingResources.clear();
+
+        if (packet.present.has_value()) {
+            return present(*packet.present, errorMessage);
+        }
+        return true;
+    } catch (const std::exception& error) {
+        cleanup();
+        if (errorMessage != nullptr) {
+            *errorMessage = error.what();
+        }
+        return false;
+    }
+}
+
 bool VulkanRenderer::submitFrame(const FramePacket& packet, std::string* errorMessage) {
+    if (!packet.workloads.empty()) {
+        return recordAndSubmitFrame(packet, errorMessage);
+    }
+
     for (const QueueSubmitDesc& submitDesc : packet.submissions) {
         if (!submit(submitDesc, errorMessage)) {
             return false;

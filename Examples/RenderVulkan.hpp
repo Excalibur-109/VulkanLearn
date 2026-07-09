@@ -4,6 +4,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@
 /// 渲染后端只接收已经创建好的 VkSurfaceKHR，避免把窗口系统代码混进通用后端。
 struct VulkanSurfaceDesc {
     VkSurfaceKHR surface = VK_NULL_HANDLE; ///< 外部传入的 Vulkan surface。
+    std::function<VkSurfaceKHR(VkInstance)> createSurface; ///< 可选 surface 工厂；用于 GLFW 这类必须拿到 VkInstance 后才能创建 surface 的窗口库。
     bool ownsSurface = false; ///< true 表示 VulkanRenderer::shutdown 时会销毁 surface。
 };
 
@@ -125,6 +127,12 @@ public:
     /// 获取 swapchain image view handles。
     [[nodiscard]] std::vector<TextureViewHandle> getSwapchainImageViews(SwapchainHandle handle) const;
 
+    /// 获取 swapchain 实际选择的后备缓冲格式；无效句柄返回 Format::Undefined。
+    [[nodiscard]] Format getSwapchainFormat(SwapchainHandle handle) const;
+
+    /// 获取 swapchain 实际 extent；无效句柄返回 {0, 0}。
+    [[nodiscard]] Extent2D getSwapchainExtent(SwapchainHandle handle) const;
+
     /// 获取下一张 swapchain image。
     [[nodiscard]] bool acquireNextImage(
         SwapchainHandle swapchain,
@@ -162,6 +170,9 @@ public:
     void destroy(SwapchainHandle handle) noexcept;
 
 private:
+    /// 根据 FramePacket 录制并提交一帧命令；当前覆盖示例所需的上传、动态渲染和 indexed draw。
+    [[nodiscard]] bool recordAndSubmitFrame(const FramePacket& packet, std::string* errorMessage);
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -25,6 +25,8 @@ find_package(glm           CONFIG REQUIRED)
 find_package(stb           REQUIRED)         # Module 模式：vcpkg 的 stb 只提供 FindStb.cmake，且是 header-only
 find_package(tinyobjloader REQUIRED)
 
+option(VULKANLEARN_BUILD_EXAMPLES "Build RenderVulkan example programs." ON)
+
 target_include_directories(VulkanTutorial PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}           # main.cpp 在当前目录
     ${GLM_INCLUDE_DIRS}
@@ -47,4 +49,8 @@ if(WIN32)
             "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
             $<TARGET_FILE_DIR:VulkanTutorial>
     )
+endif()
+
+if(VULKANLEARN_BUILD_EXAMPLES)
+    add_subdirectory(Examples)
 endif()
