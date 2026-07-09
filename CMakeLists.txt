@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(VulkanLearnExamples LANGUAGES CXX)
+
 find_package(Vulkan REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -8,7 +11,7 @@ find_program(GLSLANG_VALIDATOR
 )
 
 if(NOT GLSLANG_VALIDATOR)
-    message(FATAL_ERROR "PbrShadowExample 需要 glslangValidator，请确认 Vulkan SDK 已安装并设置 VULKAN_SDK。")
+    message(FATAL_ERROR "PbrShadowExample requires glslangValidator. Please install the Vulkan SDK and set VULKAN_SDK.")
 endif()
 
 set(PBR_SHADOW_SHADER_SOURCES
@@ -48,6 +51,12 @@ target_include_directories(PbrShadowExample PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+target_compile_features(PbrShadowExample PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(PbrShadowExample PRIVATE /utf-8)
+endif()
+
 target_compile_definitions(PbrShadowExample PRIVATE
     PBR_SHADOW_EXAMPLE_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/Shaders\"
 )
@@ -58,10 +67,69 @@ target_link_libraries(PbrShadowExample PRIVATE
     glm::glm
 )
 
+if(WIN32)
+    add_library(RenderD3D11 STATIC
+        RenderD3D11.hpp
+        RenderD3D11.cpp
+        RenderDefinitions.hpp
+    )
+
+    target_include_directories(RenderD3D11 PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_compile_features(RenderD3D11 PUBLIC cxx_std_20)
+
+    if(MSVC)
+        target_compile_options(RenderD3D11 PRIVATE /utf-8)
+    endif()
+
+    target_link_libraries(RenderD3D11 PUBLIC
+        glm::glm
+        d3d11
+        dxgi
+        dxguid
+        d3dcompiler
+    )
+
+    add_executable(PbrShadowD3D11Example
+        PbrShadowD3D11Example.cpp
+        RenderDefinitions.hpp
+    )
+
+    target_include_directories(PbrShadowD3D11Example PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_compile_features(PbrShadowD3D11Example PRIVATE cxx_std_20)
+
+    if(MSVC)
+        target_compile_options(PbrShadowD3D11Example PRIVATE /utf-8)
+    endif()
+
+    target_compile_definitions(PbrShadowD3D11Example PRIVATE
+        PBR_SHADOW_D3D11_SHADER_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/Shaders\"
+    )
+
+    target_link_libraries(PbrShadowD3D11Example PRIVATE
+        RenderD3D11
+        glfw
+        glm::glm
+    )
+endif()
+
 if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     add_custom_command(TARGET PbrShadowExample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
             $<TARGET_FILE_DIR:PbrShadowExample>
     )
+
+    if(TARGET PbrShadowD3D11Example)
+        add_custom_command(TARGET PbrShadowD3D11Example POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
+                $<TARGET_FILE_DIR:PbrShadowD3D11Example>
+        )
+    endif()
 endif()
