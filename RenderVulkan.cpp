@@ -228,35 +228,35 @@ static VkSampleCountFlagBits toVkSampleCount(SampleCount samples) {
 
 static VkBufferUsageFlags toVkBufferUsage(BufferUsage usage) {
     VkBufferUsageFlags flags = 0;
-    if (hasAny(usage, BufferUsage::TransferSource)) flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if (hasAny(usage, BufferUsage::TransferDestination)) flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    if (hasAny(usage, BufferUsage::Vertex)) flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (hasAny(usage, BufferUsage::Index)) flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (hasAny(usage, BufferUsage::Uniform)) flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    if (hasAny(usage, BufferUsage::Storage)) flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    if (hasAny(usage, BufferUsage::Indirect)) flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    if (hasAny(usage, BufferUsage::ShaderDeviceAddress)) flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    if (hasAny(usage, BufferUsage::TransferSource))       flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    if (hasAny(usage, BufferUsage::TransferDestination))  flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (hasAny(usage, BufferUsage::Vertex))               flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    if (hasAny(usage, BufferUsage::Index))                flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    if (hasAny(usage, BufferUsage::Uniform))              flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    if (hasAny(usage, BufferUsage::Storage))              flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    if (hasAny(usage, BufferUsage::Indirect))             flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    if (hasAny(usage, BufferUsage::ShaderDeviceAddress))  flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     return flags == 0 ? VK_BUFFER_USAGE_TRANSFER_DST_BIT : flags;
 }
 
 static VkImageUsageFlags toVkImageUsage(TextureUsage usage) {
     VkImageUsageFlags flags = 0;
-    if (hasAny(usage, TextureUsage::TransferSource)) flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    if (hasAny(usage, TextureUsage::TransferDestination)) flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (hasAny(usage, TextureUsage::Sampled)) flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (hasAny(usage, TextureUsage::Storage)) flags |= VK_IMAGE_USAGE_STORAGE_BIT;
-    if (hasAny(usage, TextureUsage::ColorAttachment)) flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (hasAny(usage, TextureUsage::DepthStencilAttachment)) flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    if (hasAny(usage, TextureUsage::Transient)) flags |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-    if (hasAny(usage, TextureUsage::Present)) flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (hasAny(usage, TextureUsage::TransferSource))           flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    if (hasAny(usage, TextureUsage::TransferDestination))      flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (hasAny(usage, TextureUsage::Sampled))                  flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (hasAny(usage, TextureUsage::Storage))                  flags |= VK_IMAGE_USAGE_STORAGE_BIT;
+    if (hasAny(usage, TextureUsage::ColorAttachment))          flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (hasAny(usage, TextureUsage::DepthStencilAttachment))   flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    if (hasAny(usage, TextureUsage::Transient))                flags |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    if (hasAny(usage, TextureUsage::Present))                  flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     return flags == 0 ? VK_IMAGE_USAGE_SAMPLED_BIT : flags;
 }
 
 static VkImageCreateFlags toVkImageCreateFlags(TextureCreateFlags flags) {
     VkImageCreateFlags vkFlags = 0;
     if (hasAny(flags, TextureCreateFlags::CubeCompatible)) vkFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-    if (hasAny(flags, TextureCreateFlags::MutableFormat)) vkFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-    if (hasAny(flags, TextureCreateFlags::SparseBinding)) vkFlags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
+    if (hasAny(flags, TextureCreateFlags::MutableFormat))  vkFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    if (hasAny(flags, TextureCreateFlags::SparseBinding))  vkFlags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
     return vkFlags;
 }
 
@@ -299,18 +299,18 @@ static VkImageViewType toVkImageViewType(TextureViewDimension dimension) {
 static VkImageAspectFlags toVkImageAspect(TextureAspect aspect, Format format) {
     if (aspect == TextureAspect::All || (aspect == TextureAspect::Color && isDepthFormat(format))) {
         VkImageAspectFlags inferred = 0;
-        if (isDepthFormat(format)) inferred |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (isDepthFormat(format))    inferred |= VK_IMAGE_ASPECT_DEPTH_BIT;
         if (hasStencilFormat(format)) inferred |= VK_IMAGE_ASPECT_STENCIL_BIT;
         return inferred == 0 ? VK_IMAGE_ASPECT_COLOR_BIT : inferred;
     }
 
     VkImageAspectFlags flags = 0;
-    if (hasAny(aspect, TextureAspect::Color)) flags |= VK_IMAGE_ASPECT_COLOR_BIT;
-    if (hasAny(aspect, TextureAspect::Depth)) flags |= VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (hasAny(aspect, TextureAspect::Color))   flags |= VK_IMAGE_ASPECT_COLOR_BIT;
+    if (hasAny(aspect, TextureAspect::Depth))   flags |= VK_IMAGE_ASPECT_DEPTH_BIT;
     if (hasAny(aspect, TextureAspect::Stencil)) flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
-    if (hasAny(aspect, TextureAspect::Plane0)) flags |= VK_IMAGE_ASPECT_PLANE_0_BIT;
-    if (hasAny(aspect, TextureAspect::Plane1)) flags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
-    if (hasAny(aspect, TextureAspect::Plane2)) flags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
+    if (hasAny(aspect, TextureAspect::Plane0))  flags |= VK_IMAGE_ASPECT_PLANE_0_BIT;
+    if (hasAny(aspect, TextureAspect::Plane1))  flags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
+    if (hasAny(aspect, TextureAspect::Plane2))  flags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
     return flags == 0 ? VK_IMAGE_ASPECT_COLOR_BIT : flags;
 }
 
@@ -357,14 +357,14 @@ static VkCompareOp toVkCompareOp(CompareOp op) {
 
 static VkShaderStageFlags toVkShaderStages(ShaderStage stages) {
     VkShaderStageFlags flags = 0;
-    if (hasAny(stages, ShaderStage::Vertex)) flags |= VK_SHADER_STAGE_VERTEX_BIT;
-    if (hasAny(stages, ShaderStage::TessControl)) flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+    if (hasAny(stages, ShaderStage::Vertex))         flags |= VK_SHADER_STAGE_VERTEX_BIT;
+    if (hasAny(stages, ShaderStage::TessControl))    flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
     if (hasAny(stages, ShaderStage::TessEvaluation)) flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-    if (hasAny(stages, ShaderStage::Geometry)) flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-    if (hasAny(stages, ShaderStage::Fragment)) flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    if (hasAny(stages, ShaderStage::Compute)) flags |= VK_SHADER_STAGE_COMPUTE_BIT;
-    if (hasAny(stages, ShaderStage::Task)) flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
-    if (hasAny(stages, ShaderStage::Mesh)) flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+    if (hasAny(stages, ShaderStage::Geometry))       flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+    if (hasAny(stages, ShaderStage::Fragment))       flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    if (hasAny(stages, ShaderStage::Compute))        flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+    if (hasAny(stages, ShaderStage::Task))           flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
+    if (hasAny(stages, ShaderStage::Mesh))           flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
     return flags;
 }
 
@@ -584,45 +584,45 @@ static VkCompositeAlphaFlagBitsKHR toVkCompositeAlpha(CompositeAlphaMode mode) {
 
 static VkPipelineStageFlags toVkPipelineStages(PipelineStage stages) {
     VkPipelineStageFlags flags = 0;
-    if (hasAny(stages, PipelineStage::TopOfPipe)) flags |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    if (hasAny(stages, PipelineStage::DrawIndirect)) flags |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-    if (hasAny(stages, PipelineStage::VertexInput)) flags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-    if (hasAny(stages, PipelineStage::VertexShader)) flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::TessControlShader)) flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::TessEvaluationShader)) flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::GeometryShader)) flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::FragmentShader)) flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::EarlyFragmentTests)) flags |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    if (hasAny(stages, PipelineStage::LateFragmentTests)) flags |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    if (hasAny(stages, PipelineStage::TopOfPipe))             flags |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    if (hasAny(stages, PipelineStage::DrawIndirect))          flags |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    if (hasAny(stages, PipelineStage::VertexInput))           flags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    if (hasAny(stages, PipelineStage::VertexShader))          flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::TessControlShader))     flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::TessEvaluationShader))  flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::GeometryShader))        flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::FragmentShader))        flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::EarlyFragmentTests))    flags |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    if (hasAny(stages, PipelineStage::LateFragmentTests))     flags |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     if (hasAny(stages, PipelineStage::ColorAttachmentOutput)) flags |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    if (hasAny(stages, PipelineStage::ComputeShader)) flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-    if (hasAny(stages, PipelineStage::Transfer)) flags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
-    if (hasAny(stages, PipelineStage::BottomOfPipe)) flags |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    if (hasAny(stages, PipelineStage::Host)) flags |= VK_PIPELINE_STAGE_HOST_BIT;
-    if (hasAny(stages, PipelineStage::AllGraphics)) flags |= VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-    if (hasAny(stages, PipelineStage::AllCommands)) flags |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    if (hasAny(stages, PipelineStage::ComputeShader))         flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    if (hasAny(stages, PipelineStage::Transfer))              flags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+    if (hasAny(stages, PipelineStage::BottomOfPipe))          flags |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    if (hasAny(stages, PipelineStage::Host))                  flags |= VK_PIPELINE_STAGE_HOST_BIT;
+    if (hasAny(stages, PipelineStage::AllGraphics))           flags |= VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+    if (hasAny(stages, PipelineStage::AllCommands))           flags |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     return flags == 0 ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : flags;
 }
 
 [[maybe_unused]] static VkAccessFlags toVkAccessFlags(AccessFlags access) {
     VkAccessFlags flags = 0;
-    if (hasAny(access, AccessFlags::IndirectCommandRead)) flags |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-    if (hasAny(access, AccessFlags::IndexRead)) flags |= VK_ACCESS_INDEX_READ_BIT;
-    if (hasAny(access, AccessFlags::VertexAttributeRead)) flags |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    if (hasAny(access, AccessFlags::UniformRead)) flags |= VK_ACCESS_UNIFORM_READ_BIT;
-    if (hasAny(access, AccessFlags::InputAttachmentRead)) flags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-    if (hasAny(access, AccessFlags::ShaderRead)) flags |= VK_ACCESS_SHADER_READ_BIT;
-    if (hasAny(access, AccessFlags::ShaderWrite)) flags |= VK_ACCESS_SHADER_WRITE_BIT;
-    if (hasAny(access, AccessFlags::ColorAttachmentRead)) flags |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    if (hasAny(access, AccessFlags::IndirectCommandRead))  flags |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+    if (hasAny(access, AccessFlags::IndexRead))            flags |= VK_ACCESS_INDEX_READ_BIT;
+    if (hasAny(access, AccessFlags::VertexAttributeRead))  flags |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    if (hasAny(access, AccessFlags::UniformRead))          flags |= VK_ACCESS_UNIFORM_READ_BIT;
+    if (hasAny(access, AccessFlags::InputAttachmentRead))  flags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    if (hasAny(access, AccessFlags::ShaderRead))           flags |= VK_ACCESS_SHADER_READ_BIT;
+    if (hasAny(access, AccessFlags::ShaderWrite))          flags |= VK_ACCESS_SHADER_WRITE_BIT;
+    if (hasAny(access, AccessFlags::ColorAttachmentRead))  flags |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
     if (hasAny(access, AccessFlags::ColorAttachmentWrite)) flags |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    if (hasAny(access, AccessFlags::DepthStencilRead)) flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-    if (hasAny(access, AccessFlags::DepthStencilWrite)) flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    if (hasAny(access, AccessFlags::TransferRead)) flags |= VK_ACCESS_TRANSFER_READ_BIT;
-    if (hasAny(access, AccessFlags::TransferWrite)) flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
-    if (hasAny(access, AccessFlags::HostRead)) flags |= VK_ACCESS_HOST_READ_BIT;
-    if (hasAny(access, AccessFlags::HostWrite)) flags |= VK_ACCESS_HOST_WRITE_BIT;
-    if (hasAny(access, AccessFlags::MemoryRead)) flags |= VK_ACCESS_MEMORY_READ_BIT;
-    if (hasAny(access, AccessFlags::MemoryWrite)) flags |= VK_ACCESS_MEMORY_WRITE_BIT;
+    if (hasAny(access, AccessFlags::DepthStencilRead))     flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    if (hasAny(access, AccessFlags::DepthStencilWrite))    flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    if (hasAny(access, AccessFlags::TransferRead))         flags |= VK_ACCESS_TRANSFER_READ_BIT;
+    if (hasAny(access, AccessFlags::TransferWrite))        flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
+    if (hasAny(access, AccessFlags::HostRead))             flags |= VK_ACCESS_HOST_READ_BIT;
+    if (hasAny(access, AccessFlags::HostWrite))            flags |= VK_ACCESS_HOST_WRITE_BIT;
+    if (hasAny(access, AccessFlags::MemoryRead))           flags |= VK_ACCESS_MEMORY_READ_BIT;
+    if (hasAny(access, AccessFlags::MemoryWrite))          flags |= VK_ACCESS_MEMORY_WRITE_BIT;
     return flags;
 }
 
@@ -1274,18 +1274,18 @@ bool VulkanRenderer::initialize(const VulkanRendererDesc& desc, std::string* err
         impl_->caps.supportsTextureCompressionASTC = support.features.textureCompressionASTC_LDR == VK_TRUE;
         impl_->supportsTimelineSemaphore = support.features12.timelineSemaphore == VK_TRUE;
 
-        if (impl_->caps.supportsCompute) impl_->caps.features |= RenderFeature::Compute;
-        if (impl_->caps.supportsGeometryShader) impl_->caps.features |= RenderFeature::GeometryShader;
-        if (impl_->caps.supportsTessellation) impl_->caps.features |= RenderFeature::Tessellation;
-        if (impl_->caps.supportsSamplerAnisotropy) impl_->caps.features |= RenderFeature::SamplerAnisotropy;
-        if (impl_->caps.supportsTimestampQuery) impl_->caps.features |= RenderFeature::TimestampQuery;
-        if (impl_->caps.supportsOcclusionQuery) impl_->caps.features |= RenderFeature::OcclusionQuery;
+        if (impl_->caps.supportsCompute)                 impl_->caps.features |= RenderFeature::Compute;
+        if (impl_->caps.supportsGeometryShader)          impl_->caps.features |= RenderFeature::GeometryShader;
+        if (impl_->caps.supportsTessellation)            impl_->caps.features |= RenderFeature::Tessellation;
+        if (impl_->caps.supportsSamplerAnisotropy)       impl_->caps.features |= RenderFeature::SamplerAnisotropy;
+        if (impl_->caps.supportsTimestampQuery)          impl_->caps.features |= RenderFeature::TimestampQuery;
+        if (impl_->caps.supportsOcclusionQuery)          impl_->caps.features |= RenderFeature::OcclusionQuery;
         if (impl_->caps.supportsPipelineStatisticsQuery) impl_->caps.features |= RenderFeature::PipelineStatisticsQuery;
-        if (impl_->caps.supportsDynamicRendering) impl_->caps.features |= RenderFeature::DynamicRendering;
-        if (impl_->caps.supportsDebugMarkers) impl_->caps.features |= RenderFeature::DebugMarkers;
-        if (impl_->caps.supportsTextureCompressionBC) impl_->caps.features |= RenderFeature::TextureCompressionBC;
-        if (impl_->caps.supportsTextureCompressionETC2) impl_->caps.features |= RenderFeature::TextureCompressionETC2;
-        if (impl_->caps.supportsTextureCompressionASTC) impl_->caps.features |= RenderFeature::TextureCompressionASTC;
+        if (impl_->caps.supportsDynamicRendering)        impl_->caps.features |= RenderFeature::DynamicRendering;
+        if (impl_->caps.supportsDebugMarkers)            impl_->caps.features |= RenderFeature::DebugMarkers;
+        if (impl_->caps.supportsTextureCompressionBC)    impl_->caps.features |= RenderFeature::TextureCompressionBC;
+        if (impl_->caps.supportsTextureCompressionETC2)  impl_->caps.features |= RenderFeature::TextureCompressionETC2;
+        if (impl_->caps.supportsTextureCompressionASTC)  impl_->caps.features |= RenderFeature::TextureCompressionASTC;
 
         for (u32 i = 0; i < memoryProperties.memoryHeapCount; ++i) {
             if ((memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
@@ -1334,20 +1334,20 @@ void VulkanRenderer::shutdown() noexcept {
 
     vkDeviceWaitIdle(impl_->native.device);
 
-    for (u64 i = impl_->swapchains.size(); i > 0; --i) destroy(SwapchainHandle(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i) destroy(PipelineHandle(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i) destroy(PipelineCacheHandle(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i) destroy(PipelineLayoutHandle(i));
-    for (u64 i = impl_->bindGroups.size(); i > 0; --i) destroy(BindGroupHandle(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(SwapchainHandle(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(PipelineHandle(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(PipelineCacheHandle(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(PipelineLayoutHandle(i));
+    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(BindGroupHandle(i));
     for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(BindGroupLayoutHandle(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i) destroy(QueryPoolHandle(i));
-    for (u64 i = impl_->semaphores.size(); i > 0; --i) destroy(SemaphoreHandle(i));
-    for (u64 i = impl_->fences.size(); i > 0; --i) destroy(FenceHandle(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i) destroy(ShaderHandle(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i) destroy(SamplerHandle(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i) destroy(TextureViewHandle(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i) destroy(TextureHandle(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i) destroy(BufferHandle(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(QueryPoolHandle(i));
+    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(SemaphoreHandle(i));
+    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(FenceHandle(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(ShaderHandle(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(SamplerHandle(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(TextureViewHandle(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(TextureHandle(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(BufferHandle(i));
 
     if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);
@@ -2057,17 +2057,17 @@ QueryPoolHandle VulkanRenderer::createQueryPool(const QueryPoolDesc& desc) {
     case QueryType::PipelineStatistics:
         queryInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
         queryInfo.pipelineStatistics = 0;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::InputAssemblyVertices)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::InputAssemblyPrimitives)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::VertexShaderInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::GeometryShaderInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::GeometryShaderPrimitives)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::ClippingInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::ClippingPrimitives)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::FragmentShaderInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::TessControlShaderPatches)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::InputAssemblyVertices))           queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::InputAssemblyPrimitives))         queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::VertexShaderInvocations))         queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::GeometryShaderInvocations))       queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::GeometryShaderPrimitives))        queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::ClippingInvocations))             queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::ClippingPrimitives))              queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::FragmentShaderInvocations))       queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::TessControlShaderPatches))        queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT;
         if (hasAny(desc.statistics, PipelineStatisticFlags::TessEvaluationShaderInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT;
-        if (hasAny(desc.statistics, PipelineStatisticFlags::ComputeShaderInvocations)) queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+        if (hasAny(desc.statistics, PipelineStatisticFlags::ComputeShaderInvocations))        queryInfo.pipelineStatistics |= VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
         break;
     }
 
@@ -2466,10 +2466,10 @@ bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string
 
         const auto bufferDstAccess = [](BufferUsage usage) {
             VkAccessFlags access = 0;
-            if (hasAny(usage, BufferUsage::Vertex)) access |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-            if (hasAny(usage, BufferUsage::Index)) access |= VK_ACCESS_INDEX_READ_BIT;
-            if (hasAny(usage, BufferUsage::Uniform)) access |= VK_ACCESS_UNIFORM_READ_BIT;
-            if (hasAny(usage, BufferUsage::Storage)) access |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            if (hasAny(usage, BufferUsage::Vertex))   access |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            if (hasAny(usage, BufferUsage::Index))    access |= VK_ACCESS_INDEX_READ_BIT;
+            if (hasAny(usage, BufferUsage::Uniform))  access |= VK_ACCESS_UNIFORM_READ_BIT;
+            if (hasAny(usage, BufferUsage::Storage))  access |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             if (hasAny(usage, BufferUsage::Indirect)) access |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
             return access == 0 ? VK_ACCESS_MEMORY_READ_BIT : access;
         };

@@ -278,8 +278,8 @@ static UINT toBufferBindFlags(BufferUsage usage, MemoryUsage memoryUsage) {
     }
 
     UINT flags = 0;
-    if (hasAny(usage, BufferUsage::Vertex)) flags |= D3D11_BIND_VERTEX_BUFFER;
-    if (hasAny(usage, BufferUsage::Index)) flags |= D3D11_BIND_INDEX_BUFFER;
+    if (hasAny(usage, BufferUsage::Vertex))  flags |= D3D11_BIND_VERTEX_BUFFER;
+    if (hasAny(usage, BufferUsage::Index))   flags |= D3D11_BIND_INDEX_BUFFER;
     if (hasAny(usage, BufferUsage::Uniform)) flags |= D3D11_BIND_CONSTANT_BUFFER;
     if (hasAny(usage, BufferUsage::Storage)) flags |= D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
     return flags;
@@ -291,10 +291,10 @@ static UINT toTextureBindFlags(TextureUsage usage, MemoryUsage memoryUsage) {
     }
 
     UINT flags = 0;
-    if (hasAny(usage, TextureUsage::Sampled)) flags |= D3D11_BIND_SHADER_RESOURCE;
-    if (hasAny(usage, TextureUsage::Storage)) flags |= D3D11_BIND_UNORDERED_ACCESS;
-    if (hasAny(usage, TextureUsage::ColorAttachment) || hasAny(usage, TextureUsage::Present)) flags |= D3D11_BIND_RENDER_TARGET;
-    if (hasAny(usage, TextureUsage::DepthStencilAttachment)) flags |= D3D11_BIND_DEPTH_STENCIL;
+    if (hasAny(usage, TextureUsage::Sampled))                                                  flags |= D3D11_BIND_SHADER_RESOURCE;
+    if (hasAny(usage, TextureUsage::Storage))                                                  flags |= D3D11_BIND_UNORDERED_ACCESS;
+    if (hasAny(usage, TextureUsage::ColorAttachment) || hasAny(usage, TextureUsage::Present))  flags |= D3D11_BIND_RENDER_TARGET;
+    if (hasAny(usage, TextureUsage::DepthStencilAttachment))                                   flags |= D3D11_BIND_DEPTH_STENCIL;
     return flags == 0 ? D3D11_BIND_SHADER_RESOURCE : flags;
 }
 
@@ -308,22 +308,22 @@ static D3D11_FILTER toD3DFilter(const SamplerDesc& desc) {
     const bool mipLinear = desc.mipmapMode == MipmapMode::Linear;
     if (desc.enableCompare) {
         if (minLinear && magLinear && mipLinear) return D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
-        if (minLinear && magLinear) return D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-        if (minLinear && mipLinear) return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
-        if (magLinear && mipLinear) return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR;
-        if (minLinear) return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT;
-        if (magLinear) return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT;
-        if (mipLinear) return D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR;
+        if (minLinear && magLinear)              return D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+        if (minLinear && mipLinear)              return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+        if (magLinear && mipLinear)              return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR;
+        if (minLinear)                           return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT;
+        if (magLinear)                           return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT;
+        if (mipLinear)                           return D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR;
         return D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
     }
 
     if (minLinear && magLinear && mipLinear) return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    if (minLinear && magLinear) return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
-    if (minLinear && mipLinear) return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
-    if (magLinear && mipLinear) return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
-    if (minLinear) return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
-    if (magLinear) return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
-    if (mipLinear) return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+    if (minLinear && magLinear)              return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+    if (minLinear && mipLinear)              return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+    if (magLinear && mipLinear)              return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
+    if (minLinear)                           return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+    if (magLinear)                           return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
+    if (mipLinear)                           return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
     return D3D11_FILTER_MIN_MAG_MIP_POINT;
 }
 
@@ -912,16 +912,16 @@ static RenderCapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_L
     caps.supportsTextureCompressionASTC = false;
 
     caps.features =
-        RenderFeature::Compute |
-        RenderFeature::GeometryShader |
-        RenderFeature::Tessellation |
-        RenderFeature::SamplerAnisotropy |
-        RenderFeature::SamplerCompare |
-        RenderFeature::TimestampQuery |
-        RenderFeature::OcclusionQuery |
+        RenderFeature::Compute                 |
+        RenderFeature::GeometryShader          |
+        RenderFeature::Tessellation            |
+        RenderFeature::SamplerAnisotropy       |
+        RenderFeature::SamplerCompare          |
+        RenderFeature::TimestampQuery          |
+        RenderFeature::OcclusionQuery          |
         RenderFeature::PipelineStatisticsQuery |
-        RenderFeature::IndirectDraw |
-        RenderFeature::TextureCompressionBC |
+        RenderFeature::IndirectDraw            |
+        RenderFeature::TextureCompressionBC    |
         RenderFeature::DebugMarkers;
     return caps;
 }
@@ -1042,20 +1042,20 @@ void D3D11Renderer::shutdown() noexcept {
         impl_->context->Flush();
     }
 
-    for (u64 i = impl_->swapchains.size(); i > 0; --i) destroy(SwapchainHandle(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i) destroy(PipelineHandle(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i) destroy(PipelineCacheHandle(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i) destroy(PipelineLayoutHandle(i));
-    for (u64 i = impl_->bindGroups.size(); i > 0; --i) destroy(BindGroupHandle(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(SwapchainHandle(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(PipelineHandle(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(PipelineCacheHandle(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(PipelineLayoutHandle(i));
+    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(BindGroupHandle(i));
     for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(BindGroupLayoutHandle(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i) destroy(QueryPoolHandle(i));
-    for (u64 i = impl_->semaphores.size(); i > 0; --i) destroy(SemaphoreHandle(i));
-    for (u64 i = impl_->fences.size(); i > 0; --i) destroy(FenceHandle(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i) destroy(ShaderHandle(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i) destroy(SamplerHandle(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i) destroy(TextureViewHandle(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i) destroy(TextureHandle(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i) destroy(BufferHandle(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(QueryPoolHandle(i));
+    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(SemaphoreHandle(i));
+    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(FenceHandle(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(ShaderHandle(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(SamplerHandle(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(TextureViewHandle(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(TextureHandle(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(BufferHandle(i));
 
     impl_->native = {};
     impl_->context.Reset();
@@ -1296,7 +1296,7 @@ static std::vector<std::byte> compileHlsl(const ShaderDesc& desc) {
 
     UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
     if (desc.compileOptions.enableDebugInfo) flags |= D3DCOMPILE_DEBUG;
-    if (desc.compileOptions.optimize) flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+    if (desc.compileOptions.optimize)        flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
     else flags |= D3DCOMPILE_SKIP_OPTIMIZATION;
     if (desc.compileOptions.treatWarningsAsErrors) flags |= D3DCOMPILE_WARNINGS_ARE_ERRORS;
 
@@ -1847,30 +1847,30 @@ static bool stageVisible(ShaderStage visibility, ShaderStage stage) {
 }
 
 static void setConstantBufferForStages(ID3D11DeviceContext* context, ShaderStage visibility, UINT slot, ID3D11Buffer* buffer) {
-    if (stageVisible(visibility, ShaderStage::Vertex)) context->VSSetConstantBuffers(slot, 1, &buffer);
-    if (stageVisible(visibility, ShaderStage::TessControl)) context->HSSetConstantBuffers(slot, 1, &buffer);
+    if (stageVisible(visibility, ShaderStage::Vertex))         context->VSSetConstantBuffers(slot, 1, &buffer);
+    if (stageVisible(visibility, ShaderStage::TessControl))    context->HSSetConstantBuffers(slot, 1, &buffer);
     if (stageVisible(visibility, ShaderStage::TessEvaluation)) context->DSSetConstantBuffers(slot, 1, &buffer);
-    if (stageVisible(visibility, ShaderStage::Geometry)) context->GSSetConstantBuffers(slot, 1, &buffer);
-    if (stageVisible(visibility, ShaderStage::Fragment)) context->PSSetConstantBuffers(slot, 1, &buffer);
-    if (stageVisible(visibility, ShaderStage::Compute)) context->CSSetConstantBuffers(slot, 1, &buffer);
+    if (stageVisible(visibility, ShaderStage::Geometry))       context->GSSetConstantBuffers(slot, 1, &buffer);
+    if (stageVisible(visibility, ShaderStage::Fragment))       context->PSSetConstantBuffers(slot, 1, &buffer);
+    if (stageVisible(visibility, ShaderStage::Compute))        context->CSSetConstantBuffers(slot, 1, &buffer);
 }
 
 static void setSrvForStages(ID3D11DeviceContext* context, ShaderStage visibility, UINT slot, ID3D11ShaderResourceView* srv) {
-    if (stageVisible(visibility, ShaderStage::Vertex)) context->VSSetShaderResources(slot, 1, &srv);
-    if (stageVisible(visibility, ShaderStage::TessControl)) context->HSSetShaderResources(slot, 1, &srv);
+    if (stageVisible(visibility, ShaderStage::Vertex))         context->VSSetShaderResources(slot, 1, &srv);
+    if (stageVisible(visibility, ShaderStage::TessControl))    context->HSSetShaderResources(slot, 1, &srv);
     if (stageVisible(visibility, ShaderStage::TessEvaluation)) context->DSSetShaderResources(slot, 1, &srv);
-    if (stageVisible(visibility, ShaderStage::Geometry)) context->GSSetShaderResources(slot, 1, &srv);
-    if (stageVisible(visibility, ShaderStage::Fragment)) context->PSSetShaderResources(slot, 1, &srv);
-    if (stageVisible(visibility, ShaderStage::Compute)) context->CSSetShaderResources(slot, 1, &srv);
+    if (stageVisible(visibility, ShaderStage::Geometry))       context->GSSetShaderResources(slot, 1, &srv);
+    if (stageVisible(visibility, ShaderStage::Fragment))       context->PSSetShaderResources(slot, 1, &srv);
+    if (stageVisible(visibility, ShaderStage::Compute))        context->CSSetShaderResources(slot, 1, &srv);
 }
 
 static void setSamplerForStages(ID3D11DeviceContext* context, ShaderStage visibility, UINT slot, ID3D11SamplerState* sampler) {
-    if (stageVisible(visibility, ShaderStage::Vertex)) context->VSSetSamplers(slot, 1, &sampler);
-    if (stageVisible(visibility, ShaderStage::TessControl)) context->HSSetSamplers(slot, 1, &sampler);
+    if (stageVisible(visibility, ShaderStage::Vertex))         context->VSSetSamplers(slot, 1, &sampler);
+    if (stageVisible(visibility, ShaderStage::TessControl))    context->HSSetSamplers(slot, 1, &sampler);
     if (stageVisible(visibility, ShaderStage::TessEvaluation)) context->DSSetSamplers(slot, 1, &sampler);
-    if (stageVisible(visibility, ShaderStage::Geometry)) context->GSSetSamplers(slot, 1, &sampler);
-    if (stageVisible(visibility, ShaderStage::Fragment)) context->PSSetSamplers(slot, 1, &sampler);
-    if (stageVisible(visibility, ShaderStage::Compute)) context->CSSetSamplers(slot, 1, &sampler);
+    if (stageVisible(visibility, ShaderStage::Geometry))       context->GSSetSamplers(slot, 1, &sampler);
+    if (stageVisible(visibility, ShaderStage::Fragment))       context->PSSetSamplers(slot, 1, &sampler);
+    if (stageVisible(visibility, ShaderStage::Compute))        context->CSSetSamplers(slot, 1, &sampler);
 }
 
 template <typename BindGroupResourceT>
