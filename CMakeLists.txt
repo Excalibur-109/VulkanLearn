@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(VulkanLearnExamples LANGUAGES CXX)
 
 find_package(Vulkan REQUIRED)
@@ -166,6 +166,57 @@ if(WIN32)
     )
 endif()
 
+# Unified RHI：所有新公共类型和文件均使用 RHI 前缀。
+# 原有 Render* 后端作为私有兼容驱动，后续可以在不影响上层接口的情况下逐步迁移。
+add_library(RHI STATIC
+    RHI/RHI.hpp
+    RHI/RHIDefinitions.hpp
+    RHI/Core/RHIDevice.hpp
+    RHI/Core/RHIDeviceDesc.hpp
+    RHI/Core/RHIDeviceFactory.hpp
+    RHI/Core/RHIDeviceFactory.cpp
+    RHI/Vulkan/RHIVulkanDevice.hpp
+    RHI/Vulkan/RHIVulkanPrivate.hpp
+    RHI/Vulkan/RHIVulkanDevice.cpp
+    RHI/Vulkan/RHIVulkanResources.cpp
+    RHI/Vulkan/RHIVulkanPipelines.cpp
+    RHI/Vulkan/RHIVulkanFrame.cpp
+    RHI/Vulkan/RHIVulkanSwapchain.cpp
+    RenderVulkan/RenderVulkan.cpp
+)
+
+target_include_directories(RHI PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/RHI
+    ${CMAKE_CURRENT_SOURCE_DIR}/RHI/Core
+)
+
+target_compile_features(RHI PUBLIC cxx_std_20)
+target_link_libraries(RHI PUBLIC Vulkan::Vulkan glm::glm)
+
+if(MSVC)
+    target_compile_options(RHI PRIVATE /utf-8)
+endif()
+
+if(WIN32)
+    target_sources(RHI PRIVATE
+        RHI/D3D11/RHID3D11Device.hpp
+        RHI/D3D11/RHID3D11Private.hpp
+        RHI/D3D11/RHID3D11Device.cpp
+        RHI/D3D11/RHID3D11Resources.cpp
+        RHI/D3D11/RHID3D11Pipelines.cpp
+        RHI/D3D11/RHID3D11Frame.cpp
+        RHI/D3D11/RHID3D11Swapchain.cpp
+        RHI/D3D12/RHID3D12Device.hpp
+        RHI/D3D12/RHID3D12Private.hpp
+        RHI/D3D12/RHID3D12Device.cpp
+        RHI/D3D12/RHID3D12Resources.cpp
+        RHI/D3D12/RHID3D12Pipelines.cpp
+        RHI/D3D12/RHID3D12Frame.cpp
+        RHI/D3D12/RHID3D12Swapchain.cpp
+    )
+    target_link_libraries(RHI PUBLIC RenderD3D11 RenderD3D12)
+endif()
 if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     add_custom_command(TARGET PbrShadowExample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
