@@ -108,6 +108,7 @@
       <strong>目录</strong>
       <a href="#layout">推荐目录结构</a>
       <a href="#keywords">常用关键字</a>
+      <a href="#semantics">语义对应</a>
       <a href="#stages">阶段结构</a>
       <a href="#resources">资源绑定</a>
       <a href="#style">代码整理规则</a>
@@ -151,6 +152,40 @@
             <tr><td><code>gl_GlobalInvocationID</code></td><td>compute shader 当前全局线程 id。</td><td><code>uvec3 id = gl_GlobalInvocationID;</code></td></tr>
           </tbody>
         </table>
+      </section>
+
+      <section id="semantics">
+        <h2>语义对应</h2>
+        <p>GLSL 没有 HLSL 那种写在变量后面的 <code>: SV_Position</code>、<code>: TEXCOORD0</code> 语义。GLSL 把“系统语义”做成内建变量，把“自定义阶段传递语义”做成 <code>layout(location = n)</code>。所以学习 GLSL 时要记的是“内建变量 + location”，不是 HLSL 的语义后缀。</p>
+        <table>
+          <thead><tr><th>HLSL 语义</th><th>GLSL 写法</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>SV_Position</code></td><td><code>gl_Position</code></td><td>顶点 shader 输出裁剪空间位置。</td></tr>
+            <tr><td><code>SV_Target0</code></td><td><code>layout(location = 0) out vec4 outColor</code></td><td>片元 shader 输出到第 0 个 color attachment。</td></tr>
+            <tr><td><code>SV_VertexID</code></td><td><code>gl_VertexIndex</code></td><td>当前顶点编号，常用于全屏三角形。</td></tr>
+            <tr><td><code>SV_InstanceID</code></td><td><code>gl_InstanceIndex</code></td><td>当前实例编号，常用于读取对象数组。</td></tr>
+            <tr><td><code>SV_DispatchThreadID</code></td><td><code>gl_GlobalInvocationID</code></td><td>compute shader 当前全局线程 id。</td></tr>
+            <tr><td><code>SV_GroupThreadID</code></td><td><code>gl_LocalInvocationID</code></td><td>compute shader 在线程组内部的局部线程 id。</td></tr>
+            <tr><td><code>SV_GroupID</code></td><td><code>gl_WorkGroupID</code></td><td>compute shader 当前线程组 id。</td></tr>
+            <tr><td><code>POSITION</code></td><td><code>layout(location = 0) in vec3 inPosition</code></td><td>顶点输入位置。语义名由 HLSL 使用，GLSL 只看 location。</td></tr>
+            <tr><td><code>NORMAL</code></td><td><code>layout(location = 1) in vec3 inNormal</code></td><td>顶点输入法线。</td></tr>
+            <tr><td><code>TEXCOORD0</code></td><td><code>layout(location = 0) out/in vec2 uv</code></td><td>普通阶段间插值变量。HLSL 用语义名，GLSL 用 location 配对。</td></tr>
+            <tr><td><code>nointerpolation</code></td><td><code>flat</code></td><td>禁用插值，适合材质索引、对象 ID。</td></tr>
+          </tbody>
+        </table>
+        <pre><code>// HLSL
+struct VSOutput {
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+// GLSL
+layout(location = 0) out vec2 outUv;
+
+void main() {
+    outUv = inUv;
+    gl_Position = scene.viewProjection * worldPosition;
+}</code></pre>
       </section>
 
       <section id="stages">
@@ -200,7 +235,7 @@ void main() {
 
       <section id="examples">
         <h2>示例文件</h2>
-        <p class="file-list">完整示例位于 <code>GLSL_Guide/shaders</code>。主渲染入口是 <code>pbr_lit.vert</code> 和 <code>pbr_lit.frag</code>；阴影 pass 是 <code>shadow_depth.vert</code> 和 <code>shadow_depth.frag</code>；后处理是 <code>fullscreen_triangle.vert</code> + <code>tone_mapping.frag</code>；compute 示例是 <code>compute_particles.comp</code>。</p>
+        <p class="file-list">完整示例位于 <code>GLSL_Guide/shaders</code>。主渲染入口是 <code>pbr_lit.vert</code> 和 <code>pbr_lit.frag</code>；阴影 pass 是 <code>shadow_depth.vert</code> 和 <code>shadow_depth.frag</code>；后处理是 <code>fullscreen_triangle.vert</code> + <code>tone_mapping.frag</code>；compute 示例是 <code>compute_particles.comp</code>；语义对照示例是 <code>semantic_equivalents.vert</code>、<code>semantic_equivalents.frag</code>、<code>semantic_equivalents.comp</code>。</p>
       </section>
 
       <section id="checklist">

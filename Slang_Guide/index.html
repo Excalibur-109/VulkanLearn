@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slang Shader 写法指南</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5e687c;
+      --line: #d9deea;
+      --accent: #7a4a00;
+      --code-bg: #16150f;
+      --code-text: #f1ecdc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.65 "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      padding: 32px 40px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    header h1 { margin: 0 0 8px; font-size: 30px; }
+    header p { margin: 0; max-width: 1040px; color: var(--muted); }
+    main {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      gap: 24px;
+      padding: 24px 40px 48px;
+    }
+    nav {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    nav a {
+      display: block;
+      padding: 6px 0;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    section {
+      margin-bottom: 18px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    h3 { margin: 18px 0 8px; font-size: 17px; }
+    p, ul, ol { margin-top: 0; }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #f1ebdd;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.93em;
+    }
+    pre {
+      overflow: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      line-height: 1.5;
+    }
+    pre code { padding: 0; background: transparent; color: inherit; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 4px;
+    }
+    th, td {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f4ecdb; }
+    .file-list code { white-space: nowrap; }
+    @media (max-width: 880px) {
+      main { grid-template-columns: 1fr; padding: 18px; }
+      nav { position: static; }
+      header { padding: 24px 18px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Slang Shader 写法指南</h1>
+    <p>Slang 是一种 HLSL 风格的现代 shader 语言和编译器，目标是用一份源码生成多种后端输出，例如 Vulkan SPIR-V、D3D12 DXIL、D3D11 DXBC、Metal、WGSL、CUDA 或 CPU 代码。它适合你后面做多后端微型游戏引擎。</p>
+  </header>
+
+  <main>
+    <nav>
+      <strong>目录</strong>
+      <a href="#what">Slang 是什么</a>
+      <a href="#folder">本项目里的文件夹</a>
+      <a href="#layout">推荐目录结构</a>
+      <a href="#keywords">常用写法</a>
+      <a href="#targets">多后端编译</a>
+      <a href="#semantics">语义和资源绑定</a>
+      <a href="#style">代码整理规则</a>
+      <a href="#examples">示例文件</a>
+      <a href="#checklist">检查清单</a>
+    </nav>
+
+    <div>
+      <section id="what">
+        <h2>Slang 是什么</h2>
+        <p>Slang 可以理解为“更适合大型工程和多后端的 HLSL”。它保留了大量 HLSL 语法习惯，例如 <code>float3</code>、<code>cbuffer</code>、<code>Texture2D</code>、<code>SamplerState</code>、<code>SV_Position</code> 语义，同时增加模块化、泛型、接口、反射 API、自动生成不同目标代码等能力。</p>
+        <table>
+          <thead><tr><th>语言</th><th>主要输出</th><th>适合场景</th></tr></thead>
+          <tbody>
+            <tr><td>GLSL</td><td>SPIR-V/OpenGL</td><td>学习 Vulkan 和贴近 Vulkan 资源绑定。</td></tr>
+            <tr><td>HLSL</td><td>DXBC/DXIL，也可编译到 SPIR-V</td><td>D3D11/D3D12 或 Windows 图形开发。</td></tr>
+            <tr><td>Slang</td><td>SPIR-V、DXIL、DXBC、MSL、WGSL、CUDA、CPU 等</td><td>一份 shader 源码支持 Vulkan/D3D/Metal/WebGPU 等多后端。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="folder">
+        <h2>本项目里的 Slang 文件夹</h2>
+        <p>根目录下的 <code>slang-2026.12-windows-x86_64</code> 是 Slang SDK 文件夹。本地检查结果显示它目前包含 <code>include</code> 和 <code>lib</code>，可以用于 C++ 集成 Slang 编译/反射 API；但没有 <code>bin/slangc.exe</code> 命令行编译器。</p>
+        <pre><code>slang-2026.12-windows-x86_64/
+  include/                 // C/C++ API 头文件，例如 slang.h
+  lib/                     // slang.lib、slang-compiler.lib、gfx.lib
+
+// 如果要命令行编译示例，需要额外有 slangc.exe：
+slangc PbrLit.slang -entry VSMain -target spirv -profile vs_6_0 -o PbrLit.vert.spv</code></pre>
+      </section>
+
+      <section id="layout">
+        <h2>推荐目录结构</h2>
+        <p>Slang 可以像 HLSL 一样使用 <code>#include</code> 拆文件。你后续做引擎时，可以让 C++ shader compiler 系统统一处理 include、entry point、target、reflection。</p>
+        <pre><code>Slang_Guide/
+  index.html
+  shaders/
+    Common.slang              // 数学、颜色空间、tone mapping
+    SceneLayout.slang         // cbuffer、buffer、资源绑定
+    PbrLighting.slang         // PBR 光照函数
+    PbrLit.slang              // VSMain + PSMain
+    ShadowDepth.slang         // ShadowVS + ShadowPS
+    FullscreenTriangle.slang  // 全屏三角形 VS
+    ToneMapping.slang         // 后处理 PS
+    ComputeParticles.slang    // compute shader 示例
+    SemanticExamples.slang    // HLSL/GLSL 语义对应集中示例
+    GenericUtilities.slang    // Slang 泛型函数示例</code></pre>
+      </section>
+
+      <section id="keywords">
+        <h2>常用写法</h2>
+        <table>
+          <thead><tr><th>写法</th><th>用途</th><th>示例</th></tr></thead>
+          <tbody>
+            <tr><td><code>[shader("vertex")]</code></td><td>声明 vertex entry point。</td><td><code>[shader("vertex")] VSOut VSMain(...)</code></td></tr>
+            <tr><td><code>[shader("fragment")]</code></td><td>声明 fragment/pixel entry point。</td><td><code>[shader("fragment")] float4 PSMain(...) : SV_Target0</code></td></tr>
+            <tr><td><code>[shader("compute")]</code></td><td>声明 compute entry point。</td><td><code>[shader("compute")] [numthreads(64,1,1)]</code></td></tr>
+            <tr><td><code>cbuffer</code></td><td>常量缓冲。</td><td><code>cbuffer SceneUniforms : register(b0, space0)</code></td></tr>
+            <tr><td><code>StructuredBuffer</code></td><td>结构化只读 buffer。</td><td><code>StructuredBuffer&lt;Material&gt;</code></td></tr>
+            <tr><td><code>RWStructuredBuffer</code></td><td>可读写结构化 buffer，compute 常用。</td><td><code>RWStructuredBuffer&lt;Particle&gt;</code></td></tr>
+            <tr><td><code>Texture2D</code></td><td>二维纹理。</td><td><code>Texture2D&lt;float4&gt; BaseColorMap</code></td></tr>
+            <tr><td><code>SamplerState</code></td><td>普通采样器。</td><td><code>SamplerState LinearSampler</code></td></tr>
+            <tr><td><code>__generic</code></td><td>Slang 的泛型能力，可用于复用标量/向量函数或材质模型。</td><td><code>__generic&lt;typename T&gt; T BlendValue(...)</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="targets">
+        <h2>多后端编译</h2>
+        <p>Slang 的核心价值是同一份源码可以按不同 target 编译。下面命令需要你有 <code>slangc.exe</code>。</p>
+        <pre><code>// Vulkan
+slangc shaders/PbrLit.slang -entry VSMain -target spirv -profile vs_6_0 -o PbrLit.vert.spv
+slangc shaders/PbrLit.slang -entry PSMain -target spirv -profile ps_6_0 -o PbrLit.frag.spv
+
+// D3D12
+slangc shaders/PbrLit.slang -entry VSMain -target dxil -profile vs_6_0 -o PbrLitVS.dxil
+slangc shaders/PbrLit.slang -entry PSMain -target dxil -profile ps_6_0 -o PbrLitPS.dxil
+
+// D3D11
+slangc shaders/PbrLit.slang -entry VSMain -target dxbc -profile vs_5_0 -o PbrLitVS.dxbc
+slangc shaders/PbrLit.slang -entry PSMain -target dxbc -profile ps_5_0 -o PbrLitPS.dxbc</code></pre>
+      </section>
+
+      <section id="semantics">
+        <h2>语义和资源绑定</h2>
+        <p>Slang 支持 HLSL 风格语义，所以你会继续看到 <code>POSITION</code>、<code>NORMAL</code>、<code>TEXCOORD0</code>、<code>SV_Position</code>、<code>SV_Target0</code>。编译到 Vulkan SPIR-V 时，编译器会把系统语义映射到 SPIR-V BuiltIn，把普通语义映射成 location。</p>
+        <table>
+          <thead><tr><th>Slang/HLSL 写法</th><th>Vulkan 概念</th><th>D3D 概念</th></tr></thead>
+          <tbody>
+            <tr><td><code>SV_Position</code></td><td><code>BuiltIn Position</code></td><td>系统值位置语义。</td></tr>
+            <tr><td><code>SV_Target0</code></td><td>第 0 个 color attachment 输出 location</td><td>第 0 个 render target。</td></tr>
+            <tr><td><code>TEXCOORD0</code></td><td>普通 location 输入/输出</td><td>普通插值语义。</td></tr>
+            <tr><td><code>register(b0, space0)</code></td><td><code>set = 0, binding = 0</code></td><td>CBV register b0 space0。</td></tr>
+            <tr><td><code>register(t1, space2)</code></td><td><code>set = 2, binding = 1</code></td><td>SRV register t1 space2。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="style">
+        <h2>代码整理规则</h2>
+        <ul>
+          <li>通用数学、颜色空间、tone mapping 放 <code>Common.slang</code>。</li>
+          <li>CPU/GPU 共享布局放 <code>SceneLayout.slang</code>，字段按 16 字节对齐。</li>
+          <li>PBR、阴影、后处理函数拆成独立文件，入口函数只负责组装输入和输出。</li>
+          <li>入口函数统一命名：<code>VSMain</code>、<code>PSMain</code>、<code>CSMain</code>，特殊 pass 用 <code>ShadowVS</code>、<code>ShadowPS</code>。</li>
+          <li>多后端项目中优先使用 <code>register(..., space...)</code>，后续能自然映射 Vulkan set/binding 和 D3D register space。</li>
+          <li>高级特性先少用。等基础 Vulkan/D3D 管线稳定后，再引入接口、泛型、自动微分和 reflection 生成绑定代码。</li>
+        </ul>
+      </section>
+
+      <section id="examples">
+        <h2>示例文件</h2>
+        <p class="file-list">完整示例位于 <code>Slang_Guide/shaders</code>。主渲染是 <code>PbrLit.slang</code>；阴影 pass 是 <code>ShadowDepth.slang</code>；后处理是 <code>FullscreenTriangle.slang</code> + <code>ToneMapping.slang</code>；compute 示例是 <code>ComputeParticles.slang</code>；语义对照是 <code>SemanticExamples.slang</code>；泛型示例是 <code>GenericUtilities.slang</code>。</p>
+      </section>
+
+      <section id="checklist">
+        <h2>检查清单</h2>
+        <ol>
+          <li>每个 entry point 是否有正确的 <code>[shader("...")]</code> 属性。</li>
+          <li>语义是否和顶点布局、阶段输入输出一致。</li>
+          <li><code>register</code> 和 <code>space</code> 是否能映射到 Vulkan set/binding 和 D3D root signature。</li>
+          <li>cbuffer、StructuredBuffer 的 C++ 结构体是否和 shader 布局一致。</li>
+          <li>编译到 Vulkan 时是否输出 SPIR-V，编译到 D3D12 时是否输出 DXIL。</li>
+          <li>是否使用 Slang reflection 读取资源绑定，避免 C++ 手写绑定表和 shader 漂移。</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
