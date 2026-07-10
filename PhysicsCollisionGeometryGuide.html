@@ -272,7 +272,7 @@
 <body>
   <header>
     <h1>2D / 3D 物理碰撞几何体与检测算法</h1>
-    <p>物理碰撞的核心是用简单几何体近似复杂模型，并判断两个几何体是否相交。实际引擎通常分为宽阶段和窄阶段：宽阶段快速筛掉大部分不可能碰撞的物体，窄阶段再用精确算法计算是否碰撞、碰撞法线和穿透深度。</p>
+    <p>物理碰撞的核心是用简单几何体近似复杂模型，并判断两个几何体是否相交。本文的计算口径是：碰撞体有本地形状，物体 Transform 只考虑位置和旋转，不考虑缩放。检测前先把 Local Collider 转成 World Collider，再进入宽阶段和窄阶段。</p>
   </header>
 
   <main>
@@ -282,6 +282,7 @@
       <a href="#shapes2d">2D 几何体</a>
       <a href="#shapes3d">3D 几何体</a>
       <a href="#pipeline">碰撞检测流程</a>
+      <a href="#rotation-transform">旋转与世界碰撞体</a>
       <a href="#mathbase">数学基础</a>
       <a href="#circle">2D 圆形</a>
       <a href="#aabb2d">2D AABB</a>
@@ -501,13 +502,98 @@
         <p>完整碰撞系统不应该每帧把所有物体两两检测。假设有 N 个物体，暴力检测是 <code>O(N^2)</code>，物体一多就会很慢。</p>
         <div class="formula">Brute force pair count = N * (N - 1) / 2</div>
         <ol>
-          <li>每个物体先计算一个宽阶段 AABB。</li>
+          <li>每个物体先把本地碰撞体按 position + rotation 转到世界空间。</li>
+          <li>根据世界空间碰撞体重新计算宽阶段 AABB。</li>
           <li>用空间结构找出可能重叠的 AABB 对。</li>
           <li>对每个候选对调用具体几何体的窄阶段检测。</li>
           <li>如果碰撞，计算 normal、depth、contact point。</li>
           <li>把接触信息交给物理解算器。</li>
         </ol>
         <p class="ok">先做学习版引擎时，建议从 AABB 宽阶段 + 圆/球/AABB/胶囊窄阶段开始。SAT、GJK、EPA 放在基础系统稳定后再加。</p>
+      </section>
+
+      <section id="rotation-transform">
+        <h2>旋转与世界碰撞体</h2>
+        <p>本文后续所有检测默认都发生在世界空间。物体的缩放不参与碰撞体计算，只有平移和旋转参与。这样公式更稳定，也更接近很多游戏里“物理体尺寸固定、模型视觉可缩放但碰撞不缩放”的做法。</p>
+
+        <h3>2D 旋转</h3>
+        <div class="formula">R(a) =
+[ cos(a) -sin(a) ]
+[ sin(a)  cos(a) ]
+
+worldPoint = position + R(rotation) * localPoint
+worldDirection = R(rotation) * localDirection</div>
+
+        <h3>3D 旋转</h3>
+        <p>3D 中可以用四元数或 3 个正交轴表示旋转。下面公式使用物体的世界方向轴：</p>
+        <div class="formula">axisX = rotation * (1, 0, 0)
+axisY = rotation * (0, 1, 0)
+axisZ = rotation * (0, 0, 1)
+
+worldPoint = position
+           + axisX * localPoint.x
+           + axisY * localPoint.y
+           + axisZ * localPoint.z</div>
+
+        <h3>各碰撞体如何受旋转影响</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>碰撞体</th>
+              <th>旋转后的世界数据</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Circle / Sphere</td>
+              <td><code>worldCenter = position + R * localCenter</code>，半径不变。</td>
+              <td>圆和球本身旋转后形状不变，只有本地中心偏移会被旋转。</td>
+            </tr>
+            <tr>
+              <td>Segment</td>
+              <td><code>worldA = position + R * localA</code>，<code>worldB = position + R * localB</code>。</td>
+              <td>线段方向会随物体旋转。</td>
+            </tr>
+            <tr>
+              <td>AABB</td>
+              <td>本地盒旋转后不再是 AABB，应先变成 OBB，再计算包住 OBB 的世界 AABB。</td>
+              <td>世界 AABB 主要用于宽阶段；窄阶段要用 OBB 或凸多边形。</td>
+            </tr>
+            <tr>
+              <td>OBB</td>
+              <td><code>worldCenter = position + R * localCenter</code>，<code>worldAxes = R * localAxes</code>，<code>halfExtents</code> 不变。</td>
+              <td>因为不考虑缩放，半尺寸保持不变。</td>
+            </tr>
+            <tr>
+              <td>Capsule</td>
+              <td>两个端点按旋转和平移变换，半径不变。</td>
+              <td>角色胶囊体常用这种方式。</td>
+            </tr>
+            <tr>
+              <td>Convex Polygon / Hull</td>
+              <td>所有本地顶点按 <code>position + R * localVertex</code> 变换到世界空间。</td>
+              <td>之后再用 SAT/GJK 检测。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>旋转盒生成宽阶段 AABB</h3>
+        <p>本地矩形或盒子旋转后是 OBB；宽阶段仍然需要 AABB，所以要重新包围旋转后的 OBB。</p>
+        <div class="formula">2D:
+ux = R * (1, 0)
+uy = R * (0, 1)
+worldHalf.x = abs(ux.x) * half.x + abs(uy.x) * half.y
+worldHalf.y = abs(ux.y) * half.x + abs(uy.y) * half.y
+worldAabb.min = worldCenter - worldHalf
+worldAabb.max = worldCenter + worldHalf
+
+3D:
+worldHalf.x = abs(axisX.x) * half.x + abs(axisY.x) * half.y + abs(axisZ.x) * half.z
+worldHalf.y = abs(axisX.y) * half.x + abs(axisY.y) * half.y + abs(axisZ.y) * half.z
+worldHalf.z = abs(axisX.z) * half.x + abs(axisY.z) * half.y + abs(axisZ.z) * half.z</div>
+
+        <p class="warn">不要把“旋转后的本地 AABB”继续当成窄阶段 AABB 检测。AABB 的定义就是轴对齐；旋转后它应该是 OBB。世界 AABB 只是包围它的粗略盒子，用于宽阶段筛选。</p>
       </section>
 
       <section id="mathbase">
@@ -559,6 +645,11 @@ overlap if maxA >= minB && maxB >= minA</div>
         </div>
 
         <h3>圆 - 圆数学过程</h3>
+        <p>如果圆有本地中心，先应用物体旋转和平移。圆的半径不受旋转影响。</p>
+        <div class="formula">worldCenterA = positionA + rotationA * localCenterA
+worldCenterB = positionB + rotationB * localCenterB
+radiusA = localRadiusA
+radiusB = localRadiusB</div>
         <div class="formula">A(centerA, radiusA)
 B(centerB, radiusB)
 d = centerB - centerA
@@ -577,7 +668,7 @@ collide if dot(d, d) <= radius^2</div>
 
       <section id="aabb2d">
         <h2>2D AABB 碰撞</h2>
-        <p>AABB = Axis-Aligned Bounding Box，轴对齐包围盒。它不旋转，所以检测非常便宜。</p>
+        <p>AABB = Axis-Aligned Bounding Box，轴对齐包围盒。它不旋转，所以检测非常便宜。若物体有旋转，本地矩形不能直接当世界 AABB；正确做法是先生成世界 OBB，再计算包住 OBB 的世界 AABB，用于宽阶段。</p>
         <div class="diagram-grid">
           <div class="diagram">
             <strong>AABB 重叠</strong>
@@ -610,6 +701,16 @@ collide = overlapX && overlapY</div>
     B.max.x < A.min.x ||
     A.max.y < B.min.y ||
     B.max.y < A.min.y</div>
+        <h3>旋转矩形转宽阶段 AABB</h3>
+        <div class="formula">worldCenter = position + R * localCenter
+axisX = R * (1, 0)
+axisY = R * (0, 1)
+
+worldHalf.x = abs(axisX.x) * half.x + abs(axisY.x) * half.y
+worldHalf.y = abs(axisX.y) * half.x + abs(axisY.y) * half.y
+
+worldAabb.min = worldCenter - worldHalf
+worldAabb.max = worldCenter + worldHalf</div>
       </section>
 
       <section id="segment">
@@ -627,7 +728,7 @@ intersect if 0 <= t <= 1 && 0 <= u <= 1</div>
 
       <section id="sat2d">
         <h2>2D SAT 凸多边形检测</h2>
-        <p>SAT = Separating Axis Theorem，分离轴定理。对于两个凸形状，如果存在一条轴，让两个形状投影区间不重叠，则它们不碰撞。反过来，如果所有候选轴上都重叠，则碰撞。</p>
+        <p>SAT = Separating Axis Theorem，分离轴定理。对于两个凸形状，如果存在一条轴，让两个形状投影区间不重叠，则它们不碰撞。反过来，如果所有候选轴上都重叠，则碰撞。若多边形属于某个旋转物体，先把所有本地顶点变换到世界空间。</p>
         <div class="diagram-grid">
           <div class="diagram">
             <strong>投影重叠</strong>
@@ -661,7 +762,8 @@ perpendicular(x, y) = (-y, x)</div>
 
         <h3>数学过程</h3>
         <ol>
-          <li>取多边形 A 和 B 的所有边。</li>
+          <li>把多边形 A 和 B 的本地顶点按 <code>worldVertex = position + R * localVertex</code> 转到世界空间。</li>
+          <li>取世界空间多边形 A 和 B 的所有边。</li>
           <li>对每条边求垂直轴。</li>
           <li>把 A 和 B 的所有顶点投影到这条轴上。</li>
           <li>得到两个区间 <code>[minA, maxA]</code> 和 <code>[minB, maxB]</code>。</li>
@@ -673,6 +775,11 @@ perpendicular(x, y) = (-y, x)</div>
       <section id="sphere">
         <h2>3D 球体碰撞</h2>
         <h3>球 - 球</h3>
+        <p>球体旋转后形状不变，只有本地中心偏移会随旋转变化。本文不考虑缩放，所以半径保持不变。</p>
+        <div class="formula">worldCenterA = positionA + rotationA * localCenterA
+worldCenterB = positionB + rotationB * localCenterB
+radiusA = localRadiusA
+radiusB = localRadiusB</div>
         <div class="formula">A(centerA, radiusA)
 B(centerB, radiusB)
 d = centerB - centerA
@@ -690,7 +797,7 @@ collide if penetration > 0</div>
 
       <section id="aabb3d">
         <h2>3D AABB 碰撞</h2>
-        <p>3D AABB 比 2D 多了 z 轴。三个轴都重叠才碰撞。</p>
+        <p>3D AABB 比 2D 多了 z 轴。三个轴都重叠才碰撞。如果物体本身有旋转，本地盒应先转为世界 OBB，再计算包住 OBB 的世界 AABB 做宽阶段；窄阶段不要继续用这个粗略 AABB 替代 OBB。</p>
         <div class="formula">overlapX = A.min.x <= B.max.x && A.max.x >= B.min.x
 overlapY = A.min.y <= B.max.y && A.max.y >= B.min.y
 overlapZ = A.min.z <= B.max.z && A.max.z >= B.min.z
@@ -703,6 +810,18 @@ closest.y = clamp(center.y, min.y, max.y)
 closest.z = clamp(center.z, min.z, max.z)
 d = center - closest
 collide if dot(d, d) <= radius^2</div>
+        <h3>旋转盒转宽阶段 AABB</h3>
+        <div class="formula">worldCenter = position + R * localCenter
+axisX = R * (1, 0, 0)
+axisY = R * (0, 1, 0)
+axisZ = R * (0, 0, 1)
+
+worldHalf.x = abs(axisX.x) * half.x + abs(axisY.x) * half.y + abs(axisZ.x) * half.z
+worldHalf.y = abs(axisX.y) * half.x + abs(axisY.y) * half.y + abs(axisZ.y) * half.z
+worldHalf.z = abs(axisX.z) * half.x + abs(axisY.z) * half.y + abs(axisZ.z) * half.z
+
+worldAabb.min = worldCenter - worldHalf
+worldAabb.max = worldCenter + worldHalf</div>
       </section>
 
       <section id="ray">
@@ -769,6 +888,10 @@ hit if u >= 0 && v >= 0 && u + v <= 1 && t >= 0</div>
 
         <h3>数学过程</h3>
         <p>胶囊 - 胶囊可以转化为“线段 - 线段最近距离”。</p>
+        <p>如果胶囊端点保存在本地空间，检测前先旋转和平移两个端点；本文不考虑缩放，所以半径保持不变。</p>
+        <div class="formula">worldA = position + R * localA
+worldB = position + R * localB
+worldRadius = localRadius</div>
         <div class="formula">capsuleA(segmentA, radiusA)
 capsuleB(segmentB, radiusB)
 closestA, closestB = ClosestPointsBetweenSegments(segmentA, segmentB)
@@ -784,6 +907,12 @@ collide if dot(d, d) <= (sphere.radius + capsule.radius)^2</div>
       <section id="obb">
         <h2>OBB 与 3D SAT</h2>
         <p>OBB = Oriented Bounding Box，有方向的盒子。它比 AABB 更贴合旋转物体，但检测更复杂。</p>
+        <p>在本文的无缩放口径下，OBB 的世界半尺寸等于本地半尺寸，旋转只改变中心和方向轴。</p>
+        <div class="formula">worldCenter = position + R * localCenter
+worldAxisX = R * localAxisX
+worldAxisY = R * localAxisY
+worldAxisZ = R * localAxisZ
+worldHalfExtents = localHalfExtents</div>
         <h3>2D OBB</h3>
         <p>2D OBB 可以当成 4 个顶点的凸多边形，用 SAT 检测。候选轴是两个盒子的局部 x/y 轴，共 4 条轴。</p>
 
@@ -861,6 +990,54 @@ inline float Clamp(float value, float minValue, float maxValue)
 inline float LengthSquared(Vec2 v) { return Dot(v, v); }
 inline float LengthSquared(Vec3 v) { return Dot(v, v); }
 
+struct Transform2D {
+    Vec2 position;
+    float rotationRadians = 0.0f;
+};
+
+inline Vec2 Rotate(Vec2 v, float radians)
+{
+    float c = std::cos(radians);
+    float s = std::sin(radians);
+    return {
+        v.x * c - v.y * s,
+        v.x * s + v.y * c
+    };
+}
+
+inline Vec2 TransformPoint(Transform2D transform, Vec2 localPoint)
+{
+    return transform.position + Rotate(localPoint, transform.rotationRadians);
+}
+
+inline Vec2 TransformDirection(Transform2D transform, Vec2 localDirection)
+{
+    return Rotate(localDirection, transform.rotationRadians);
+}
+
+struct RotationBasis3D {
+    Vec3 axisX = { 1.0f, 0.0f, 0.0f };
+    Vec3 axisY = { 0.0f, 1.0f, 0.0f };
+    Vec3 axisZ = { 0.0f, 0.0f, 1.0f };
+};
+
+struct Transform3D {
+    Vec3 position;
+    RotationBasis3D rotation;
+};
+
+inline Vec3 RotateVector(Transform3D transform, Vec3 localVector)
+{
+    return transform.rotation.axisX * localVector.x +
+           transform.rotation.axisY * localVector.y +
+           transform.rotation.axisZ * localVector.z;
+}
+
+inline Vec3 TransformPoint(Transform3D transform, Vec3 localPoint)
+{
+    return transform.position + RotateVector(transform, localPoint);
+}
+
 inline Vec2 ClosestPointOnSegment(Vec2 p, Vec2 a, Vec2 b)
 {
     Vec2 ab = b - a;
@@ -898,10 +1075,73 @@ struct Aabb2D {
     Vec2 max;
 };
 
+struct LocalBox2D {
+    Vec2 center;
+    Vec2 halfExtents;
+};
+
+struct Obb2D {
+    Vec2 center;
+    Vec2 axisX;
+    Vec2 axisY;
+    Vec2 halfExtents;
+};
+
 struct Segment2D {
     Vec2 a;
     Vec2 b;
 };
+
+Circle2D BuildWorldCircle(Circle2D localCircle, Transform2D transform)
+{
+    return {
+        TransformPoint(transform, localCircle.center),
+        localCircle.radius
+    };
+}
+
+Segment2D BuildWorldSegment(Segment2D localSegment, Transform2D transform)
+{
+    return {
+        TransformPoint(transform, localSegment.a),
+        TransformPoint(transform, localSegment.b)
+    };
+}
+
+Obb2D BuildWorldOBB(LocalBox2D localBox, Transform2D transform)
+{
+    return {
+        TransformPoint(transform, localBox.center),
+        TransformDirection(transform, { 1.0f, 0.0f }),
+        TransformDirection(transform, { 0.0f, 1.0f }),
+        localBox.halfExtents
+    };
+}
+
+Aabb2D ComputeAabbFromObb(Obb2D box)
+{
+    Vec2 worldHalf {
+        std::abs(box.axisX.x) * box.halfExtents.x + std::abs(box.axisY.x) * box.halfExtents.y,
+        std::abs(box.axisX.y) * box.halfExtents.x + std::abs(box.axisY.y) * box.halfExtents.y
+    };
+
+    return {
+        box.center - worldHalf,
+        box.center + worldHalf
+    };
+}
+
+std::vector&lt;Vec2&gt; BuildWorldConvexPolygon(const std::vector&lt;Vec2&gt;& localVertices, Transform2D transform)
+{
+    std::vector&lt;Vec2&gt; worldVertices;
+    worldVertices.reserve(localVertices.size());
+
+    for (Vec2 localVertex : localVertices) {
+        worldVertices.push_back(TransformPoint(transform, localVertex));
+    }
+
+    return worldVertices;
+}
 
 bool Intersects(Circle2D a, Circle2D b)
 {
@@ -1030,6 +1270,78 @@ struct Capsule {
     Vec3 b;
     float radius = 0.0f;
 };
+
+struct LocalBox3D {
+    Vec3 center;
+    Vec3 halfExtents;
+};
+
+struct Obb3D {
+    Vec3 center;
+    Vec3 axisX;
+    Vec3 axisY;
+    Vec3 axisZ;
+    Vec3 halfExtents;
+};
+
+Sphere BuildWorldSphere(Sphere localSphere, Transform3D transform)
+{
+    return {
+        TransformPoint(transform, localSphere.center),
+        localSphere.radius
+    };
+}
+
+Capsule BuildWorldCapsule(Capsule localCapsule, Transform3D transform)
+{
+    return {
+        TransformPoint(transform, localCapsule.a),
+        TransformPoint(transform, localCapsule.b),
+        localCapsule.radius
+    };
+}
+
+Plane BuildWorldPlane(Plane localPlane, Transform3D transform)
+{
+    Vec3 worldNormal = RotateVector(transform, localPlane.normal);
+    Vec3 localPointOnPlane = localPlane.normal * (-localPlane.d);
+    Vec3 worldPointOnPlane = TransformPoint(transform, localPointOnPlane);
+    return {
+        worldNormal,
+        -Dot(worldNormal, worldPointOnPlane)
+    };
+}
+
+Obb3D BuildWorldOBB(LocalBox3D localBox, Transform3D transform)
+{
+    return {
+        TransformPoint(transform, localBox.center),
+        RotateVector(transform, { 1.0f, 0.0f, 0.0f }),
+        RotateVector(transform, { 0.0f, 1.0f, 0.0f }),
+        RotateVector(transform, { 0.0f, 0.0f, 1.0f }),
+        localBox.halfExtents
+    };
+}
+
+Aabb3D ComputeAabbFromObb(Obb3D box)
+{
+    Vec3 worldHalf {
+        std::abs(box.axisX.x) * box.halfExtents.x +
+            std::abs(box.axisY.x) * box.halfExtents.y +
+            std::abs(box.axisZ.x) * box.halfExtents.z,
+        std::abs(box.axisX.y) * box.halfExtents.x +
+            std::abs(box.axisY.y) * box.halfExtents.y +
+            std::abs(box.axisZ.y) * box.halfExtents.z,
+        std::abs(box.axisX.z) * box.halfExtents.x +
+            std::abs(box.axisY.z) * box.halfExtents.y +
+            std::abs(box.axisZ.z) * box.halfExtents.z
+    };
+
+    return {
+        box.center - worldHalf,
+        box.center + worldHalf
+    };
+}
 
 bool Intersects(Sphere a, Sphere b)
 {
@@ -1199,7 +1511,8 @@ bool Intersects(Capsule a, Capsule b)
       <section id="debug">
         <h2>调试建议</h2>
         <ul>
-          <li>先画出碰撞体线框，不要只看渲染模型。</li>
+          <li>先画出世界空间碰撞体线框，不要只看渲染模型，也不要只看本地碰撞体。</li>
+          <li>确认调试线框只应用 position + rotation，不应用 scale。</li>
           <li>先实现圆/球、AABB，再实现胶囊、SAT、GJK。</li>
           <li>所有方向向量参与 dot/cross 前确认是否 normalize。</li>
           <li>比较距离时优先用距离平方，避免无意义开方。</li>
