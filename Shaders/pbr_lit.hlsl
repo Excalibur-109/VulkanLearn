@@ -1,5 +1,4 @@
 static const float PI = 3.14159265359;
-static const uint OBJECT_STRIDE_BYTES = 144;
 static const uint OBJECT_LOCAL_TO_WORLD_OFFSET = 0;
 static const uint OBJECT_NORMAL_MATRIX_OFFSET = 64;
 static const uint OBJECT_MATERIAL_INDEX_OFFSET = 128;
@@ -31,7 +30,6 @@ struct PbrVertexInput
     float3 position : POSITION;
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
-    uint objectIndex : INSTANCE0;
 };
 
 struct PbrVertexOutput
@@ -73,7 +71,7 @@ float3 TransformVectorFromColumns(ByteAddressBuffer buffer, uint matrixByteOffse
 
 PbrVertexOutput PbrVertexMain(PbrVertexInput input)
 {
-    const uint objectBase = input.objectIndex * OBJECT_STRIDE_BYTES;
+    const uint objectBase = 0;
     const float4 worldPosition = TransformPointFromColumns(ObjectBuffer, objectBase + OBJECT_LOCAL_TO_WORLD_OFFSET, input.position);
 
     PbrVertexOutput output;

@@ -12,6 +12,15 @@
 #include <unordered_set>
 #include <utility>
 
+// 学习导读：
+// 这个文件是统一渲染抽象到 Vulkan 的落地层。RenderDefinitions.hpp 里的 BufferDesc、
+// TextureDesc、PipelineDesc、FramePacket 等结构只描述“引擎想要什么”；这里负责把它们
+// 翻译成 VkBuffer/VkImage/VkDescriptorSet/VkPipeline/VkCommandBuffer 等 Vulkan 对象。
+//
+// Vulkan 是显式 API：资源内存、资源状态、同步和命令录制都要由引擎明确处理。因此读这个
+// 文件时可以按“创建设备 -> 创建资源 -> 创建绑定/管线 -> 录制命令 -> 提交/呈现 -> 销毁”
+// 的顺序理解，而不是把它看成一组互不相关的函数。
+
 /// Vulkan 资源句柄使用 1-based index；0 保持为无效句柄。
 template <typename HandleT, typename ResourceT>
 static HandleT makeRenderHandle(std::vector<ResourceT>& resources, ResourceT&& resource) {
@@ -67,6 +76,8 @@ static std::vector<std::byte> readBinaryFile(const std::string& path) {
     return data;
 }
 
+// 统一 Format 到 VkFormat 的映射层。引擎其它模块只依赖 RenderDefinitions.hpp 中的
+// Format 枚举，后端在边界处一次性转换成 native enum，这样上层不会散落 Vulkan 类型。
 static VkFormat toVkFormat(Format format) {
     switch (format) {
     case Format::Undefined:         return VK_FORMAT_UNDEFINED;
@@ -672,6 +683,10 @@ struct VulkanQueueFamilies {
     u32 present = INVALID_INDEX; ///< 呈现队列族，需要 surface 支持。
 };
 
+// Impl 是 VulkanRenderer 的后端状态仓库。
+// 公共 API 对外只暴露轻量 Handle，Handle 实际上是这些 vector 的 1-based 索引；真实的
+// Vulkan 对象、创建时的描述信息、是否拥有对象生命周期等都集中保存在这里。这样上层可以
+// 用统一句柄表达依赖关系，后端仍能拿到 native 对象执行命令。
 struct VulkanRenderer::Impl {
     struct BufferResource {
         BufferDesc desc{};
@@ -868,6 +883,9 @@ static std::vector<VkExtensionProperties> enumerateDeviceExtensions(VkPhysicalDe
     return extensions;
 }
 
+// Vulkan 的队列能力挂在 queue family 上，不是每个 VkQueue 都天然支持所有操作。
+// 这里优先找图形队列，再尽量找独立 compute/transfer 队列；如果找不到独立队列，就退回到
+// graphics family，保证 QueueType::Transfer 等抽象至少有可用队列。
 static VulkanQueueFamilies findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     VulkanQueueFamilies result{};
 
@@ -944,6 +962,9 @@ static VulkanDeviceSupport queryVulkanDeviceSupport(VkPhysicalDevice device) {
     return support;
 }
 
+// requiredFeatures 是用户/引擎声明“没有就不能启动”的能力集合。
+// 这里不要只看 Vulkan 是否暴露 feature，还要看本后端是否真的实现了对应资源模型和命令路径；
+// 例如硬件可能支持光追，但当前 renderer 没有 AS、SBT、ray pipeline，所以仍要返回 false。
 static bool supportsRequiredRenderFeatures(const VulkanDeviceSupport& support, const VulkanQueueFamilies& queues, RenderFeature required) {
     if (hasAny(required, RenderFeature::Compute)                 && queues.compute == INVALID_INDEX)                                        return false;
     if (hasAny(required, RenderFeature::SamplerAnisotropy)       && support.features.samplerAnisotropy != VK_TRUE)                          return false;
@@ -968,6 +989,10 @@ static bool supportsRequiredRenderFeatures(const VulkanDeviceSupport& support, c
     return !hasAny(required, unsupportedByThisBackend);
 }
 
+// 物理设备打分用于在多 GPU 机器上选择默认设备。
+// - 不满足队列、surface、扩展、required feature 的设备直接淘汰；
+// - 离散 GPU 默认更高分；
+// - LowPower 模式下集成 GPU 会被偏好。
 static int scorePhysicalDevice(VkPhysicalDevice device, VkSurfaceKHR surface, const VulkanRendererDesc& desc) {
     const VulkanDeviceSupport support = queryVulkanDeviceSupport(device);
 
@@ -1025,6 +1050,12 @@ VulkanRenderer::VulkanRenderer(VulkanRenderer&&) noexcept = default;
 
 VulkanRenderer& VulkanRenderer::operator=(VulkanRenderer&&) noexcept = default;
 
+// 初始化 Vulkan 后端的主流程：
+// 1. 收集 layer/extension，创建 VkInstance 和可选 debug messenger；
+// 2. 创建/接收 VkSurfaceKHR，用于后续 swapchain 和 present queue 查询；
+// 3. 枚举物理设备并打分，选出满足 requiredFeatures 的 GPU；
+// 4. 创建 logical device，启用需要的 feature/extension，并取出各类队列；
+// 5. 创建 command pool、descriptor pool，并把设备限制整理成 RenderCapabilities。
 bool VulkanRenderer::initialize(const VulkanRendererDesc& desc, std::string* errorMessage) {
     try {
         if (isInitialized()) {
@@ -1334,6 +1365,9 @@ void VulkanRenderer::shutdown() noexcept {
 
     vkDeviceWaitIdle(impl_->native.device);
 
+    // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind group 依赖 layout，
+    // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
+    // 不会自动追踪这些关系，所以后端需要保持明确顺序。
     for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(SwapchainHandle(i));
     for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(PipelineHandle(i));
     for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(PipelineCacheHandle(i));
@@ -1394,6 +1428,9 @@ const VulkanNativeHandles& VulkanRenderer::nativeHandles() const noexcept {
     return impl_->native;
 }
 
+// Buffer 在 Vulkan 中分成两步：先创建 VkBuffer 得到资源形状和 usage，再查询 memory
+// requirements，分配合适 memory type，最后 vkBindBufferMemory 绑定。persistentlyMapped
+// 只适合 CPU 可见内存，用来让上层长期写入动态数据。
 BufferHandle VulkanRenderer::createBuffer(const BufferDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1441,6 +1478,9 @@ BufferHandle VulkanRenderer::createBuffer(const BufferDesc& desc) {
     return handle;
 }
 
+// Texture 对应 VkImage。注意 VkImage 只是“存储和布局状态”，真正给 shader 或 render pass
+// 使用时还需要 VkImageView；因此 createTexture 只负责 image + memory，createTextureView
+// 才负责 format/aspect/mip/layer 这些访问窗口。
 TextureHandle VulkanRenderer::createTexture(const TextureDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1488,6 +1528,9 @@ TextureHandle VulkanRenderer::createTexture(const TextureDesc& desc) {
     return handle;
 }
 
+// ImageView 是 Vulkan 访问图片的入口：同一个 VkImage 可以有多个 view，分别选择不同 mip、
+// array layer、format reinterpretation 或 depth/stencil aspect。RenderGraph 找附件时也是
+// 通过 TextureViewHandle 找到可绑定的 VkImageView。
 TextureViewHandle VulkanRenderer::createTextureView(const TextureViewDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1523,6 +1566,8 @@ TextureViewHandle VulkanRenderer::createTextureView(const TextureViewDesc& desc)
     return handle;
 }
 
+// Sampler 只描述采样规则，不拥有纹理数据。Vulkan 把 sampled image 和 sampler 拆开是常见
+// 做法：同一张 texture 可以配多个 sampler，同一个 sampler 也能复用到多张 texture。
 SamplerHandle VulkanRenderer::createSampler(const SamplerDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1557,6 +1602,8 @@ SamplerHandle VulkanRenderer::createSampler(const SamplerDesc& desc) {
     return handle;
 }
 
+// Vulkan shader module 只接收 SPIR-V bytecode。这里不编译 GLSL/HLSL，而是假定上层已经
+// 提供 bytecode 或文件路径；entry point 和 stage 会在创建 pipeline 时写进 shader stage。
 ShaderHandle VulkanRenderer::createShaderModule(const ShaderDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1587,6 +1634,9 @@ ShaderHandle VulkanRenderer::createShaderModule(const ShaderDesc& desc) {
     return handle;
 }
 
+// BindGroupLayout 对应 Vulkan descriptor set layout：它声明某个 set 里有哪些 binding、
+// 每个 binding 是 buffer/image/sampler，以及哪些 shader stage 可见。Push constant 不在
+// descriptor set 中分配，所以这里跳过，稍后交给 PipelineLayout。
 BindGroupLayoutHandle VulkanRenderer::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1627,6 +1677,8 @@ BindGroupLayoutHandle VulkanRenderer::createBindGroupLayout(const BindGroupLayou
     return handle;
 }
 
+// BindGroup 对应实际 descriptor set。layout 只声明“槽位形状”，这里把具体 buffer/view/sampler
+// 写入 VkDescriptorSet。绘制时只需要 vkCmdBindDescriptorSets，不再逐个资源绑定。
 BindGroupHandle VulkanRenderer::createBindGroup(const BindGroupDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1721,6 +1773,8 @@ BindGroupHandle VulkanRenderer::createBindGroup(const BindGroupDesc& desc) {
     return makeRenderHandle<BindGroupHandle>(impl_->bindGroups, std::move(resource));
 }
 
+// PipelineLayout 是 shader 资源接口的总表：它组合多个 descriptor set layout，并声明 push
+// constant 范围。图形/计算 pipeline 创建和命令绑定 descriptor set 时都必须使用同一个 layout。
 PipelineLayoutHandle VulkanRenderer::createPipelineLayout(const PipelineLayoutDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("VulkanRenderer 尚未初始化");
@@ -1795,6 +1849,9 @@ static VkStencilOpState toVkStencilState(const StencilFaceState& state) {
     return vkState;
 }
 
+// GraphicsPipeline 在 Vulkan 中是“大状态对象”：shader stages、vertex layout、primitive、
+// raster/depth/blend/multisample 等固定状态会一起烘进 VkPipeline。本实现使用 dynamic
+// rendering，所以 pipeline 只记录附件 format，不需要提前创建 VkRenderPass。
 PipelineHandle VulkanRenderer::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     if (!impl_->caps.supportsDynamicRendering) {
         throw std::runtime_error("当前 Vulkan 图形管线实现需要 dynamic rendering");
@@ -1998,6 +2055,8 @@ PipelineHandle VulkanRenderer::createGraphicsPipeline(const GraphicsPipelineDesc
     return handle;
 }
 
+// Compute pipeline 比图形管线简单：只有一个 compute shader stage 和一个 pipeline layout。
+// 创建完成后临时 shader module 可以销毁，因为 VkPipeline 已经内部引用/编译了需要的信息。
 PipelineHandle VulkanRenderer::createComputePipeline(const ComputePipelineDesc& desc) {
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
@@ -2040,6 +2099,8 @@ PipelineHandle VulkanRenderer::createComputePipeline(const ComputePipelineDesc& 
     return handle;
 }
 
+// QueryPool 用于 GPU 侧统计：timestamp 量时间，occlusion 量通过深度/模板测试的样本，
+// pipeline statistics 量各阶段调用次数。不是所有统计项都默认可用，所以初始化时会检查 feature。
 QueryPoolHandle VulkanRenderer::createQueryPool(const QueryPoolDesc& desc) {
     Impl::QueryPoolResource resource{};
     resource.desc = desc;
@@ -2080,6 +2141,8 @@ QueryPoolHandle VulkanRenderer::createQueryPool(const QueryPoolDesc& desc) {
     return handle;
 }
 
+// Semaphore/Fence 都是同步对象：semaphore 主要在 queue 之间或 acquire/present 之间传递依赖，
+// fence 用于 CPU 等 GPU 完成。timeline semaphore 需要 Vulkan 1.2 feature 支持。
 SemaphoreHandle VulkanRenderer::createSemaphore(const SemaphoreDesc& desc) {
     if (desc.type == SemaphoreType::Timeline && !impl_->supportsTimelineSemaphore) {
         throw std::runtime_error("当前 Vulkan 设备不支持 timeline semaphore");
@@ -2123,6 +2186,9 @@ FenceHandle VulkanRenderer::createFence(const FenceDesc& desc) {
     return handle;
 }
 
+// Swapchain 是窗口系统提供的可呈现图像队列。Vulkan swapchain image 由 VkSwapchainKHR 拥有，
+// 不能像普通 texture 那样释放内存，所以这里把它们包装成 TextureResource，并把 ownsImage
+// 设为 false；这样上层仍然能用 TextureHandle/TextureViewHandle 统一描述后备缓冲。
 SwapchainHandle VulkanRenderer::createSwapchain(const SwapchainDesc& desc) {
     if (impl_->native.surface == VK_NULL_HANDLE) {
         throw std::runtime_error("createSwapchain 需要 initialize 时传入有效 VkSurfaceKHR");
@@ -2291,6 +2357,8 @@ bool VulkanRenderer::acquireNextImage(
     FenceHandle signalFence,
     u32* imageIndex,
     std::string* errorMessage) {
+    // acquire 只是向 swapchain 取下一张可写图像的索引，并可选 signal semaphore/fence。
+    // 真正把图像从 Present 转到 ColorAttachment 的 layout transition 在 frame 录制阶段完成。
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, swapchainHandle);
     const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signalSemaphore);
     const Impl::FenceResource* fence = getRenderResource(impl_->fences, signalFence);
@@ -2314,6 +2382,8 @@ bool VulkanRenderer::acquireNextImage(
     return true;
 }
 
+// 低层 submit：把外部已经准备好的同步关系提交到指定 queue。
+// 这个函数不录制命令，只把 wait/signal semaphore、timeline value 和 fence 翻译成 VkSubmitInfo。
 bool VulkanRenderer::submit(const QueueSubmitDesc& desc, std::string* errorMessage) {
     std::vector<VkSemaphore> waitSemaphores;
     std::vector<VkPipelineStageFlags> waitStages;
@@ -2381,6 +2451,8 @@ bool VulkanRenderer::submit(const QueueSubmitDesc& desc, std::string* errorMessa
     return true;
 }
 
+// present 把 acquire 得到并渲染完成的 swapchain image 交还给窗口系统。
+// Vulkan 要求 present 等待 render-finished semaphore，确保图像写入完成后才显示。
 bool VulkanRenderer::present(const PresentDesc& desc, std::string* errorMessage) {
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
     if (swapchain == nullptr || swapchain->swapchain == VK_NULL_HANDLE) {
@@ -2416,6 +2488,10 @@ bool VulkanRenderer::present(const PresentDesc& desc, std::string* errorMessage)
     return true;
 }
 
+// recordAndSubmitFrame 是把 FramePacket 真正落成 Vulkan 命令的地方。
+// 当前实现为学习和示例优先：每帧分配一个一次性 command buffer，处理上传、资源状态转换、
+// dynamic rendering begin/end、pipeline/descriptor/buffer 绑定和 draw，然后提交并等待 fence。
+// 工程化 renderer 通常会复用 command buffer、staging buffer 和 frame fence，但核心顺序相同。
 bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string* errorMessage) {
     struct StagingResource {
         VkBuffer buffer = VK_NULL_HANDLE;
@@ -2571,6 +2647,8 @@ bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string
         };
 
         const auto transitionTexture = [&](TextureHandle handle, ResourceState after) {
+            // RenderGraph 只描述 pass 读写需要的 ResourceState；Vulkan 需要实际 image layout
+            // 和 access mask，所以这里根据当前状态生成 VkImageMemoryBarrier。
             Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
             if (texture == nullptr || texture->image == VK_NULL_HANDLE || texture->currentState == after) {
                 return;
@@ -2631,6 +2709,8 @@ bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string
         };
 
         for (const RenderGraphPassDesc& pass : packet.graph.passes) {
+            // pass 的 reads/writes 先变成 layout transition，再根据 workload 录制具体 draw。
+            // 这样“资源生命周期/状态”和“画什么”保持分离，便于之后扩展自动依赖分析。
             for (const RenderGraphResourceRef& read : pass.reads) {
                 if (read.type == RenderGraphResourceType::Texture || read.type == RenderGraphResourceType::SwapchainImage) {
                     transitionTexture(textureForName(read.name), read.state);
@@ -2722,6 +2802,8 @@ bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string
             vkCmdSetScissor(commandBuffer, 0, 1, &vkScissor);
 
             const auto recordDraw = [&](const DrawIndexedCommand& draw) {
+                // 一个 draw 的最小 Vulkan 绑定集合：pipeline、descriptor sets、vertex buffers、
+                // index buffer，然后发出 vkCmdDrawIndexed。
                 const Impl::PipelineResource* pipeline = getRenderResource(impl_->pipelines, draw.pipeline);
                 if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE) {
                     throw std::runtime_error("DrawIndexedCommand pipeline 无效");
@@ -2869,6 +2951,8 @@ bool VulkanRenderer::recordAndSubmitFrame(const FramePacket& packet, std::string
 }
 
 bool VulkanRenderer::submitFrame(const FramePacket& packet, std::string* errorMessage) {
+    // FramePacket 有 workload 时走“录制并提交”的路径；没有 workload 时只执行用户提供的
+    // QueueSubmitDesc/PresentDesc，方便外部系统自己管理 command buffer。
     if (!packet.workloads.empty()) {
         return recordAndSubmitFrame(packet, errorMessage);
     }
@@ -2890,6 +2974,8 @@ void VulkanRenderer::waitIdle() const noexcept {
     }
 }
 
+// destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
+// 因为 Handle 是 1-based index，压缩数组会让已经发出去的 Handle 指向错误资源。
 void VulkanRenderer::destroy(BufferHandle handle) noexcept {
     Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle);
     if (resource == nullptr) return;

@@ -13,12 +13,24 @@
 
 using Microsoft::WRL::ComPtr;
 
+// 学习导读：
+// 这个文件是统一渲染抽象到 Direct3D 11 的落地层。和 Vulkan 不同，D3D11 是偏“状态机”的
+// immediate context API：创建资源和状态对象后，绘制时把 input layout、shader、RTV/DSV、
+// constant buffer、SRV、sampler 等绑定到 context，然后调用 Draw/Dispatch。
+//
+// 因为 D3D11 没有 Vulkan 那种 descriptor set、显式 image layout 和 queue submit 模型，
+// 本后端会把 RenderDefinitions.hpp 的 BindGroup/Pipeline/FramePacket 翻译成 D3D11 的
+// COM 对象和 context 状态设置，尽量保持上层接口和 Vulkan 后端一致。
+
+// D3D11 资源句柄同样使用 1-based index；0 是无效句柄。真实 COM 对象保存在 Impl 的
+// vector 中，公共 API 只传递轻量 Handle。
 template <typename HandleT, typename ResourceT>
 static HandleT makeRenderHandle(std::vector<ResourceT>& resources, ResourceT&& resource) {
     resources.push_back(std::move(resource));
     return HandleT(static_cast<u64>(resources.size()));
 }
 
+// 根据引擎句柄查找后端资源；越界或空句柄返回 nullptr，调用方再决定报错还是忽略。
 template <typename ResourceT, typename HandleT>
 static ResourceT* getRenderResource(std::vector<ResourceT>& resources, HandleT handle) {
     if (!handle || handle.value == 0 || handle.value > resources.size()) {
@@ -27,6 +39,7 @@ static ResourceT* getRenderResource(std::vector<ResourceT>& resources, HandleT h
     return &resources[static_cast<size_t>(handle.value - 1)];
 }
 
+// const 版本资源查找。
 template <typename ResourceT, typename HandleT>
 static const ResourceT* getRenderResource(const std::vector<ResourceT>& resources, HandleT handle) {
     if (!handle || handle.value == 0 || handle.value > resources.size()) {
@@ -35,12 +48,15 @@ static const ResourceT* getRenderResource(const std::vector<ResourceT>& resource
     return &resources[static_cast<size_t>(handle.value - 1)];
 }
 
+// DirectX API 通常用 HRESULT 表达错误；这里集中转换成异常，让 initialize/create* 函数
+// 可以统一用 try/catch 填 errorMessage。
 static void throwIfFailed(HRESULT hr, const char* message) {
     if (FAILED(hr)) {
         throw std::runtime_error(message);
     }
 }
 
+// Windows/D3D 文件 API 常用 UTF-16 路径；引擎层统一用 UTF-8 string，所以需要边界转换。
 static std::wstring toWideString(const std::string& text) {
     if (text.empty()) {
         return {};
@@ -54,6 +70,7 @@ static std::wstring toWideString(const std::string& text) {
     return result;
 }
 
+// DXGI adapter 名称是 wchar_t，这里转回 UTF-8 供 RenderCapabilities 使用。
 static std::string toUtf8String(const wchar_t* text) {
     if (text == nullptr || text[0] == L'\0') {
         return {};
@@ -67,6 +84,8 @@ static std::string toUtf8String(const wchar_t* text) {
     return result;
 }
 
+// 统一 Format 到 DXGI_FORMAT 的映射层。上层资源描述不直接暴露 DXGI 枚举，便于同一份
+// RenderDefinitions.hpp 同时驱动 Vulkan 和 D3D11。
 static DXGI_FORMAT toDxgiFormat(Format format) {
     switch (format) {
     case Format::Undefined:         return DXGI_FORMAT_UNKNOWN;
@@ -203,6 +222,9 @@ static Format fromDxgiFormat(DXGI_FORMAT format) {
     }
 }
 
+// D3D11 深度纹理常用 typeless 资源格式创建，再用 DSV/SRV 选择具体解释方式：
+// - DSV 解释成深度/模板格式用于深度测试；
+// - SRV 解释成 R 通道格式用于 shader 采样阴影图等数据。
 static DXGI_FORMAT toTypelessDepthFormat(Format format) {
     switch (format) {
     case Format::D16_UNorm:         return DXGI_FORMAT_R16_TYPELESS;
@@ -214,6 +236,8 @@ static DXGI_FORMAT toTypelessDepthFormat(Format format) {
     }
 }
 
+// 深度纹理作为 shader resource 读取时不能直接用 D24/D32 这类 DSV 格式，需要改成可采样的
+// color-like 格式；普通 color texture 则直接沿用 toDxgiFormat。
 static DXGI_FORMAT toSrvFormat(Format format) {
     switch (format) {
     case Format::D16_UNorm:         return DXGI_FORMAT_R16_UNORM;
@@ -225,6 +249,7 @@ static DXGI_FORMAT toSrvFormat(Format format) {
     }
 }
 
+// 深度模板视图需要 DSV 专用格式，和创建资源用的 typeless 格式不同。
 static DXGI_FORMAT toDsvFormat(Format format) {
     switch (format) {
     case Format::D16_UNorm:         return DXGI_FORMAT_D16_UNORM;
@@ -236,6 +261,7 @@ static DXGI_FORMAT toDsvFormat(Format format) {
     }
 }
 
+// Swapchain 只支持 DXGI 可呈现格式；这里把引擎偏好的格式收敛到 DXGI 能接受的后备缓冲格式。
 static DXGI_FORMAT toSwapchainFormat(Format format) {
     switch (format) {
     case Format::RGBA8_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -518,6 +544,8 @@ static UINT formatBytesPerBlock(Format format) {
     }
 }
 
+// 压缩纹理按 4x4 block 存储，上传时 row pitch 不是 width * pixelBytes，而是 block 数乘
+// block 大小。这里封装 pitch 计算，避免调用 UpdateSubresource 时行跨度错误。
 static bool isBlockCompressed(Format format) {
     return format == Format::BC1RGBA_UNorm ||
            format == Format::BC1RGBA_SRGB ||
@@ -536,6 +564,7 @@ static UINT rowPitchForFormat(Format format, u32 width) {
     return width * formatBytesPerBlock(format);
 }
 
+// ShaderDesc 可以不显式写 target profile；D3D11 需要按 stage 编译到 vs/ps/cs 等 profile。
 static std::string defaultProfileForStage(ShaderStage stage) {
     switch (stage) {
     case ShaderStage::Vertex:         return "vs_5_0";
@@ -548,6 +577,8 @@ static std::string defaultProfileForStage(ShaderStage stage) {
     }
 }
 
+// TextureViewDesc 是引擎的统一“看这张纹理的哪一部分”的描述。D3D11 会根据资源维度、
+// array/mip 范围、MSAA 情况生成 SRV/RTV/DSV 描述，真正绑定到 shader 或 output merger。
 static D3D11_SHADER_RESOURCE_VIEW_DESC makeTextureSrvDesc(const TextureDesc& texture, const TextureViewDesc& view, Format viewFormat) {
     D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
     desc.Format = toSrvFormat(viewFormat);
@@ -644,6 +675,10 @@ static D3D11_DEPTH_STENCIL_VIEW_DESC makeDsvDesc(const TextureDesc& texture, con
     return desc;
 }
 
+// Impl 是 D3D11Renderer 的后端状态仓库。
+// D3D11 对象都是 COM 对象，这里用 ComPtr 管生命周期；公共 Handle 只保存 1-based index。
+// 注意 BindGroupLayout/PipelineLayout 在 D3D11 中没有原生等价物，它们主要作为统一抽象的
+// 描述和校验数据存在，真正的绑定发生在 applyBindGroup/applyPipeline 里。
 struct D3D11Renderer::Impl {
     struct BufferResource {
         BufferDesc desc{};
@@ -801,10 +836,15 @@ struct D3D11Renderer::Impl {
     }
 };
 
+// WARP/software adapter 一般只作为 fallback，不参与默认硬件选择。
 static bool isSoftwareAdapter(const DXGI_ADAPTER_DESC1& desc) {
     return (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
 }
 
+// DXGI adapter 选择策略：
+// - Default 取第一个非软件 adapter；
+// - HighPerformance 倾向显存更大的 adapter；
+// - LowPower 倾向显存更小/通常更省电的 adapter。
 static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory1* factory, PowerPreference preference) {
     ComPtr<IDXGIAdapter1> selected;
     SIZE_T selectedMemory = preference == PowerPreference::LowPower ? std::numeric_limits<SIZE_T>::max() : 0;
@@ -842,6 +882,8 @@ static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory1* factory, PowerPreferen
     return selected;
 }
 
+// D3D11 的 feature set 相对固定，但统一 RenderFeature 里包含 Vulkan/D3D12 风格能力。
+// 这里既检查 caps 是否支持，也明确排除本后端没有实现或 API 本身不适合表达的能力。
 static bool supportsRequiredFeatures(const RenderCapabilities& caps, RenderFeature required) {
     if (hasAny(required, RenderFeature::Compute)                 && !caps.supportsCompute)                 return false;
     if (hasAny(required, RenderFeature::GeometryShader)          && !caps.supportsGeometryShader)          return false;
@@ -867,6 +909,8 @@ static bool supportsRequiredFeatures(const RenderCapabilities& caps, RenderFeatu
     return !hasAny(required, unsupported);
 }
 
+// 把 adapter/feature level 整理成引擎统一的 RenderCapabilities。
+// 这些能力会被上层用于选择渲染路径，也会被 requiredFeatures 校验。
 static RenderCapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVEL featureLevel) {
     RenderCapabilities caps{};
     caps.api = GraphicsApi::Direct3D11;
@@ -938,6 +982,12 @@ D3D11Renderer::D3D11Renderer(D3D11Renderer&&) noexcept = default;
 
 D3D11Renderer& D3D11Renderer::operator=(D3D11Renderer&&) noexcept = default;
 
+// 初始化 D3D11 后端的主流程：
+// 1. 创建 DXGI factory 并按 PowerPreference 选择 adapter；
+// 2. 用 adapter 或指定 driverType 创建 ID3D11Device + immediate context；
+// 3. 允许在硬件设备失败时 fallback 到 WARP；
+// 4. 生成 RenderCapabilities，并检查 minimumFeatureLevel/requiredFeatures；
+// 5. 刷新 native handle，供示例或平台层必要时访问原生对象。
 bool D3D11Renderer::initialize(const D3D11RendererDesc& desc, std::string* errorMessage) {
     try {
         if (isInitialized()) {
@@ -1038,10 +1088,14 @@ void D3D11Renderer::shutdown() noexcept {
     }
 
     if (impl_->context) {
+        // ClearState 解除 context 对资源/状态对象的引用，再 Flush 让驱动尽快处理已提交命令；
+        // 否则 COM 引用可能让资源在 Reset 时仍被 context 持有。
         impl_->context->ClearState();
         impl_->context->Flush();
     }
 
+    // 按依赖反向释放：swapchain/backbuffer view 先释放，pipeline/bind group 等引用资源的对象
+    // 先清掉，最后再释放 texture/buffer。ComPtr 会处理 COM Release，vector 槽位不压缩。
     for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(SwapchainHandle(i));
     for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(PipelineHandle(i));
     for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(PipelineCacheHandle(i));
@@ -1076,6 +1130,8 @@ const D3D11NativeHandles& D3D11Renderer::nativeHandles() const noexcept {
     return impl_->native;
 }
 
+// BufferDesc 会映射到 D3D11_BUFFER_DESC。D3D11 constant buffer 要 16 字节对齐；raw storage
+// buffer view 需要 4 字节对齐，并通过 MISC_BUFFER_ALLOW_RAW_VIEWS 允许创建 SRV/UAV。
 BufferHandle D3D11Renderer::createBuffer(const BufferDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1104,6 +1160,8 @@ BufferHandle D3D11Renderer::createBuffer(const BufferDesc& desc) {
     return makeRenderHandle<BufferHandle>(impl_->buffers, std::move(resource));
 }
 
+// D3D11 texture 分成 Texture1D/2D/3D 三套接口；这里用 TextureDesc::dimension 选择创建函数。
+// 深度格式会先创建成 typeless，之后再由 SRV/DSV 决定“采样视图”还是“深度视图”。
 TextureHandle D3D11Renderer::createTexture(const TextureDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1169,6 +1227,8 @@ TextureHandle D3D11Renderer::createTexture(const TextureDesc& desc) {
     return makeRenderHandle<TextureHandle>(impl_->textures, std::move(resource));
 }
 
+// D3D11 的 view 是资源用途的入口：SRV 给 shader 读，RTV 给 color attachment 写，DSV 给深度
+// 测试，UAV 给 compute/像素 shader 随机读写。一个 TextureViewDesc 可能按 usage 创建多个 view。
 TextureViewHandle D3D11Renderer::createTextureView(const TextureViewDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1232,6 +1292,8 @@ TextureViewHandle D3D11Renderer::createTextureView(const TextureViewDesc& desc) 
     return handle;
 }
 
+// SamplerState 描述采样过滤、寻址、比较采样等规则。和 Vulkan 一样，sampler 不拥有纹理；
+// 具体纹理通过 SRV 绑定，采样规则通过 sampler slot 绑定。
 SamplerHandle D3D11Renderer::createSampler(const SamplerDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1272,6 +1334,8 @@ SamplerHandle D3D11Renderer::createSampler(const SamplerDesc& desc) {
     return makeRenderHandle<SamplerHandle>(impl_->samplers, std::move(resource));
 }
 
+// D3D11 可以直接从 HLSL source/file 编译，也可以接收已编译 DXBC bytecode。
+// 这里集中处理 entry point、target profile、宏和编译选项，返回 create shader object 所需字节码。
 static std::vector<std::byte> compileHlsl(const ShaderDesc& desc) {
     if (!desc.bytecode.empty()) {
         return desc.bytecode;
@@ -1347,6 +1411,8 @@ static std::vector<std::byte> compileHlsl(const ShaderDesc& desc) {
     return result;
 }
 
+// ShaderResource 保存具体 stage 的 D3D11 shader 对象，同时保留 bytecode。
+// 顶点 shader 的 bytecode 后续还要用于 CreateInputLayout，因为 D3D11 需要用它校验顶点输入签名。
 ShaderHandle D3D11Renderer::createShaderModule(const ShaderDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1393,12 +1459,16 @@ ShaderHandle D3D11Renderer::createShaderModule(const ShaderDesc& desc) {
     return makeRenderHandle<ShaderHandle>(impl_->shaders, std::move(resource));
 }
 
+// D3D11 没有原生 DescriptorSetLayout；这里保存 layout 描述，用来在 createBindGroup 时校验
+// binding 是否存在、可见 shader stage 是哪些、storage 是否可写。
 BindGroupLayoutHandle D3D11Renderer::createBindGroupLayout(const BindGroupLayoutDesc& desc) {
     Impl::BindGroupLayoutResource resource{};
     resource.desc = desc;
     return makeRenderHandle<BindGroupLayoutHandle>(impl_->bindGroupLayouts, std::move(resource));
 }
 
+// D3D11 的 BindGroup 是“延迟绑定记录”：创建时把统一 ResourceBinding 解析成 COM view/state，
+// 绘制/dispatch 时 applyBindGroup 再把这些对象设置到 VS/PS/CS 等具体 shader stage。
 BindGroupHandle D3D11Renderer::createBindGroup(const BindGroupDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1494,6 +1564,8 @@ BindGroupHandle D3D11Renderer::createBindGroup(const BindGroupDesc& desc) {
     return makeRenderHandle<BindGroupHandle>(impl_->bindGroups, std::move(resource));
 }
 
+// PipelineLayout 在 D3D11 中主要用于统一抽象校验：确认它引用的 bind group layout 都存在。
+// 真正的资源槽位绑定在 applyBindGroup 时按每个 binding 的 slot 和 visibility 执行。
 PipelineLayoutHandle D3D11Renderer::createPipelineLayout(const PipelineLayoutDesc& desc) {
     for (BindGroupLayoutHandle handle : desc.bindGroupLayouts) {
         if (getRenderResource(impl_->bindGroupLayouts, handle) == nullptr) {
@@ -1505,6 +1577,8 @@ PipelineLayoutHandle D3D11Renderer::createPipelineLayout(const PipelineLayoutDes
     return makeRenderHandle<PipelineLayoutHandle>(impl_->pipelineLayouts, std::move(resource));
 }
 
+// D3D11 没有 Vulkan/D3D12 那种 pipeline cache；保留这个资源类型是为了让统一接口完整，
+// 以后接入 D3D12/Vulkan 离线缓存时，上层 API 不需要改变。
 PipelineCacheHandle D3D11Renderer::createPipelineCache(const PipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
@@ -1520,6 +1594,9 @@ static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const StencilFaceState& state
     return desc;
 }
 
+// 图形 pipeline 在 D3D11 里不是一个原生大对象，而是一组状态对象和 shader 组合：
+// input layout、shader stages、rasterizer state、depth-stencil state、blend state。
+// applyPipeline 会在绘制时把这些对象依次设置到 immediate context。
 PipelineHandle D3D11Renderer::createGraphicsPipeline(const GraphicsPipelineDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1674,6 +1751,8 @@ PipelineHandle D3D11Renderer::createGraphicsPipeline(const GraphicsPipelineDesc&
     return makeRenderHandle<PipelineHandle>(impl_->pipelines, std::move(resource));
 }
 
+// Compute pipeline 只需要 compute shader。为了和统一 PipelineHandle 对齐，仍然存到
+// PipelineResource，并用 compute=true 区分 applyPipeline 的绑定路径。
 PipelineHandle D3D11Renderer::createComputePipeline(const ComputePipelineDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1696,6 +1775,7 @@ PipelineHandle D3D11Renderer::createComputePipeline(const ComputePipelineDesc& d
     return makeRenderHandle<PipelineHandle>(impl_->pipelines, std::move(resource));
 }
 
+// D3D11 query 是单个 ID3D11Query 对象；为了匹配统一 QueryPool 抽象，这里预创建一组 query。
 QueryPoolHandle D3D11Renderer::createQueryPool(const QueryPoolDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1720,6 +1800,8 @@ QueryPoolHandle D3D11Renderer::createQueryPool(const QueryPoolDesc& desc) {
     return makeRenderHandle<QueryPoolHandle>(impl_->queryPools, std::move(resource));
 }
 
+// D3D11 没有 Vulkan timeline/binary semaphore 的原生等价物。本后端用轻量 CPU 状态模拟
+// 统一接口里的 semaphore，适合示例和跨后端流程对齐，不适合作为跨 queue 精细同步。
 SemaphoreHandle D3D11Renderer::createSemaphore(const SemaphoreDesc& desc) {
     Impl::SemaphoreResource resource{};
     resource.desc = desc;
@@ -1728,6 +1810,8 @@ SemaphoreHandle D3D11Renderer::createSemaphore(const SemaphoreDesc& desc) {
     return makeRenderHandle<SemaphoreHandle>(impl_->semaphores, std::move(resource));
 }
 
+// Fence 用 D3D11_QUERY_EVENT 实现：submit 时 End 一个 event query，waitIdle/GetData 可检查
+// GPU 是否执行到该点。
 FenceHandle D3D11Renderer::createFence(const FenceDesc& desc) {
     Impl::FenceResource resource{};
     resource.desc = desc;
@@ -1735,6 +1819,8 @@ FenceHandle D3D11Renderer::createFence(const FenceDesc& desc) {
     return makeRenderHandle<FenceHandle>(impl_->fences, std::move(resource));
 }
 
+// D3D11 swapchain 通常只有一个当前 back buffer。为了和 Vulkan 多图像 swapchain 接口一致，
+// 这里也把 back buffer 包装成 TextureHandle + TextureViewHandle，供 RenderGraph 统一引用。
 SwapchainHandle D3D11Renderer::createSwapchain(const SwapchainDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("D3D11Renderer is not initialized");
@@ -1846,6 +1932,8 @@ static bool stageVisible(ShaderStage visibility, ShaderStage stage) {
     return hasAny(visibility, stage);
 }
 
+// D3D11 每个 shader stage 都有独立的 constant buffer/SRV/sampler slot。
+// 统一的 ShaderStage visibility 会在这里展开成 VS/HS/DS/GS/PS/CS 对应的 Set* 调用。
 static void setConstantBufferForStages(ID3D11DeviceContext* context, ShaderStage visibility, UINT slot, ID3D11Buffer* buffer) {
     if (stageVisible(visibility, ShaderStage::Vertex))         context->VSSetConstantBuffers(slot, 1, &buffer);
     if (stageVisible(visibility, ShaderStage::TessControl))    context->HSSetConstantBuffers(slot, 1, &buffer);
@@ -1873,6 +1961,8 @@ static void setSamplerForStages(ID3D11DeviceContext* context, ShaderStage visibi
     if (stageVisible(visibility, ShaderStage::Compute))        context->CSSetSamplers(slot, 1, &sampler);
 }
 
+// 把 BindGroup 中预解析好的资源真正绑定到 context。
+// 图形路径通常绑定 CBV/SRV/Sampler；compute 路径还允许把 StorageTexture 的 UAV 绑定到 CS。
 template <typename BindGroupResourceT>
 static void applyBindGroup(ID3D11DeviceContext* context, const BindGroupResourceT& bindGroup, bool compute) {
     for (const auto& binding : bindGroup.bindings) {
@@ -1914,6 +2004,8 @@ static void applyBindGroup(ID3D11DeviceContext* context, const BindGroupResource
     }
 }
 
+// D3D11 pipeline 是一组 context 状态。每次 draw/dispatch 前调用它，确保当前 context 处于
+// 这个 PipelineHandle 描述的状态；后续 draw 会继承这些状态，直到再次被覆盖。
 template <typename PipelineResourceT>
 static void applyPipeline(ID3D11DeviceContext* context, const PipelineResourceT& pipeline) {
     if (pipeline.compute) {
@@ -1940,6 +2032,8 @@ bool D3D11Renderer::acquireNextImage(
     u32* imageIndex,
     std::string* errorMessage) {
     try {
+        // D3D11 swapchain 后端当前只包装一个 back buffer，所以 imageIndex 固定为 0。
+        // semaphore/fence 在这里标记为已 signal，用来保持和 Vulkan 调用流程一致。
         if (getRenderResource(impl_->swapchains, swapchain) == nullptr) {
             throw std::runtime_error("acquireNextImage swapchain is invalid");
         }
@@ -1964,6 +2058,8 @@ bool D3D11Renderer::acquireNextImage(
     }
 }
 
+// D3D11 immediate context 没有 Vulkan 那样显式提交 command buffer。
+// Flush 会把当前累积的状态/命令推给驱动；semaphore/fence 在本实现中作为统一接口的轻量模拟。
 bool D3D11Renderer::submit(const QueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const QueueWaitDesc& wait : desc.waits) {
@@ -2003,6 +2099,8 @@ bool D3D11Renderer::submit(const QueueSubmitDesc& desc, std::string* errorMessag
     }
 }
 
+// Present 把当前 back buffer 交给 DXGI。Immediate 模式/allowTearing 走 syncInterval=0，
+// 其它模式用 syncInterval=1 等待垂直同步。
 bool D3D11Renderer::present(const PresentDesc& desc, std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
@@ -2021,6 +2119,9 @@ bool D3D11Renderer::present(const PresentDesc& desc, std::string* errorMessage) 
     }
 }
 
+// D3D11 的 recordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
+// 先上传 buffer/texture，再按 RenderGraph pass 绑定 RTV/DSV、viewport/scissor，最后执行
+// draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种 barrier。
 bool D3D11Renderer::recordAndSubmitFrame(const FramePacket& packet, std::string* errorMessage) {
     try {
         for (const BufferUploadDesc& upload : packet.uploads.buffers) {
@@ -2101,6 +2202,8 @@ bool D3D11Renderer::recordAndSubmitFrame(const FramePacket& packet, std::string*
         };
 
         const auto bindDrawResources = [&](const std::vector<BindGroupHandle>& bindGroups, bool compute) {
+            // workload 只携带 BindGroupHandle；真正把资源铺到 shader slot 的逻辑集中在
+            // applyBindGroup，draw/dispatch 代码不需要知道资源具体是 buffer、texture 还是 sampler。
             for (BindGroupHandle bindGroupHandle : bindGroups) {
                 const Impl::BindGroupResource* bindGroup = getRenderResource(impl_->bindGroups, bindGroupHandle);
                 if (bindGroup == nullptr) {
@@ -2168,6 +2271,8 @@ bool D3D11Renderer::recordAndSubmitFrame(const FramePacket& packet, std::string*
         };
 
         for (const RenderGraphPassDesc& pass : packet.graph.passes) {
+            // RenderGraph pass 负责声明附件；workload 负责声明 draw/dispatch。这里把二者合并成
+            // D3D11 output-merger 绑定和实际绘制命令。
             const RenderPassWorkload* workload = findWorkload(pass.name);
             if (workload == nullptr) {
                 continue;
@@ -2268,6 +2373,8 @@ bool D3D11Renderer::recordAndSubmitFrame(const FramePacket& packet, std::string*
 }
 
 bool D3D11Renderer::submitFrame(const FramePacket& packet, std::string* errorMessage) {
+    // 和 Vulkan 后端保持同一入口：有 workload 就由 renderer 执行帧包；没有 workload 时只处理
+    // 外部传入的 submit/present 描述。
     if (!packet.workloads.empty()) {
         return recordAndSubmitFrame(packet, errorMessage);
     }
@@ -2301,6 +2408,8 @@ void D3D11Renderer::waitIdle() const noexcept {
     }
 }
 
+// destroy 系列只清空对应槽位里的 COM 对象和描述，不压缩 vector。
+// Handle 是 1-based index，压缩会导致已发出的 Handle 指向错误资源。
 void D3D11Renderer::destroy(BufferHandle handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
         resource->buffer.Reset();

@@ -3,6 +3,7 @@
 
 #include "RenderVulkan.hpp"
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
@@ -146,7 +147,7 @@ Extent2D waitForDrawableSize(GLFWwindow* window) {
 }
 
 glm::mat4 makeVulkanPerspective(float fovRadians, float aspect, float nearPlane, float farPlane) {
-    glm::mat4 projection = glm::perspective(fovRadians, aspect, nearPlane, farPlane);
+    glm::mat4 projection = glm::perspectiveRH_ZO(fovRadians, aspect, nearPlane, farPlane);
     projection[1][1] *= -1.0F;
     return projection;
 }
@@ -201,7 +202,7 @@ GeneratedMesh generatePlaneAndSphere() {
             const u32 b = row1 + slice;
             const u32 c = row1 + slice + 1;
             const u32 d = row0 + slice + 1;
-            mesh.indices.insert(mesh.indices.end(), {a, b, c, a, c, d});
+            mesh.indices.insert(mesh.indices.end(), {a, c, b, a, d, c});
         }
     }
 
@@ -262,7 +263,7 @@ GraphicsPipelineDesc makePbrPipelineDesc(PipelineLayoutHandle layout, PipelineCa
     desc.vertexBuffers = {makePbrVertexLayout()};
     desc.colorFormats = {colorFormat == Format::Undefined ? Format::BGRA8_SRGB : colorFormat};
     desc.depthStencilFormat = Format::D32_Float;
-    desc.raster.cullMode = CullMode::Back;
+    desc.raster.cullMode = CullMode::None;
     desc.depthStencil.depthTestEnable = true;
     desc.depthStencil.depthWriteEnable = true;
     desc.depthStencil.depthCompareOp = CompareOp::LessOrEqual;
@@ -282,7 +283,7 @@ GraphicsPipelineDesc makeShadowPipelineDesc(PipelineLayoutHandle layout, Pipelin
     desc.vertexBuffers = {makePbrVertexLayout()};
     desc.colorFormats = {};
     desc.depthStencilFormat = Format::D32_Float;
-    desc.raster.cullMode = CullMode::Back;
+    desc.raster.cullMode = CullMode::None;
     desc.raster.depthBiasEnable = true;
     desc.raster.depthBiasConstantFactor = 1.25F;
     desc.raster.depthBiasSlopeFactor = 1.75F;
@@ -503,11 +504,11 @@ void updateSceneUniforms(ExampleResources& resources, Extent2D extent) {
     const glm::vec3 lightDirection = glm::normalize(glm::vec3(0.35F, -1.0F, 0.25F));
     const glm::vec3 lightPosition = -lightDirection * 7.0F + glm::vec3(0.0F, 1.0F, 0.0F);
 
-    resources.sceneUniforms.view = glm::lookAt(cameraPosition, cameraTarget, glm::vec3(0.0F, 1.0F, 0.0F));
+    resources.sceneUniforms.view = glm::lookAtRH(cameraPosition, cameraTarget, glm::vec3(0.0F, 1.0F, 0.0F));
     resources.sceneUniforms.projection = makeVulkanPerspective(60.0F * PI / 180.0F, aspect, 0.1F, 100.0F);
     resources.sceneUniforms.viewProjection = resources.sceneUniforms.projection * resources.sceneUniforms.view;
-    const glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(0.0F, 0.6F, 0.0F), glm::vec3(0.0F, 1.0F, 0.0F));
-    const glm::mat4 lightProjection = glm::ortho(-7.0F, 7.0F, -7.0F, 7.0F, 0.1F, 20.0F);
+    const glm::mat4 lightView = glm::lookAtRH(lightPosition, glm::vec3(0.0F, 0.6F, 0.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    const glm::mat4 lightProjection = glm::orthoRH_ZO(-7.0F, 7.0F, -7.0F, 7.0F, 0.1F, 20.0F);
     resources.sceneUniforms.lightViewProjection = lightProjection * lightView;
     resources.sceneUniforms.cameraPosition = glm::vec4(cameraPosition, 1.0F);
     resources.sceneUniforms.ambientColorExposure = glm::vec4(0.035F, 0.04F, 0.045F, 1.15F);

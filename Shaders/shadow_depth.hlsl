@@ -1,4 +1,3 @@
-static const uint OBJECT_STRIDE_BYTES = 144;
 static const uint OBJECT_LOCAL_TO_WORLD_OFFSET = 0;
 
 cbuffer SceneUniforms : register(b0)
@@ -18,7 +17,6 @@ struct ShadowVertexInput
     float3 position : POSITION;
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
-    uint objectIndex : INSTANCE0;
 };
 
 struct ShadowVertexOutput
@@ -42,7 +40,7 @@ float4 TransformPointFromColumns(ByteAddressBuffer buffer, uint matrixByteOffset
 
 ShadowVertexOutput ShadowVertexMain(ShadowVertexInput input)
 {
-    const uint objectBase = input.objectIndex * OBJECT_STRIDE_BYTES;
+    const uint objectBase = 0;
     const float4 worldPosition = TransformPointFromColumns(ObjectBuffer, objectBase + OBJECT_LOCAL_TO_WORLD_OFFSET, input.position);
 
     ShadowVertexOutput output;

@@ -86,13 +86,11 @@ struct ExampleResources {
     std::vector<MaterialDesc> materials;
     std::vector<ObjectGpuData> objectData;
     std::vector<MaterialGpuData> materialData;
-    std::vector<u32> instanceObjectIndices;
     SceneUniforms sceneUniforms{};
     LightUniforms lightUniforms{};
 
     BufferHandle vertexBuffer{};
     BufferHandle indexBuffer{};
-    BufferHandle instanceObjectIndexBuffer{};
     BufferHandle sceneUniformBuffer{};
     BufferHandle lightUniformBuffer{};
     BufferHandle objectBuffer{};
@@ -105,7 +103,7 @@ struct ExampleResources {
     BindGroupLayoutHandle sceneLayout{};
     BindGroupLayoutHandle objectLayout{};
     BindGroupHandle sceneBindGroup{};
-    BindGroupHandle objectBindGroup{};
+    std::vector<BindGroupHandle> objectBindGroups;
     PipelineLayoutHandle pipelineLayout{};
     PipelineCacheHandle pipelineCache{};
     PipelineHandle pbrPipeline{};
@@ -195,7 +193,7 @@ GeneratedMesh generatePlaneAndSphere() {
             const u32 b = row1 + slice;
             const u32 c = row1 + slice + 1;
             const u32 d = row0 + slice + 1;
-            mesh.indices.insert(mesh.indices.end(), {a, b, c, a, c, d});
+            mesh.indices.insert(mesh.indices.end(), {a, c, b, a, d, c});
         }
     }
 
@@ -247,18 +245,6 @@ VertexBufferLayoutDesc makePbrVertexLayout() {
     return layout;
 }
 
-VertexBufferLayoutDesc makeObjectIndexLayout() {
-    VertexBufferLayoutDesc layout{};
-    layout.binding = 1;
-    layout.stride = sizeof(u32);
-    layout.inputRate = VertexInputRate::PerInstance;
-    layout.stepRate = 1;
-    layout.attributes = {
-        {"INSTANCE", 0, 3, 1, VertexFormat::UInt32, 0}
-    };
-    return layout;
-}
-
 GraphicsPipelineDesc makePbrPipelineDesc(PipelineLayoutHandle layout, PipelineCacheHandle cache, Format colorFormat) {
     GraphicsPipelineDesc desc{};
     desc.debugName = "ExampleD3D11.PBRPipeline";
@@ -268,7 +254,7 @@ GraphicsPipelineDesc makePbrPipelineDesc(PipelineLayoutHandle layout, PipelineCa
         makeShader(ShaderStage::Vertex, "pbr_lit.hlsl", "PbrVertexMain", "vs_5_0", "PBRD3D11.Vertex"),
         makeShader(ShaderStage::Fragment, "pbr_lit.hlsl", "PbrPixelMain", "ps_5_0", "PBRD3D11.Pixel")
     };
-    desc.vertexBuffers = {makePbrVertexLayout(), makeObjectIndexLayout()};
+    desc.vertexBuffers = {makePbrVertexLayout()};
     desc.colorFormats = {colorFormat == Format::Undefined ? Format::BGRA8_UNorm : colorFormat};
     desc.depthStencilFormat = Format::D32_Float;
     desc.raster.cullMode = CullMode::None;
@@ -288,7 +274,7 @@ GraphicsPipelineDesc makeShadowPipelineDesc(PipelineLayoutHandle layout, Pipelin
         makeShader(ShaderStage::Vertex, "shadow_depth.hlsl", "ShadowVertexMain", "vs_5_0", "ShadowD3D11.Vertex"),
         makeShader(ShaderStage::Fragment, "shadow_depth.hlsl", "ShadowPixelMain", "ps_5_0", "ShadowD3D11.Pixel")
     };
-    desc.vertexBuffers = {makePbrVertexLayout(), makeObjectIndexLayout()};
+    desc.vertexBuffers = {makePbrVertexLayout()};
     desc.colorFormats = {};
     desc.depthStencilFormat = Format::D32_Float;
     desc.raster.cullMode = CullMode::None;
@@ -346,7 +332,6 @@ void destroyFrameTargets(D3D11Renderer& renderer, FrameTargets& targets) {
 ExampleResources createExampleResources(D3D11Renderer& renderer, Format colorFormat) {
     ExampleResources resources{};
     resources.cpuMesh = generatePlaneAndSphere();
-    resources.instanceObjectIndices = {0, 1};
 
     resources.vertexBuffer = createBuffer(
         renderer,
@@ -359,12 +344,6 @@ ExampleResources createExampleResources(D3D11Renderer& renderer, Format colorFor
         "ExampleD3D11.GeometryIndices",
         sizeof(u32) * resources.cpuMesh.indices.size(),
         BufferUsage::Index | BufferUsage::TransferDestination,
-        MemoryUsage::GpuOnly);
-    resources.instanceObjectIndexBuffer = createBuffer(
-        renderer,
-        "ExampleD3D11.InstanceObjectIndices",
-        sizeof(u32) * resources.instanceObjectIndices.size(),
-        BufferUsage::Vertex | BufferUsage::TransferDestination,
         MemoryUsage::GpuOnly);
     resources.sceneUniformBuffer = createBuffer(
         renderer,
@@ -471,22 +450,24 @@ ExampleResources createExampleResources(D3D11Renderer& renderer, Format colorFor
     };
     resources.sceneBindGroup = renderer.createBindGroup(sceneBindGroup);
 
-    BindGroupDesc objectBindGroup{};
-    objectBindGroup.debugName = "ExampleD3D11.ObjectBindGroup";
-    objectBindGroup.layout = resources.objectLayout;
-    objectBindGroup.bindings = {
-        {0, 0, BindingType::StorageBuffer, {resources.objectBuffer, 0, sizeof(ObjectGpuData) * resources.objectData.size()}},
-        {1, 0, BindingType::StorageBuffer, {resources.materialBuffer, 0, sizeof(MaterialGpuData) * resources.materialData.size()}}
-    };
-    resources.objectBindGroup = renderer.createBindGroup(objectBindGroup);
+    resources.objectBindGroups.reserve(resources.objectData.size());
+    for (size_t objectIndex = 0; objectIndex < resources.objectData.size(); ++objectIndex) {
+        BindGroupDesc objectBindGroup{};
+        objectBindGroup.debugName = "ExampleD3D11.ObjectBindGroup." + std::to_string(objectIndex);
+        objectBindGroup.layout = resources.objectLayout;
+        objectBindGroup.bindings = {
+            {0, 0, BindingType::StorageBuffer, {resources.objectBuffer, sizeof(ObjectGpuData) * objectIndex, sizeof(ObjectGpuData)}},
+            {1, 0, BindingType::StorageBuffer, {resources.materialBuffer, 0, sizeof(MaterialGpuData) * resources.materialData.size()}}
+        };
+        resources.objectBindGroups.push_back(renderer.createBindGroup(objectBindGroup));
+    }
 
     resources.pbrPipeline = renderer.createGraphicsPipeline(makePbrPipelineDesc(resources.pipelineLayout, resources.pipelineCache, colorFormat));
     resources.shadowPipeline = renderer.createGraphicsPipeline(makeShadowPipelineDesc(resources.pipelineLayout, resources.pipelineCache));
 
     resources.meshDesc.debugName = "ExampleD3D11.GeneratedPlaneAndSphere";
     resources.meshDesc.vertexStreams = {
-        {resources.vertexBuffer, 0, 0, sizeof(PbrVertex)},
-        {resources.instanceObjectIndexBuffer, 0, 1, sizeof(u32)}
+        {resources.vertexBuffer, 0, 0, sizeof(PbrVertex)}
     };
     resources.meshDesc.indexStream = IndexStream{resources.indexBuffer, IndexType::UInt32, 0, static_cast<u32>(resources.cpuMesh.indices.size())};
     resources.meshDesc.submeshes = {resources.cpuMesh.planeSubmesh, resources.cpuMesh.sphereSubmesh};
@@ -494,7 +475,7 @@ ExampleResources createExampleResources(D3D11Renderer& renderer, Format colorFor
     MaterialDesc planeMaterial{};
     planeMaterial.debugName = "ExampleD3D11.PlaneMaterial";
     planeMaterial.pipeline = resources.pbrPipeline;
-    planeMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    planeMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroups[0]};
     planeMaterial.parameters = {
         {"baseColorFactor", MaterialParameterType::Float4, resources.materialData[0].baseColor},
         {"metallic", MaterialParameterType::Float, {resources.materialData[0].metallicRoughness.x, 0.0F, 0.0F, 0.0F}},
@@ -504,7 +485,7 @@ ExampleResources createExampleResources(D3D11Renderer& renderer, Format colorFor
     MaterialDesc sphereMaterial{};
     sphereMaterial.debugName = "ExampleD3D11.SphereMaterial";
     sphereMaterial.pipeline = resources.pbrPipeline;
-    sphereMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    sphereMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroups[1]};
     sphereMaterial.parameters = {
         {"baseColorFactor", MaterialParameterType::Float4, resources.materialData[1].baseColor},
         {"metallic", MaterialParameterType::Float, {resources.materialData[1].metallicRoughness.x, 0.0F, 0.0F, 0.0F}},
@@ -546,7 +527,6 @@ UploadBatchDesc makeUploadBatch(const ExampleResources& resources) {
     UploadBatchDesc uploads{};
     uploads.buffers.push_back(makeUpload(resources.vertexBuffer, bytesFromVector(resources.cpuMesh.vertices)));
     uploads.buffers.push_back(makeUpload(resources.indexBuffer, bytesFromVector(resources.cpuMesh.indices)));
-    uploads.buffers.push_back(makeUpload(resources.instanceObjectIndexBuffer, bytesFromVector(resources.instanceObjectIndices)));
     uploads.buffers.push_back(makeUpload(resources.sceneUniformBuffer, bytesFromObject(resources.sceneUniforms)));
     uploads.buffers.push_back(makeUpload(resources.lightUniformBuffer, bytesFromObject(resources.lightUniforms)));
     uploads.buffers.push_back(makeUpload(resources.objectBuffer, bytesFromVector(resources.objectData)));
@@ -557,14 +537,14 @@ UploadBatchDesc makeUploadBatch(const ExampleResources& resources) {
 DrawIndexedCommand makeDraw(const ExampleResources& resources, const SubmeshDesc& submesh, PipelineHandle pipeline, u32 objectIndex) {
     DrawIndexedCommand draw{};
     draw.pipeline = pipeline;
-    draw.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    draw.bindGroups = {resources.sceneBindGroup, resources.objectBindGroups[objectIndex]};
     draw.vertexStreams = resources.meshDesc.vertexStreams;
     draw.indexStream = *resources.meshDesc.indexStream;
     draw.indexCount = submesh.indexCount;
     draw.instanceCount = 1;
     draw.firstIndex = submesh.firstIndex;
     draw.vertexOffsetElements = 0;
-    draw.firstInstance = objectIndex;
+    draw.firstInstance = 0;
     return draw;
 }
 
@@ -718,7 +698,9 @@ void destroyExampleResources(D3D11Renderer& renderer, ExampleResources& resource
     renderer.destroy(resources.pipelineCache);
     renderer.destroy(resources.pipelineLayout);
     renderer.destroy(resources.sceneBindGroup);
-    renderer.destroy(resources.objectBindGroup);
+    for (BindGroupHandle bindGroup : resources.objectBindGroups) {
+        renderer.destroy(bindGroup);
+    }
     renderer.destroy(resources.sceneLayout);
     renderer.destroy(resources.objectLayout);
     renderer.destroy(resources.shadowSampler);
@@ -728,7 +710,6 @@ void destroyExampleResources(D3D11Renderer& renderer, ExampleResources& resource
     renderer.destroy(resources.objectBuffer);
     renderer.destroy(resources.lightUniformBuffer);
     renderer.destroy(resources.sceneUniformBuffer);
-    renderer.destroy(resources.instanceObjectIndexBuffer);
     renderer.destroy(resources.indexBuffer);
     renderer.destroy(resources.vertexBuffer);
     resources = {};

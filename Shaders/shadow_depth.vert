@@ -16,8 +16,7 @@ layout(set = 0, binding = 0) uniform SceneUniforms {
 struct ObjectData {
     mat4 localToWorld;
     mat4 normalMatrix;
-    uint materialIndex;
-    vec3 padding0;
+    uvec4 materialIndex;
 };
 
 layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
