@@ -78,6 +78,13 @@ if(WIN32)
     add_library(RenderD3D11 STATIC
         RenderD3D11.hpp
         RenderD3D11.cpp
+        RenderD3D11Core.inl
+        RenderD3D11Destroy.inl
+        RenderD3D11Frame.inl
+        RenderD3D11Pipelines.inl
+        RenderD3D11Private.inl
+        RenderD3D11Resources.inl
+        RenderD3D11SyncSwapchain.inl
         RenderDefinitions.hpp
     )
 

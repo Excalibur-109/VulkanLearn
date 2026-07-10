@@ -1059,6 +1059,18 @@ void Renderer::Render(const std::vector<std::unique_ptr<Entity>>& entities, Came
 
 // Render the scene (raw pointer snapshot overload)
 void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* camera, ImGuiSystem* imguiSystem) {
+  // 学习导读：这里就是 simple_engine 当前的“手写 RenderGraph”。
+  // 它没有单独的 RenderGraph 类，也没有先声明一张 pass/resource 图再统一编译；
+  // 而是把一帧需要做的事情按固定顺序直接写在 Render() 里：
+  // 1) 等待当前 frame slot 的 fence，保证 CPU 可以安全复用本帧 command buffer/descriptor。
+  // 2) 在开始录制前处理上传、descriptor 更新、AS 更新等“不能边录命令边改”的资源工作。
+  // 3) acquire swapchain image，得到本帧最终要写入并 present 的后备缓冲 imageIndex。
+  // 4) 录制多个逻辑 pass：可选 RayQuery、反射、Forward+ depth prepass/compute、opaque、composite、transparent、ImGui。
+  // 5) 在每个 pass 之间手写 pipelineBarrier2，显式描述 image layout 和读写依赖。
+  // 6) submit command buffer，signal renderFinished semaphore，再交给 presentQueue 显示。
+  //
+  // 如果以后要抽成真正的 RenderGraph，下面这些硬编码的 pass 顺序、资源状态转换和 descriptor 准备点，
+  // 就会变成 graph builder 的输入；builder 再自动拓扑排序、插入 barrier、分配 transient resource。
   // Update watchdog timestamp to prove frame is progressing
   lastFrameUpdateTime.store(std::chrono::steady_clock::now(), std::memory_order_relaxed);
   watchdogProgressLabel.store("Render: frame begin", std::memory_order_relaxed);
@@ -1111,6 +1123,13 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
   watchdogProgressLabel.store("Render: reset inFlightFence", std::memory_order_relaxed);
   device.resetFences(*inFlightFences[currentFrame]);
 
+  // RenderGraph 思路里的“编译前资源准备”。
+  // 这些操作会创建/销毁 buffer、image、descriptor set 或 acceleration structure。
+  // 它们不能夹在 vkBeginCommandBuffer/vkEndCommandBuffer 之间乱做，否则很容易出现：
+  // - descriptor 正被 command buffer 使用时被更新；
+  // - 后台线程和渲染线程同时提交 Vulkan queue；
+  // - 当前 frame slot 还没等 fence 就复用 GPU 资源。
+  // 所以这里先等 fence，再统一处理上传和延迟释放，之后才进入真正的 pass 录制。
   // Execute any pending GPU uploads (enqueued by worker/loading threads) on the render thread
   // at this safe point to ensure all Vulkan submits happen on a single thread.
   // This prevents validation/GPU-AV PostSubmit crashes due to cross-thread queue usage.
@@ -1658,6 +1677,10 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
   // refreshPBRForwardPlusBindingsForFrame(currentFrame);
 
   // Acquire next swapchain image
+  // RenderGraph 的输出目标在这里才确定：swapchain 有多张 image，当前帧具体写哪张由 acquireNextImage 返回。
+  // currentFrame 是“CPU/GPU 帧槽”，用于 command buffer、UBO、in-flight fence；
+  // imageIndex 是“窗口系统给出的后备缓冲索引”，用于 swapchain image view 和 present semaphore。
+  // 这两个索引不能混用，否则常见结果是等待了错误 semaphore，或把内容渲染到另一张后备缓冲。
   // acquireNextImage returns imageIndex (which swapchain image is available).
   // Use currentFrame to select an imageAvailableSemaphore for acquire.
   // Use imageIndex to select renderFinishedSemaphore for present (ties semaphore to the specific image).
@@ -1791,6 +1814,9 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
     }
   }
 
+  // 从这里开始进入“RenderGraph 执行阶段”：前面只是准备资源和选择本帧输出目标；
+  // 后面每个 beginRendering/endRendering 块都可以理解成一个 render pass node。
+  // 由于这里没有真正的 graph compiler，每个 node 之间需要手工维护 layout、barrier 和 attachment load/store。
   commandBuffers[currentFrame].reset();
   // Begin command buffer recording for this frame
   commandBuffers[currentFrame].begin(vk::CommandBufferBeginInfo());
@@ -2270,6 +2296,13 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
     }
 
 
+    // 逻辑 pass：Forward+ depth prepass。
+    // 目标是先只写深度，不写颜色。后面的 Forward+ compute 可以利用深度把屏幕切成 tile/cluster，
+    // 计算每个 tile 可能影响的灯光列表；opaque pass 也可以用已经写好的深度减少 overdraw。
+    // 在真正的 RenderGraph 中，这个 pass 会声明：
+    // - write: depthImage(DepthAttachmentWrite)
+    // - output: didOpaqueDepthPrepass 标志影响后续 depth loadOp 和 pipeline variant
+    // 这里用 didOpaqueDepthPrepass 这个 bool 手工把依赖传给后面的 opaque pass。
     // Track whether we executed a depth pre-pass this frame (used to choose depth load op and pipeline state)
     bool didOpaqueDepthPrepass = false;
 
@@ -2365,6 +2398,14 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
       dispatchForwardPlus(commandBuffers[currentFrame], tilesX, tilesY, forwardPlusSlicesZ);
     }
 
+    // 逻辑 pass：Opaque color pass。
+    // 不直接画到 swapchain，而是先画到 opaqueSceneColorImages[currentFrame] 这张 off-screen color。
+    // 这样做的好处是：后面 composite pass 可以统一做曝光、gamma、调试显示、透明合成前的基础颜色处理。
+    // 对 RenderGraph 来说，这个 pass 的核心声明是：
+    // - read: depthImage(DepthAttachmentRead 或 DepthAttachmentWrite，取决于是否执行 prepass)
+    // - write: opaqueSceneColorImages[currentFrame](ColorAttachmentWrite)
+    // - read: entity/material/texture descriptor sets
+    // 当前代码手写 oscOldLayout/oscToColor2，就是在补 graph compiler 本该自动插入的资源状态转换。
     // PASS 1: RENDER OPAQUE OBJECTS TO OFF-SCREEN TEXTURE
     // Transition off-screen color to attachment write (Sync2). On first use after creation or after switching
     // from a mode that never produced this image, the layout may still be UNDEFINED.
@@ -2472,6 +2513,14 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
       }
     }
     commandBuffers[currentFrame].endRendering();
+    // 逻辑 pass：Composite。
+    // 这个 pass 把 opaque off-screen color 当作 sampled texture 读取，再用全屏三角形写入 swapchain image。
+    // 所以前面必须把 opaqueSceneColor 从 ColorAttachmentOptimal 转到 ShaderReadOnlyOptimal；
+    // 同时把 swapchain image 从 acquire 后的未知/旧状态转到 ColorAttachmentOptimal。
+    // 在抽象 RenderGraph 中，这就是一条明确的数据边：
+    //   OpaqueColor.write -> Composite.sample
+    // 以及最终输出边：
+    //   Composite.write -> SwapchainImage
     // PASS 1b: PRESENT – composite path
     {
       // Transition off-screen to SHADER_READ for sampling (Sync2)
@@ -2560,6 +2609,10 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
       // Restore depth attachment pointer for subsequent passes
       renderingInfo.pDepthAttachment = savedDepthPtr;
     }
+    // 逻辑 pass：Transparent。
+    // 透明物体必须在 opaque/composite 之后画，因为它需要和已经存在的颜色做 blending；
+    // 这里直接 load swapchain 上 composite 写好的颜色，再按排序后的 transparentJobs 叠加。
+    // 这也是为什么 transparentJobs 前面会按距离排序：透明混合不是可交换操作，绘制顺序会影响结果。
     // PASS 2: RENDER TRANSPARENT OBJECTS TO THE SWAPCHAIN
     {
       // Ensure depth attachment is bound again for the transparent pass
@@ -2678,6 +2731,9 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
     };
     commandBuffers[currentFrame].beginRendering(imguiRenderingInfo);
 
+    // 逻辑 pass：ImGui overlay。
+    // UI 通常放在最后，因为它应该覆盖在 3D 场景之上；它读写的主要目标就是当前 swapchain image。
+    // 这里要求 swapchain 仍处于 ColorAttachmentOptimal，UI 绘制结束后再统一转到 PresentSrcKHR。
     imguiSystem->Render(commandBuffers[currentFrame], currentFrame);
 
     commandBuffers[currentFrame].endRendering();
@@ -2704,6 +2760,13 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
   commandBuffers[currentFrame].end();
   isRecordingCmd.store(false, std::memory_order_relaxed);
 
+  // RenderGraph 的 GPU 同步出口。
+  // 前面所有 pass 都已经被录进 commandBuffers[currentFrame]，现在要把“外部依赖”和“输出完成信号”
+  // 接到 queue submit 上：
+  // - 等 imageAvailableSemaphores[acquireSemaphoreIndex]：窗口系统允许我们写这张 swapchain image。
+  // - 等 uploadsTimeline：后台/前置上传已经把本帧采样或绘制要用的资源准备好。
+  // - signal renderFinishedSemaphores[imageIndex]：告诉 presentQueue，这张 image 已经画完可以显示。
+  // 这相当于把整张手写 RenderGraph 封装成一个 graphics queue submit。
   // Submit and present (Synchronization 2)
   uint64_t uploadsValueToWait = uploadTimelineLastSubmitted.load(std::memory_order_relaxed);
 
@@ -2752,6 +2815,8 @@ void Renderer::Render(const std::vector<Entity *>& entities, CameraComponent* ca
     graphicsQueue.submit2(submit2, *inFlightFences[currentFrame]);
   }
 
+  // present 是这一帧图的最后一步：它不再录进 command buffer，而是把 swapchain image 交还给窗口系统。
+  // 因为 present 等待 renderFinishedSemaphores[imageIndex]，所以 GPU 没画完之前窗口系统不会读取这张图。
   vk::PresentInfoKHR presentInfo{.waitSemaphoreCount = 1, .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex], .swapchainCount = 1, .pSwapchains = &*swapChain, .pImageIndices = &imageIndex};
   vk::Result presentResult = vk::Result::eSuccess;
   try {
