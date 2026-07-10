@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RenderDefinitions.hpp"
+#include "../RenderDefinitions.hpp"
 
 #include <vulkan/vulkan.h>
 

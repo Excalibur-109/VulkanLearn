@@ -41,21 +41,22 @@ add_custom_target(PbrShadowExampleShaders DEPENDS ${PBR_SHADOW_SHADER_OUTPUTS})
 add_executable(PbrShadowExample
     PbrShadowExample.cpp
     RenderDefinitions.hpp
-    RenderVulkan.hpp
-    RenderVulkan.cpp
-    RenderVulkanCore.inl
-    RenderVulkanDestroy.inl
-    RenderVulkanFrame.inl
-    RenderVulkanPipelines.inl
-    RenderVulkanPrivate.inl
-    RenderVulkanResources.inl
-    RenderVulkanSyncSwapchain.inl
+    RenderVulkan/RenderVulkan.hpp
+    RenderVulkan/RenderVulkan.cpp
+    RenderVulkan/RenderVulkanCore.inl
+    RenderVulkan/RenderVulkanDestroy.inl
+    RenderVulkan/RenderVulkanFrame.inl
+    RenderVulkan/RenderVulkanPipelines.inl
+    RenderVulkan/RenderVulkanPrivate.inl
+    RenderVulkan/RenderVulkanResources.inl
+    RenderVulkan/RenderVulkanSyncSwapchain.inl
 )
 
 add_dependencies(PbrShadowExample PbrShadowExampleShaders)
 
 target_include_directories(PbrShadowExample PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/RenderVulkan
 )
 
 target_compile_features(PbrShadowExample PRIVATE cxx_std_20)
@@ -76,20 +77,21 @@ target_link_libraries(PbrShadowExample PRIVATE
 
 if(WIN32)
     add_library(RenderD3D11 STATIC
-        RenderD3D11.hpp
-        RenderD3D11.cpp
-        RenderD3D11Core.inl
-        RenderD3D11Destroy.inl
-        RenderD3D11Frame.inl
-        RenderD3D11Pipelines.inl
-        RenderD3D11Private.inl
-        RenderD3D11Resources.inl
-        RenderD3D11SyncSwapchain.inl
+        RenderD3D11/RenderD3D11.hpp
+        RenderD3D11/RenderD3D11.cpp
+        RenderD3D11/RenderD3D11Core.inl
+        RenderD3D11/RenderD3D11Destroy.inl
+        RenderD3D11/RenderD3D11Frame.inl
+        RenderD3D11/RenderD3D11Pipelines.inl
+        RenderD3D11/RenderD3D11Private.inl
+        RenderD3D11/RenderD3D11Resources.inl
+        RenderD3D11/RenderD3D11SyncSwapchain.inl
         RenderDefinitions.hpp
     )
 
     target_include_directories(RenderD3D11 PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/RenderD3D11
     )
 
     target_compile_features(RenderD3D11 PUBLIC cxx_std_20)
@@ -107,20 +109,21 @@ if(WIN32)
     )
 
     add_library(RenderD3D12 STATIC
-        RenderD3D12.hpp
-        RenderD3D12.cpp
-        RenderD3D12Core.inl
-        RenderD3D12Destroy.inl
-        RenderD3D12Frame.inl
-        RenderD3D12Pipelines.inl
-        RenderD3D12Private.inl
-        RenderD3D12Resources.inl
-        RenderD3D12SyncSwapchain.inl
+        RenderD3D12/RenderD3D12.hpp
+        RenderD3D12/RenderD3D12.cpp
+        RenderD3D12/RenderD3D12Core.inl
+        RenderD3D12/RenderD3D12Destroy.inl
+        RenderD3D12/RenderD3D12Frame.inl
+        RenderD3D12/RenderD3D12Pipelines.inl
+        RenderD3D12/RenderD3D12Private.inl
+        RenderD3D12/RenderD3D12Resources.inl
+        RenderD3D12/RenderD3D12SyncSwapchain.inl
         RenderDefinitions.hpp
     )
 
     target_include_directories(RenderD3D12 PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/RenderD3D12
     )
 
     target_compile_features(RenderD3D12 PUBLIC cxx_std_20)

@@ -1,58 +1,55 @@
 #pragma once
 
-#include "RenderDefinitions.hpp"
+#include "../RenderDefinitions.hpp"
 
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <Windows.h>
-#include <d3d12.h>
-#include <dxgi1_6.h>
+#include <d3d11.h>
+#include <dxgi.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 
-struct D3D12SurfaceDesc {
+struct D3D11SurfaceDesc {
     HWND hwnd = nullptr;
 };
 
-struct D3D12RendererDesc {
+struct D3D11RendererDesc {
     RenderBackendDesc backend{};
-    D3D12SurfaceDesc surface{};
+    D3D11SurfaceDesc surface{};
+    D3D_DRIVER_TYPE driverType = D3D_DRIVER_TYPE_UNKNOWN;
     D3D_FEATURE_LEVEL minimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
     bool allowWarpFallback = true;
 };
 
-struct D3D12NativeHandles {
-    IDXGIFactory6* factory = nullptr;
+struct D3D11NativeHandles {
+    IDXGIFactory1* factory = nullptr;
     IDXGIAdapter1* adapter = nullptr;
-    ID3D12Device* device = nullptr;
-    ID3D12CommandQueue* graphicsQueue = nullptr;
-    ID3D12CommandAllocator* commandAllocator = nullptr;
-    ID3D12GraphicsCommandList* commandList = nullptr;
-    ID3D12Fence* fence = nullptr;
-    UINT64 fenceValue = 0;
+    ID3D11Device* device = nullptr;
+    ID3D11DeviceContext* immediateContext = nullptr;
     D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
     HWND hwnd = nullptr;
 };
 
-class D3D12Renderer {
+class D3D11Renderer {
 public:
-    D3D12Renderer();
-    ~D3D12Renderer();
+    D3D11Renderer();
+    ~D3D11Renderer();
 
-    D3D12Renderer(const D3D12Renderer&) = delete;
-    D3D12Renderer& operator=(const D3D12Renderer&) = delete;
-    D3D12Renderer(D3D12Renderer&&) noexcept;
-    D3D12Renderer& operator=(D3D12Renderer&&) noexcept;
+    D3D11Renderer(const D3D11Renderer&) = delete;
+    D3D11Renderer& operator=(const D3D11Renderer&) = delete;
+    D3D11Renderer(D3D11Renderer&&) noexcept;
+    D3D11Renderer& operator=(D3D11Renderer&&) noexcept;
 
-    [[nodiscard]] bool initialize(const D3D12RendererDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool initialize(const D3D11RendererDesc& desc, std::string* errorMessage = nullptr);
     void shutdown() noexcept;
 
     [[nodiscard]] bool isInitialized() const noexcept;
     [[nodiscard]] const RenderCapabilities& capabilities() const noexcept;
-    [[nodiscard]] const D3D12NativeHandles& nativeHandles() const noexcept;
+    [[nodiscard]] const D3D11NativeHandles& nativeHandles() const noexcept;
 
     [[nodiscard]] BufferHandle createBuffer(const BufferDesc& desc);
     [[nodiscard]] TextureHandle createTexture(const TextureDesc& desc);
