@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GLSL Shader 写法指南</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5c667a;
+      --line: #d9deea;
+      --accent: #1d6fbd;
+      --code-bg: #101722;
+      --code-text: #e7edf7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.65 "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      padding: 32px 40px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    header h1 { margin: 0 0 8px; font-size: 30px; }
+    header p { margin: 0; max-width: 980px; color: var(--muted); }
+    main {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 24px;
+      padding: 24px 40px 48px;
+    }
+    nav {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    nav a {
+      display: block;
+      padding: 6px 0;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    section {
+      margin-bottom: 18px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    h3 { margin: 18px 0 8px; font-size: 17px; }
+    p, ul, ol { margin-top: 0; }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #edf1f8;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.93em;
+    }
+    pre {
+      overflow: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      line-height: 1.5;
+    }
+    pre code { padding: 0; background: transparent; color: inherit; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 4px;
+    }
+    th, td {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef3fb; }
+    .file-list code { white-space: nowrap; }
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; padding: 18px; }
+      nav { position: static; }
+      header { padding: 24px 18px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GLSL Shader 写法指南</h1>
+    <p>这份指南面向 Vulkan 风格 GLSL 450，重点讲 shader 文件结构、关键字、资源绑定、顶点/片元/计算 shader 的组织方式，以及如何把公共代码拆成 include 文件。</p>
+  </header>
+
+  <main>
+    <nav>
+      <strong>目录</strong>
+      <a href="#layout">推荐目录结构</a>
+      <a href="#keywords">常用关键字</a>
+      <a href="#stages">阶段结构</a>
+      <a href="#resources">资源绑定</a>
+      <a href="#style">代码整理规则</a>
+      <a href="#examples">示例文件</a>
+      <a href="#checklist">检查清单</a>
+    </nav>
+
+    <div>
+      <section id="layout">
+        <h2>推荐目录结构</h2>
+        <p>GLSL 适合按“公共类型、公共函数、具体 shader 阶段”拆分。你的引擎后续可以让 shader 编译器在预处理阶段处理 <code>#include</code>，把公共代码拼进最终源码。</p>
+        <pre><code>GLSL_Guide/
+  index.html
+  shaders/
+    common.glsl              // 数学常量、saturate、颜色空间、tone mapping
+    scene_layout.glsl        // Scene/Object/Material 的统一内存布局
+    pbr_lighting.glsl        // Cook-Torrance PBR 函数
+    pbr_lit.vert             // 主渲染顶点 shader
+    pbr_lit.frag             // 主渲染片元 shader
+    shadow_depth.vert        // 阴影深度 pass 顶点 shader
+    shadow_depth.frag        // 阴影深度 pass 片元 shader
+    fullscreen_triangle.vert // 后处理全屏三角形
+    tone_mapping.frag        // HDR tone mapping
+    compute_particles.comp   // compute shader 示例</code></pre>
+      </section>
+
+      <section id="keywords">
+        <h2>常用关键字</h2>
+        <table>
+          <thead><tr><th>关键字</th><th>用途</th><th>示例</th></tr></thead>
+          <tbody>
+            <tr><td><code>#version 450</code></td><td>指定 GLSL 版本。Vulkan 常用 450 起步。</td><td><code>#version 450</code></td></tr>
+            <tr><td><code>layout(location = n)</code></td><td>声明顶点输入、阶段输出和片元输出位置。</td><td><code>layout(location = 0) in vec3 inPosition;</code></td></tr>
+            <tr><td><code>layout(set = x, binding = y)</code></td><td>声明 Vulkan descriptor set 和 binding。</td><td><code>layout(set = 0, binding = 0) uniform SceneUniforms</code></td></tr>
+            <tr><td><code>uniform</code></td><td>只读常量数据，通常对应 uniform buffer 或 sampler。</td><td><code>uniform sampler2D baseColorMap;</code></td></tr>
+            <tr><td><code>buffer</code></td><td>storage buffer，可保存数组、实例数据、材质数据。</td><td><code>readonly buffer ObjectBuffer { ObjectData objects[]; };</code></td></tr>
+            <tr><td><code>readonly/writeonly</code></td><td>约束 storage buffer/image 的访问方向，便于编译器优化和验证。</td><td><code>readonly buffer</code></td></tr>
+            <tr><td><code>flat</code></td><td>禁用插值，适合材质索引、对象 ID。</td><td><code>flat out uint outMaterialIndex;</code></td></tr>
+            <tr><td><code>gl_Position</code></td><td>顶点 shader 必须写出的裁剪空间位置。</td><td><code>gl_Position = scene.viewProjection * worldPosition;</code></td></tr>
+            <tr><td><code>gl_InstanceIndex</code></td><td>实例化绘制时当前 instance 下标。</td><td><code>objectData.objects[gl_InstanceIndex]</code></td></tr>
+            <tr><td><code>gl_GlobalInvocationID</code></td><td>compute shader 当前全局线程 id。</td><td><code>uvec3 id = gl_GlobalInvocationID;</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="stages">
+        <h2>阶段结构</h2>
+        <h3>顶点 shader</h3>
+        <p>顶点 shader 做三件事：读取 vertex attribute，读取对象变换，把结果输出给后续阶段。不要在顶点 shader 中写复杂光照，除非目标是低成本或特殊风格。</p>
+        <pre><code>layout(location = 0) in vec3 inPosition;
+layout(location = 0) out vec3 outWorldPosition;
+
+void main() {
+    vec4 worldPosition = object.localToWorld * vec4(inPosition, 1.0);
+    outWorldPosition = worldPosition.xyz;
+    gl_Position = scene.viewProjection * worldPosition;
+}</code></pre>
+
+        <h3>片元 shader</h3>
+        <p>片元 shader 负责材质读取、光照、阴影、透明度和最终颜色输出。PBR 代码建议放在公共 include 中，主函数只保留数据组装和结果输出。</p>
+
+        <h3>计算 shader</h3>
+        <p>compute shader 使用 <code>layout(local_size_x = ...)</code> 声明线程组大小。CPU dispatch 的 group 数量乘以 local size，得到 GPU 实际线程数量。</p>
+      </section>
+
+      <section id="resources">
+        <h2>资源绑定</h2>
+        <p>建议把 set 固定成清晰的层级：<code>set = 0</code> 放每帧/每视图数据，<code>set = 1</code> 放对象和材质数组，<code>set = 2</code> 放贴图和采样器。</p>
+        <table>
+          <thead><tr><th>Set</th><th>建议内容</th><th>原因</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>SceneUniforms、LightUniforms、shadow map</td><td>每帧或每个 camera/pass 更新一次。</td></tr>
+            <tr><td>1</td><td>ObjectBuffer、MaterialBuffer</td><td>绘制大量对象时使用 instance id 或 material id 索引。</td></tr>
+            <tr><td>2</td><td>纹理数组、sampler、IBL 贴图</td><td>材质贴图通常多、变化频率低，适合独立管理。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="style">
+        <h2>代码整理规则</h2>
+        <ul>
+          <li>统一命名：输入用 <code>inPosition</code>，输出用 <code>outWorldPosition</code>，uniform 实例用 <code>sceneData</code>。</li>
+          <li>公共函数按职责拆分：数学和颜色放 <code>common.glsl</code>，PBR 放 <code>pbr_lighting.glsl</code>，数据布局放 <code>scene_layout.glsl</code>。</li>
+          <li>所有绑定点写在文件顶部，避免资源藏在函数中间。</li>
+          <li>矩阵约定要固定：示例按列主序矩阵和 <code>projection * view * model * position</code> 的顺序写。</li>
+          <li>材质和对象结构要与 C++ 侧字节布局严格匹配，必要时用 <code>vec4</code> 对齐。</li>
+          <li>不要把 gamma 校正、tone mapping 混进 PBR 光照函数，后处理阶段单独处理更清楚。</li>
+        </ul>
+      </section>
+
+      <section id="examples">
+        <h2>示例文件</h2>
+        <p class="file-list">完整示例位于 <code>GLSL_Guide/shaders</code>。主渲染入口是 <code>pbr_lit.vert</code> 和 <code>pbr_lit.frag</code>；阴影 pass 是 <code>shadow_depth.vert</code> 和 <code>shadow_depth.frag</code>；后处理是 <code>fullscreen_triangle.vert</code> + <code>tone_mapping.frag</code>；compute 示例是 <code>compute_particles.comp</code>。</p>
+      </section>
+
+      <section id="checklist">
+        <h2>检查清单</h2>
+        <ol>
+          <li>每个 shader 是否声明了正确的 <code>#version</code>。</li>
+          <li>顶点输入 location 是否和 C++ 的 vertex layout 完全一致。</li>
+          <li>set/binding 是否和 RenderDefinitions 中的 BindGroupLayout 对齐。</li>
+          <li>uniform/storage buffer 结构是否满足 std140/std430 对齐。</li>
+          <li>深度纹理采样是否使用 <code>sampler2DShadow</code> 或手动比较，两者不要混用。</li>
+          <li>颜色贴图是否在线性空间参与光照，只在最终输出前做 gamma/tone mapping。</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
