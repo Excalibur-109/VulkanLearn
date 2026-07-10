@@ -120,7 +120,7 @@
       <section id="layout">
         <h2>推荐目录结构</h2>
         <p>GLSL 适合按“公共类型、公共函数、具体 shader 阶段”拆分。你的引擎后续可以让 shader 编译器在预处理阶段处理 <code>#include</code>，把公共代码拼进最终源码。</p>
-        <pre><code>GLSL_Guide/
+        <pre><code>ShaderGuide/GLSL_Guide/
   index.html
   shaders/
     common.glsl              // 数学常量、saturate、颜色空间、tone mapping
@@ -235,7 +235,7 @@ void main() {
 
       <section id="examples">
         <h2>示例文件</h2>
-        <p class="file-list">完整示例位于 <code>GLSL_Guide/shaders</code>。主渲染入口是 <code>pbr_lit.vert</code> 和 <code>pbr_lit.frag</code>；阴影 pass 是 <code>shadow_depth.vert</code> 和 <code>shadow_depth.frag</code>；后处理是 <code>fullscreen_triangle.vert</code> + <code>tone_mapping.frag</code>；compute 示例是 <code>compute_particles.comp</code>；语义对照示例是 <code>semantic_equivalents.vert</code>、<code>semantic_equivalents.frag</code>、<code>semantic_equivalents.comp</code>。</p>
+        <p class="file-list">完整示例位于 <code>ShaderGuide/GLSL_Guide/shaders</code>。主渲染入口是 <code>pbr_lit.vert</code> 和 <code>pbr_lit.frag</code>；阴影 pass 是 <code>shadow_depth.vert</code> 和 <code>shadow_depth.frag</code>；后处理是 <code>fullscreen_triangle.vert</code> + <code>tone_mapping.frag</code>；compute 示例是 <code>compute_particles.comp</code>；语义对照示例是 <code>semantic_equivalents.vert</code>、<code>semantic_equivalents.frag</code>、<code>semantic_equivalents.comp</code>。</p>
       </section>
 
       <section id="checklist">

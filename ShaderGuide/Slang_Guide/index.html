@@ -145,7 +145,7 @@ slangc PbrLit.slang -entry VSMain -target spirv -profile vs_6_0 -o PbrLit.vert.s
       <section id="layout">
         <h2>推荐目录结构</h2>
         <p>Slang 可以像 HLSL 一样使用 <code>#include</code> 拆文件。你后续做引擎时，可以让 C++ shader compiler 系统统一处理 include、entry point、target、reflection。</p>
-        <pre><code>Slang_Guide/
+        <pre><code>ShaderGuide/Slang_Guide/
   index.html
   shaders/
     Common.slang              // 数学、颜色空间、tone mapping
@@ -223,7 +223,7 @@ slangc shaders/PbrLit.slang -entry PSMain -target dxbc -profile ps_5_0 -o PbrLit
 
       <section id="examples">
         <h2>示例文件</h2>
-        <p class="file-list">完整示例位于 <code>Slang_Guide/shaders</code>。主渲染是 <code>PbrLit.slang</code>；阴影 pass 是 <code>ShadowDepth.slang</code>；后处理是 <code>FullscreenTriangle.slang</code> + <code>ToneMapping.slang</code>；compute 示例是 <code>ComputeParticles.slang</code>；语义对照是 <code>SemanticExamples.slang</code>；泛型示例是 <code>GenericUtilities.slang</code>。</p>
+        <p class="file-list">完整示例位于 <code>ShaderGuide/Slang_Guide/shaders</code>。主渲染是 <code>PbrLit.slang</code>；阴影 pass 是 <code>ShadowDepth.slang</code>；后处理是 <code>FullscreenTriangle.slang</code> + <code>ToneMapping.slang</code>；compute 示例是 <code>ComputeParticles.slang</code>；语义对照是 <code>SemanticExamples.slang</code>；泛型示例是 <code>GenericUtilities.slang</code>。</p>
       </section>
 
       <section id="checklist">
