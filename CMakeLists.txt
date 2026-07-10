@@ -43,6 +43,13 @@ add_executable(PbrShadowExample
     RenderDefinitions.hpp
     RenderVulkan.hpp
     RenderVulkan.cpp
+    RenderVulkanCore.inl
+    RenderVulkanDestroy.inl
+    RenderVulkanFrame.inl
+    RenderVulkanPipelines.inl
+    RenderVulkanPrivate.inl
+    RenderVulkanResources.inl
+    RenderVulkanSyncSwapchain.inl
 )
 
 add_dependencies(PbrShadowExample PbrShadowExampleShaders)
