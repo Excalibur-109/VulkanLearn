@@ -945,24 +945,24 @@ static VulkanDeviceSupport queryVulkanDeviceSupport(VkPhysicalDevice device) {
 }
 
 static bool supportsRequiredRenderFeatures(const VulkanDeviceSupport& support, const VulkanQueueFamilies& queues, RenderFeature required) {
-    if (hasAny(required, RenderFeature::Compute) && queues.compute == INVALID_INDEX) return false;
-    if (hasAny(required, RenderFeature::SamplerAnisotropy) && support.features.samplerAnisotropy != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::GeometryShader) && support.features.geometryShader != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::Tessellation) && support.features.tessellationShader != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::TimestampQuery) && support.properties.limits.timestampComputeAndGraphics != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::OcclusionQuery) && support.features.occlusionQueryPrecise != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::PipelineStatisticsQuery) && support.features.pipelineStatisticsQuery != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::DrawIndirectCount) && support.features12.drawIndirectCount != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::DynamicRendering) && support.features13.dynamicRendering != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::TextureCompressionBC) && support.features.textureCompressionBC != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::TextureCompressionETC2) && support.features.textureCompressionETC2 != VK_TRUE) return false;
-    if (hasAny(required, RenderFeature::TextureCompressionASTC) && support.features.textureCompressionASTC_LDR != VK_TRUE) return false;
+    if (hasAny(required, RenderFeature::Compute)                 && queues.compute == INVALID_INDEX)                                        return false;
+    if (hasAny(required, RenderFeature::SamplerAnisotropy)       && support.features.samplerAnisotropy != VK_TRUE)                          return false;
+    if (hasAny(required, RenderFeature::GeometryShader)          && support.features.geometryShader != VK_TRUE)                             return false;
+    if (hasAny(required, RenderFeature::Tessellation)            && support.features.tessellationShader != VK_TRUE)                         return false;
+    if (hasAny(required, RenderFeature::TimestampQuery)          && support.properties.limits.timestampComputeAndGraphics != VK_TRUE)       return false;
+    if (hasAny(required, RenderFeature::OcclusionQuery)          && support.features.occlusionQueryPrecise != VK_TRUE)                      return false;
+    if (hasAny(required, RenderFeature::PipelineStatisticsQuery) && support.features.pipelineStatisticsQuery != VK_TRUE)                    return false;
+    if (hasAny(required, RenderFeature::DrawIndirectCount)       && support.features12.drawIndirectCount != VK_TRUE)                        return false;
+    if (hasAny(required, RenderFeature::DynamicRendering)        && support.features13.dynamicRendering != VK_TRUE)                         return false;
+    if (hasAny(required, RenderFeature::TextureCompressionBC)    && support.features.textureCompressionBC != VK_TRUE)                       return false;
+    if (hasAny(required, RenderFeature::TextureCompressionETC2)  && support.features.textureCompressionETC2 != VK_TRUE)                     return false;
+    if (hasAny(required, RenderFeature::TextureCompressionASTC)  && support.features.textureCompressionASTC_LDR != VK_TRUE)                 return false;
 
     // 这些功能需要额外扩展、feature chain 或资源模型；当前后端尚未实现，不能声明为可用。
     const RenderFeature unsupportedByThisBackend =
-        RenderFeature::MeshShader |
-        RenderFeature::RayTracing |
-        RenderFeature::Bindless |
+        RenderFeature::MeshShader                |
+        RenderFeature::RayTracing                |
+        RenderFeature::Bindless                  |
         RenderFeature::ConservativeRasterization |
         RenderFeature::Multiview;
     return !hasAny(required, unsupportedByThisBackend);

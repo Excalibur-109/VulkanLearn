@@ -843,26 +843,26 @@ static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory1* factory, PowerPreferen
 }
 
 static bool supportsRequiredFeatures(const RenderCapabilities& caps, RenderFeature required) {
-    if (hasAny(required, RenderFeature::Compute) && !caps.supportsCompute) return false;
-    if (hasAny(required, RenderFeature::GeometryShader) && !caps.supportsGeometryShader) return false;
-    if (hasAny(required, RenderFeature::Tessellation) && !caps.supportsTessellation) return false;
-    if (hasAny(required, RenderFeature::SamplerAnisotropy) && !caps.supportsSamplerAnisotropy) return false;
-    if (hasAny(required, RenderFeature::SamplerCompare) && !caps.supportsSamplerCompare) return false;
-    if (hasAny(required, RenderFeature::TimestampQuery) && !caps.supportsTimestampQuery) return false;
-    if (hasAny(required, RenderFeature::OcclusionQuery) && !caps.supportsOcclusionQuery) return false;
+    if (hasAny(required, RenderFeature::Compute)                 && !caps.supportsCompute)                 return false;
+    if (hasAny(required, RenderFeature::GeometryShader)          && !caps.supportsGeometryShader)          return false;
+    if (hasAny(required, RenderFeature::Tessellation)            && !caps.supportsTessellation)            return false;
+    if (hasAny(required, RenderFeature::SamplerAnisotropy)       && !caps.supportsSamplerAnisotropy)       return false;
+    if (hasAny(required, RenderFeature::SamplerCompare)          && !caps.supportsSamplerCompare)          return false;
+    if (hasAny(required, RenderFeature::TimestampQuery)          && !caps.supportsTimestampQuery)          return false;
+    if (hasAny(required, RenderFeature::OcclusionQuery)          && !caps.supportsOcclusionQuery)          return false;
     if (hasAny(required, RenderFeature::PipelineStatisticsQuery) && !caps.supportsPipelineStatisticsQuery) return false;
-    if (hasAny(required, RenderFeature::IndirectDraw) && !caps.supportsIndirectDraw) return false;
-    if (hasAny(required, RenderFeature::TextureCompressionBC) && !caps.supportsTextureCompressionBC) return false;
+    if (hasAny(required, RenderFeature::IndirectDraw)            && !caps.supportsIndirectDraw)            return false;
+    if (hasAny(required, RenderFeature::TextureCompressionBC)    && !caps.supportsTextureCompressionBC)    return false;
 
     const RenderFeature unsupported =
-        RenderFeature::MeshShader |
-        RenderFeature::RayTracing |
-        RenderFeature::Bindless |
-        RenderFeature::DrawIndirectCount |
-        RenderFeature::DynamicRendering |
+        RenderFeature::MeshShader                |
+        RenderFeature::RayTracing                |
+        RenderFeature::Bindless                  |
+        RenderFeature::DrawIndirectCount         |
+        RenderFeature::DynamicRendering          |
         RenderFeature::ConservativeRasterization |
-        RenderFeature::TextureCompressionETC2 |
-        RenderFeature::TextureCompressionASTC |
+        RenderFeature::TextureCompressionETC2    |
+        RenderFeature::TextureCompressionASTC    |
         RenderFeature::Multiview;
     return !hasAny(required, unsupported);
 }
