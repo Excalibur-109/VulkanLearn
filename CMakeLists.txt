@@ -106,6 +106,37 @@ if(WIN32)
         d3dcompiler
     )
 
+    add_library(RenderD3D12 STATIC
+        RenderD3D12.hpp
+        RenderD3D12.cpp
+        RenderD3D12Core.inl
+        RenderD3D12Destroy.inl
+        RenderD3D12Frame.inl
+        RenderD3D12Pipelines.inl
+        RenderD3D12Private.inl
+        RenderD3D12Resources.inl
+        RenderD3D12SyncSwapchain.inl
+        RenderDefinitions.hpp
+    )
+
+    target_include_directories(RenderD3D12 PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_compile_features(RenderD3D12 PUBLIC cxx_std_20)
+
+    if(MSVC)
+        target_compile_options(RenderD3D12 PRIVATE /utf-8)
+    endif()
+
+    target_link_libraries(RenderD3D12 PUBLIC
+        glm::glm
+        d3d12
+        dxgi
+        dxguid
+        d3dcompiler
+    )
+
     add_executable(PbrShadowD3D11Example
         PbrShadowD3D11Example.cpp
         RenderDefinitions.hpp
