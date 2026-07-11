@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
 #include "RHID3D12.hpp"
 
 #include <d3dcompiler.h>
@@ -15,7 +14,6 @@
 #include <utility>
 
 namespace rhi {
-#endif
 
 using Microsoft::WRL::ComPtr;
 
@@ -1113,8 +1111,6 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - Descriptor heap CPU 槽位分配；
 // - Impl 中保存的 ID3D12Resource/RootSignature/PSO/Swapchain/Fence；
 // - DXGI adapter 选择、feature level 和 RHICapabilities 生成。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

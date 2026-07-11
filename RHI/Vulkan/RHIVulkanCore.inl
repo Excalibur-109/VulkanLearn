@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 RHIVulkan::RHIVulkan()
     : impl_(std::make_unique<Impl>()) {
@@ -49,7 +47,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         std::vector<const char*> instanceExtensions;
         for (const char* extension : desc.requiredInstanceExtensions) {
             if (!hasExtension(availableExtensions, extension)) {
-                throw std::runtime_error(std::string("缺少 Vulkan instance extension: ") + extension);
+                throw std::runtime_error(std::string("Missing Vulkan instance extension: ") + extension);
             }
             appendUniqueExtension(instanceExtensions, extension);
         }
@@ -61,7 +59,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         if (wantsDebugUtils && hasExtension(availableExtensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
             appendUniqueExtension(instanceExtensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         } else if (RHIHasAny(desc.backend.requiredFeatures, RHIRenderFeature::DebugMarkers)) {
-            throw std::runtime_error("缺少 Vulkan instance extension: VK_EXT_debug_utils");
+            throw std::runtime_error("Missing Vulkan instance extension: VK_EXT_debug_utils");
         }
 
         VkApplicationInfo appInfo{};
@@ -86,7 +84,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         }
 
         if (vkCreateInstance(&instanceInfo, nullptr, &impl_->native.instance) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateInstance 失败");
+            throw std::runtime_error("vkCreateInstance failed");
         }
 
         auto createDebugMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
@@ -99,14 +97,14 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
             // GLFW 等窗口库必须等 VkInstance 创建后才能创建 VkSurfaceKHR。
             impl_->native.surface = desc.surface.createSurface(impl_->native.instance);
             if (impl_->native.surface == VK_NULL_HANDLE) {
-                throw std::runtime_error("Vulkan surface 工厂返回了空 VkSurfaceKHR");
+                throw std::runtime_error("The Vulkan surface factory returned a null VkSurfaceKHR");
             }
         }
 
         u32 physicalDeviceCount = 0;
         vkEnumeratePhysicalDevices(impl_->native.instance, &physicalDeviceCount, nullptr);
         if (physicalDeviceCount == 0) {
-            throw std::runtime_error("找不到 Vulkan physical device");
+            throw std::runtime_error("No Vulkan physical device was found");
         }
 
         std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
@@ -121,7 +119,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
             }
         }
         if (impl_->native.physicalDevice == VK_NULL_HANDLE) {
-            throw std::runtime_error("没有符合要求的 Vulkan physical device");
+            throw std::runtime_error("No Vulkan physical device satisfies the required capabilities");
         }
 
         impl_->queueFamilies = findQueueFamilies(impl_->native.physicalDevice, impl_->native.surface);
@@ -149,7 +147,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         std::vector<const char*> deviceExtensions;
         for (const char* extension : desc.requiredDeviceExtensions) {
             if (!hasExtension(availableDeviceExtensions, extension)) {
-                throw std::runtime_error(std::string("缺少 Vulkan device extension: ") + extension);
+                throw std::runtime_error(std::string("Missing Vulkan device extension: ") + extension);
             }
             appendUniqueExtension(deviceExtensions, extension);
         }
@@ -190,7 +188,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         deviceInfo.pEnabledFeatures = &enabledFeatures;
 
         if (vkCreateDevice(impl_->native.physicalDevice, &deviceInfo, nullptr, &impl_->native.device) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateDevice 失败");
+            throw std::runtime_error("vkCreateDevice failed");
         }
 
         vkGetDeviceQueue(impl_->native.device, impl_->queueFamilies.graphics, 0, &impl_->native.graphicsQueue);
@@ -222,7 +220,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
             VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         commandPoolInfo.queueFamilyIndex = impl_->queueFamilies.graphics;
         if (vkCreateCommandPool(impl_->native.device, &commandPoolInfo, nullptr, &impl_->graphicsCommandPool) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateCommandPool(graphics) 失败");
+            throw std::runtime_error("vkCreateCommandPool(graphics) failed");
         }
 
         std::array<VkDescriptorPoolSize, 6> poolSizes{{
@@ -240,7 +238,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         poolInfo.poolSizeCount = static_cast<u32>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         if (vkCreateDescriptorPool(impl_->native.device, &poolInfo, nullptr, &impl_->descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateDescriptorPool 失败");
+            throw std::runtime_error("vkCreateDescriptorPool failed");
         }
 
         VkPhysicalDeviceMemoryProperties memoryProperties{};
@@ -405,8 +403,7 @@ const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
 // Buffer 在 Vulkan 中分成两步：先创建 VkBuffer 得到资源形状和 usage，再查询 memory
 // requirements，分配合适 memory type，最后 vkBindBufferMemory 绑定。persistentlyMapped
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
 
 

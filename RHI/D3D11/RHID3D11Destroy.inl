@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 void RHID3D11::destroy(RHIBuffer handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
@@ -128,8 +126,6 @@ void RHID3D11::destroy(RHISwapchain handle) noexcept {
 // 大多数资源只需要 ComPtr::Reset；真正要注意的是依赖方向：
 // view 引用 texture，pipeline 引用 shader/state，swapchain 引用 back buffer。
 // shutdown 会按反向依赖顺序调用这些 destroy，避免 context 或 view 还持有底层资源。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

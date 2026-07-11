@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
 #include "RHIVulkan.hpp"
 
 #include <algorithm>
@@ -16,7 +15,6 @@
 #include <utility>
 
 namespace rhi {
-#endif
 
 // 学习导读：
 // 这个文件是统一渲染抽象到 Vulkan 的落地层。RHIDefinitions.hpp 里的 RHIBufferDesc、
@@ -68,7 +66,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 static std::vector<std::byte> readBinaryFile(const std::string& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        throw std::runtime_error("无法打开 shader 文件: " + path);
+        throw std::runtime_error("Failed to open shader file: " + path);
     }
 
     const std::streamsize size = file.tellg();
@@ -388,7 +386,7 @@ static VkShaderStageFlags toVkShaderStages(RHIShaderStage stages) {
 static VkShaderStageFlagBits toVkSingleShaderStage(RHIShaderStage stage) {
     const VkShaderStageFlags flags = toVkShaderStages(stage);
     if ((flags & (flags - 1)) != 0 || flags == 0) {
-        throw std::runtime_error("RHIShaderDesc::stage 必须是单个 shader stage");
+        throw std::runtime_error("RHIShaderDesc::stage must contain exactly one shader stage");
     }
     return static_cast<VkShaderStageFlagBits>(flags);
 }
@@ -823,7 +821,7 @@ struct RHIVulkan::Impl {
                 return index;
             }
         }
-        throw std::runtime_error("找不到符合要求的 Vulkan memory type");
+        throw std::runtime_error("No compatible Vulkan memory type was found");
     }
 
     VkQueue queueForType(RHIQueueType type) const {
@@ -1180,8 +1178,7 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
     info.pfnUserCallback = vulkanDebugCallback;
     return info;
 }
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
 
 

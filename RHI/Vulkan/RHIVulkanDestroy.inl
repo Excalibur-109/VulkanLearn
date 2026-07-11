@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 void RHIVulkan::destroy(RHIBuffer handle) noexcept {
     Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle);
@@ -143,8 +141,6 @@ void RHIVulkan::destroy(RHISwapchain handle) noexcept {
         resource->swapchain = VK_NULL_HANDLE;
     }
 }
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

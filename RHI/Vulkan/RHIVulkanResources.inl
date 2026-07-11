@@ -1,17 +1,15 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
     if (desc.size == 0) {
-        throw std::runtime_error("RHIBufferDesc::size 必须大于 0");
+        throw std::runtime_error("RHIBufferDesc::size must be greater than zero");
     }
 
     Impl::BufferResource resource{};
@@ -27,7 +25,7 @@ RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
     }
 
     if (vkCreateBuffer(impl_->native.device, &bufferInfo, nullptr, &resource.buffer) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateBuffer 失败");
+        throw std::runtime_error("vkCreateBuffer failed");
     }
 
     VkMemoryRequirements requirements{};
@@ -40,20 +38,20 @@ RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
 
     if (vkAllocateMemory(impl_->native.device, &allocateInfo, nullptr, &resource.memory) != VK_SUCCESS) {
         vkDestroyBuffer(impl_->native.device, resource.buffer, nullptr);
-        throw std::runtime_error("vkAllocateMemory(buffer) 失败");
+        throw std::runtime_error("vkAllocateMemory(buffer) failed");
     }
     // 创建对象和分配内存只是两步准备；绑定成功后，buffer 才真正拥有可访问的存储。
     if (vkBindBufferMemory(impl_->native.device, resource.buffer, resource.memory, 0) != VK_SUCCESS) {
         vkDestroyBuffer(impl_->native.device, resource.buffer, nullptr);
         vkFreeMemory(impl_->native.device, resource.memory, nullptr);
-        throw std::runtime_error("vkBindBufferMemory 失败");
+        throw std::runtime_error("vkBindBufferMemory failed");
     }
 
     if (desc.persistentlyMapped) {
         if (vkMapMemory(impl_->native.device, resource.memory, 0, VK_WHOLE_SIZE, 0, &resource.mapped) != VK_SUCCESS) {
             vkDestroyBuffer(impl_->native.device, resource.buffer, nullptr);
             vkFreeMemory(impl_->native.device, resource.memory, nullptr);
-            throw std::runtime_error("vkMapMemory(buffer) 失败");
+            throw std::runtime_error("vkMapMemory(buffer) failed");
         }
     }
 
@@ -67,7 +65,7 @@ RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
 // 才负责 format/aspect/mip/layer 这些访问窗口。
 RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     Impl::TextureResource resource{};
@@ -90,7 +88,7 @@ RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (vkCreateImage(impl_->native.device, &imageInfo, nullptr, &resource.image) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateImage 失败");
+        throw std::runtime_error("vkCreateImage failed");
     }
 
     VkMemoryRequirements requirements{};
@@ -103,12 +101,12 @@ RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
 
     if (vkAllocateMemory(impl_->native.device, &allocateInfo, nullptr, &resource.memory) != VK_SUCCESS) {
         vkDestroyImage(impl_->native.device, resource.image, nullptr);
-        throw std::runtime_error("vkAllocateMemory(image) 失败");
+        throw std::runtime_error("vkAllocateMemory(image) failed");
     }
     if (vkBindImageMemory(impl_->native.device, resource.image, resource.memory, 0) != VK_SUCCESS) {
         vkDestroyImage(impl_->native.device, resource.image, nullptr);
         vkFreeMemory(impl_->native.device, resource.memory, nullptr);
-        throw std::runtime_error("vkBindImageMemory 失败");
+        throw std::runtime_error("vkBindImageMemory failed");
     }
 
     const RHITexture handle = makeRenderHandle<RHITexture>(impl_->textures, std::move(resource));
@@ -121,12 +119,12 @@ RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
 // 通过 RHITextureView 找到可绑定的 VkImageView。
 RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     const Impl::TextureResource* texture = getRenderResource(impl_->textures, desc.texture);
     if (texture == nullptr || texture->image == VK_NULL_HANDLE) {
-        throw std::runtime_error("RHITextureViewDesc::texture 无效");
+        throw std::runtime_error("RHITextureViewDesc::texture is invalid");
     }
 
     const RHIFormat viewFormat = desc.format == RHIFormat::Undefined ? texture->desc.format : desc.format;
@@ -146,7 +144,7 @@ RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
     viewInfo.subresourceRange.layerCount = desc.arrayLayerCount;
 
     if (vkCreateImageView(impl_->native.device, &viewInfo, nullptr, &resource.view) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateImageView 失败");
+        throw std::runtime_error("vkCreateImageView failed");
     }
 
     const RHITextureView handle = makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(resource));
@@ -158,7 +156,7 @@ RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
 // 做法：同一张 texture 可以配多个 sampler，同一个 sampler 也能复用到多张 texture。
 RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     Impl::SamplerResource resource{};
@@ -182,7 +180,7 @@ RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
     samplerInfo.borderColor = toVkBorderColor(desc.borderColor);
 
     if (vkCreateSampler(impl_->native.device, &samplerInfo, nullptr, &resource.sampler) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateSampler 失败");
+        throw std::runtime_error("vkCreateSampler failed");
     }
 
     const RHISampler handle = makeRenderHandle<RHISampler>(impl_->samplers, std::move(resource));
@@ -194,7 +192,7 @@ RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
 // 提供 bytecode 或文件路径；entry point 和 stage 会在创建 pipeline 时写进 shader stage。
 RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     std::vector<std::byte> bytecode = desc.bytecode;
@@ -202,7 +200,7 @@ RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
         bytecode = readBinaryFile(desc.filePath);
     }
     if (bytecode.empty() || (bytecode.size() % sizeof(u32)) != 0) {
-        throw std::runtime_error("Vulkan shader module 需要非空且 4 字节对齐的 SPIR-V bytecode");
+        throw std::runtime_error("Vulkan shader modules require non-empty, 4-byte-aligned SPIR-V bytecode");
     }
 
     Impl::ShaderResource resource{};
@@ -214,7 +212,7 @@ RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
     moduleInfo.pCode = reinterpret_cast<const u32*>(bytecode.data());
 
     if (vkCreateShaderModule(impl_->native.device, &moduleInfo, nullptr, &resource.module) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateShaderModule 失败");
+        throw std::runtime_error("vkCreateShaderModule failed");
     }
 
     const RHIShader handle = makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
@@ -227,7 +225,7 @@ RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
 // descriptor set 中分配，所以这里跳过，稍后交给 PipelineLayout。
 RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
@@ -238,7 +236,7 @@ RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc
             continue;
         }
         if (entry.type == RHIBindingType::AccelerationStructure) {
-            throw std::runtime_error("AccelerationStructure binding 需要光追资源模型，当前 Vulkan 后端尚未实现");
+            throw std::runtime_error("AccelerationStructure bindings require a ray-tracing resource model, which is not implemented by RHIVulkan");
         }
         VkDescriptorSetLayoutBinding binding{};
         binding.binding = entry.binding;
@@ -257,7 +255,7 @@ RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc
     layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(impl_->native.device, &layoutInfo, nullptr, &resource.layout) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateDescriptorSetLayout 失败");
+        throw std::runtime_error("vkCreateDescriptorSetLayout failed");
     }
 
     const RHIBindGroupLayout handle = makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
@@ -269,12 +267,12 @@ RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc
 // 写入 VkDescriptorSet。绘制时只需要 vkCmdBindDescriptorSets，不再逐个资源绑定。
 RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-        throw std::runtime_error("RHIBindGroupDesc::layout 无效");
+        throw std::runtime_error("RHIBindGroupDesc::layout is invalid");
     }
 
     Impl::BindGroupResource resource{};
@@ -287,7 +285,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
     allocateInfo.pSetLayouts = &layout->layout;
 
     if (vkAllocateDescriptorSets(impl_->native.device, &allocateInfo, &resource.set) != VK_SUCCESS) {
-        throw std::runtime_error("vkAllocateDescriptorSets 失败");
+        throw std::runtime_error("vkAllocateDescriptorSets failed");
     }
 
     std::vector<VkDescriptorBufferInfo> bufferInfos;
@@ -309,7 +307,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
         if (binding.type == RHIBindingType::UniformBuffer || binding.type == RHIBindingType::StorageBuffer) {
             const Impl::BufferResource* buffer = getRenderResource(impl_->buffers, binding.buffer.buffer);
             if (buffer == nullptr || buffer->buffer == VK_NULL_HANDLE) {
-                throw std::runtime_error("RHIResourceBinding buffer 无效");
+                throw std::runtime_error("RHIResourceBinding buffer is invalid");
             }
             VkDescriptorBufferInfo info{};
             info.buffer = buffer->buffer;
@@ -320,7 +318,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
         } else if (binding.type == RHIBindingType::Sampler) {
             const Impl::SamplerResource* sampler = getRenderResource(impl_->samplers, binding.sampler);
             if (sampler == nullptr || sampler->sampler == VK_NULL_HANDLE) {
-                throw std::runtime_error("RHIResourceBinding sampler 无效");
+                throw std::runtime_error("RHIResourceBinding sampler is invalid");
             }
             VkDescriptorImageInfo info{};
             info.sampler = sampler->sampler;
@@ -331,7 +329,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
                    binding.type == RHIBindingType::CombinedTextureSampler) {
             const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, binding.texture.view);
             if (view == nullptr || view->view == VK_NULL_HANDLE) {
-                throw std::runtime_error("RHIResourceBinding texture view 无效");
+                throw std::runtime_error("RHIResourceBinding texture view is invalid");
             }
             VkDescriptorImageInfo info{};
             info.imageView = view->view;
@@ -339,14 +337,14 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
             if (binding.type == RHIBindingType::CombinedTextureSampler) {
                 const Impl::SamplerResource* sampler = getRenderResource(impl_->samplers, binding.sampler);
                 if (sampler == nullptr || sampler->sampler == VK_NULL_HANDLE) {
-                    throw std::runtime_error("CombinedTextureSampler 缺少有效 sampler");
+                    throw std::runtime_error("CombinedTextureSampler requires a valid sampler");
                 }
                 info.sampler = sampler->sampler;
             }
             imageInfos.push_back(info);
             write.pImageInfo = &imageInfos.back();
         } else if (binding.type == RHIBindingType::AccelerationStructure) {
-            throw std::runtime_error("AccelerationStructure descriptor update 尚未实现");
+            throw std::runtime_error("AccelerationStructure descriptor updates are not implemented");
         } else {
             continue;
         }
@@ -365,7 +363,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
 // constant 范围。图形/计算 pipeline 创建和命令绑定 descriptor set 时都必须使用同一个 layout。
 RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkan 尚未初始化");
+        throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     std::vector<VkDescriptorSetLayout> setLayouts;
@@ -373,7 +371,7 @@ RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& d
     for (RHIBindGroupLayout handle : desc.bindGroupLayouts) {
         const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, handle);
         if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-            throw std::runtime_error("RHIPipelineLayoutDesc 包含无效 bind group layout");
+            throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind group layout");
         }
         setLayouts.push_back(layout->layout);
     }
@@ -399,7 +397,7 @@ RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& d
     layoutInfo.pPushConstantRanges = pushRanges.data();
 
     if (vkCreatePipelineLayout(impl_->native.device, &layoutInfo, nullptr, &resource.layout) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreatePipelineLayout 失败");
+        throw std::runtime_error("vkCreatePipelineLayout failed");
     }
 
     const RHIPipelineLayout handle = makeRenderHandle<RHIPipelineLayout>(impl_->pipelineLayouts, std::move(resource));
@@ -417,15 +415,15 @@ RHIPipelineCache RHIVulkan::createPipelineCache(const RHIPipelineCacheDesc& desc
     cacheInfo.pInitialData = desc.initialData.empty() ? nullptr : desc.initialData.data();
 
     if (vkCreatePipelineCache(impl_->native.device, &cacheInfo, nullptr, &resource.cache) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreatePipelineCache 失败");
+        throw std::runtime_error("vkCreatePipelineCache failed");
     }
 
     const RHIPipelineCache handle = makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
     impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE_CACHE, reinterpret_cast<u64>(impl_->pipelineCaches.back().cache), desc.debugName);
     return handle;
 }
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
+
 
 

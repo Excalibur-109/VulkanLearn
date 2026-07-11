@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     struct StagingResource {
@@ -35,7 +33,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
     try {
         if (!isInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
-            throw std::runtime_error("RHIVulkan 尚未初始化或缺少 graphics command pool");
+            throw std::runtime_error("RHIVulkan is not initialized or has no graphics command pool");
         }
 
         VkCommandBufferAllocateInfo allocateInfo{};
@@ -44,14 +42,14 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocateInfo.commandBufferCount = 1;
         if (vkAllocateCommandBuffers(impl_->native.device, &allocateInfo, &commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("vkAllocateCommandBuffers 失败");
+            throw std::runtime_error("vkAllocateCommandBuffers failed");
         }
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("vkBeginCommandBuffer 失败");
+            throw std::runtime_error("vkBeginCommandBuffer failed");
         }
 
         const auto bufferDstAccess = [](RHIBufferUsage usage) {
@@ -72,7 +70,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
             Impl::BufferResource* destination = getRenderResource(impl_->buffers, upload.destination);
             if (destination == nullptr || destination->buffer == VK_NULL_HANDLE) {
-                throw std::runtime_error("RHIFramePacket uploads 包含无效 destination buffer");
+                throw std::runtime_error("RHIFramePacket uploads contain an invalid destination buffer");
             }
 
             StagingResource staging{};
@@ -82,7 +80,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
             stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             if (vkCreateBuffer(impl_->native.device, &stagingInfo, nullptr, &staging.buffer) != VK_SUCCESS) {
-                throw std::runtime_error("vkCreateBuffer(staging) 失败");
+                throw std::runtime_error("vkCreateBuffer(staging) failed");
             }
 
             // buffer 创建成功后立即登记所有权，后续 memory allocation 失败时也能由 cleanup 回收。
@@ -98,16 +96,16 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 requirements.memoryTypeBits,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             if (vkAllocateMemory(impl_->native.device, &memoryInfo, nullptr, &trackedStaging.memory) != VK_SUCCESS) {
-                throw std::runtime_error("vkAllocateMemory(staging) 失败");
+                throw std::runtime_error("vkAllocateMemory(staging) failed");
             }
             // 后续 bind/map 都操作 trackedStaging，保证 cleanup 看到最新 buffer/memory 句柄。
             if (vkBindBufferMemory(impl_->native.device, trackedStaging.buffer, trackedStaging.memory, 0) != VK_SUCCESS) {
-                throw std::runtime_error("vkBindBufferMemory(staging) 失败");
+                throw std::runtime_error("vkBindBufferMemory(staging) failed");
             }
 
             void* mapped = nullptr;
             if (vkMapMemory(impl_->native.device, trackedStaging.memory, 0, stagingInfo.size, 0, &mapped) != VK_SUCCESS) {
-                throw std::runtime_error("vkMapMemory(staging) 失败");
+                throw std::runtime_error("vkMapMemory(staging) failed");
             }
             std::memcpy(mapped, upload.data.data(), upload.data.size());
             vkUnmapMemory(impl_->native.device, trackedStaging.memory);
@@ -258,7 +256,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 const RHITextureView viewHandle = findViewForTexture(texture, RHITextureAspect::Color);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || view->view == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RenderGraph color attachment 缺少有效 texture view");
+                    throw std::runtime_error("RenderGraph color attachment requires a valid texture view");
                 }
 
                 colorClearValues.push_back(vkClearColor(attachment.clearValue.color));
@@ -280,7 +278,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 const RHITextureView viewHandle = findViewForTexture(texture, RHITextureAspect::Depth);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || view->view == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RenderGraph depth attachment 缺少有效 texture view");
+                    throw std::runtime_error("RenderGraph depth attachment requires a valid texture view");
                 }
 
                 depthClear = vkClearDepthStencil(attachment.clearValue.depthStencil);
@@ -328,7 +326,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 // index buffer，然后发出 vkCmdDrawIndexed。
                 const Impl::PipelineResource* pipeline = getRenderResource(impl_->pipelines, draw.pipeline);
                 if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RHIDrawIndexedCommand pipeline 无效");
+                    throw std::runtime_error("RHIDrawIndexedCommand pipeline is invalid");
                 }
                 vkCmdBindPipeline(commandBuffer, pipeline->bindPoint, pipeline->pipeline);
 
@@ -337,7 +335,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 for (RHIBindGroup bindGroupHandle : draw.bindGroups) {
                     const Impl::BindGroupResource* bindGroup = getRenderResource(impl_->bindGroups, bindGroupHandle);
                     if (bindGroup == nullptr || bindGroup->set == VK_NULL_HANDLE) {
-                        throw std::runtime_error("RHIDrawIndexedCommand bind group 无效");
+                        throw std::runtime_error("RHIDrawIndexedCommand bind group is invalid");
                     }
                     descriptorSets.push_back(bindGroup->set);
                 }
@@ -356,7 +354,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 for (const RHIVertexStream& stream : draw.vertexStreams) {
                     const Impl::BufferResource* vertexBuffer = getRenderResource(impl_->buffers, stream.buffer);
                     if (vertexBuffer == nullptr || vertexBuffer->buffer == VK_NULL_HANDLE) {
-                        throw std::runtime_error("RHIDrawIndexedCommand vertex buffer 无效");
+                        throw std::runtime_error("RHIDrawIndexedCommand vertex buffer is invalid");
                     }
                     VkBuffer buffer = vertexBuffer->buffer;
                     VkDeviceSize offset = static_cast<VkDeviceSize>(stream.offset);
@@ -365,7 +363,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
                 const Impl::BufferResource* indexBuffer = getRenderResource(impl_->buffers, draw.indexStream.buffer);
                 if (indexBuffer == nullptr || indexBuffer->buffer == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RHIDrawIndexedCommand index buffer 无效");
+                    throw std::runtime_error("RHIDrawIndexedCommand index buffer is invalid");
                 }
                 const VkIndexType indexType = draw.indexStream.indexType == RHIIndexType::UInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
                 vkCmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, static_cast<VkDeviceSize>(draw.indexStream.offset), indexType);
@@ -393,7 +391,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         }
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("vkEndCommandBuffer 失败");
+            throw std::runtime_error("vkEndCommandBuffer failed");
         }
 
         std::vector<VkSemaphore> waitSemaphores;
@@ -407,7 +405,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             for (const RHIQueueWaitDesc& wait : submitDesc.waits) {
                 const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
                 if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RHIFramePacket submission 包含无效 wait semaphore");
+                    throw std::runtime_error("RHIFramePacket submission contains an invalid wait semaphore");
                 }
                 usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
                 waitSemaphores.push_back(semaphore->semaphore);
@@ -417,7 +415,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             for (const RHIQueueSignalDesc& signal : submitDesc.signals) {
                 const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signal.semaphore);
                 if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
-                    throw std::runtime_error("RHIFramePacket submission 包含无效 signal semaphore");
+                    throw std::runtime_error("RHIFramePacket submission contains an invalid signal semaphore");
                 }
                 usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
                 signalSemaphores.push_back(semaphore->semaphore);
@@ -446,16 +444,16 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &submitFence) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateFence(submit) 失败");
+            throw std::runtime_error("vkCreateFence(submit) failed");
         }
 
         if (vkQueueSubmit(impl_->native.graphicsQueue, 1, &submitInfo, submitFence) != VK_SUCCESS) {
-            throw std::runtime_error("vkQueueSubmit(recorded frame) 失败");
+            throw std::runtime_error("vkQueueSubmit(recorded frame) failed");
         }
         const VkResult waitResult = vkWaitForFences(
             impl_->native.device, 1, &submitFence, VK_TRUE, std::numeric_limits<u64>::max());
         if (waitResult != VK_SUCCESS) {
-            throw std::runtime_error("vkWaitForFences(recorded frame) 失败");
+            throw std::runtime_error("vkWaitForFences(recorded frame) failed");
         }
         cleanup();
         commandBuffer = VK_NULL_HANDLE;
@@ -500,8 +498,7 @@ void RHIVulkan::waitIdle() const noexcept {
 }
 
 // destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
 
 

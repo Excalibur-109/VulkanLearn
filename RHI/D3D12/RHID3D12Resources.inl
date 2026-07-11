@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D12.cpp"
+#include "RHID3D12Private.inl"
 
 namespace rhi {
-#endif
 
 RHIBuffer RHID3D12::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
@@ -554,8 +552,6 @@ RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // - texture view、sampler、CBV/SRV/UAV 是 descriptor heap 中的槽位；
 // - BindGroup 先解析成 CPU descriptor，后续完整命令录制时再拷贝到 shader-visible heap；
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

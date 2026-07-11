@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D12.cpp"
+#include "RHID3D12Private.inl"
 
 namespace rhi {
-#endif
 
 void RHID3D12::destroy(RHIBuffer handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
@@ -132,8 +130,6 @@ void RHID3D12::destroy(RHISwapchain handle) noexcept {
 // D3D12 destroy 片段只释放资源，不回收 descriptor heap 槽位。
 // 这是当前后端的简单线性分配策略：句柄槽位保持稳定，descriptor 槽位在 renderer 生命周期内单调增长。
 // 后续如果做长期运行编辑器，需要再补 descriptor free-list 或按帧 ring allocator。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

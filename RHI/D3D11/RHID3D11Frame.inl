@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 static bool stageVisible(RHIShaderStage visibility, RHIShaderStage stage) {
     if (visibility == RHIShaderStage::All) {
@@ -505,8 +503,6 @@ void RHID3D11::waitIdle() const noexcept {
 // - BindGroup -> VS/PS/CS 等 stage 的 CBV/SRV/Sampler/UAV slot；
 // - Pipeline -> IA/InputLayout/Shader/Rasterizer/DepthStencil/Blend 状态；
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

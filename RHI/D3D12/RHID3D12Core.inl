@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D12.cpp"
+#include "RHID3D12Private.inl"
 
 namespace rhi {
-#endif
 
 RHID3D12::RHID3D12()
     : impl_(std::make_unique<Impl>()) {
@@ -172,8 +170,6 @@ const RHID3D12NativeHandles& RHID3D12::nativeHandles() const noexcept {
 // D3D12 core 片段只负责“从无到可用”的后端生命周期。
 // 注意这里已经创建了 command list，但它只是基础命令录制容器；真正把 RenderGraph 变成 draw/dispatch，
 // 需要在 Frame 片段中补 command allocator reset、barrier、root signature/descriptor heap 绑定等步骤。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

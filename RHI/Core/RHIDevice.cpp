@@ -31,7 +31,7 @@ Return visitImplementation(Variant&& variant, Function&& function) {
         [&](auto&& implementation) -> Return {
             using Implementation = std::remove_cvref_t<decltype(implementation)>;
             if constexpr (std::is_same_v<Implementation, std::monostate>) {
-                throw std::runtime_error("RHIDevice 尚未初始化");
+                throw std::runtime_error("RHIDevice is not initialized");
             } else {
                 return function(implementation);
             }
@@ -275,6 +275,7 @@ RHI_FORWARD_DESTROY(RHISwapchain)
 #undef RHI_FORWARD_DESTROY
 
 } // namespace rhi
+
 
 
 

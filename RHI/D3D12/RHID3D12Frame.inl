@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D12.cpp"
+#include "RHID3D12Private.inl"
 
 namespace rhi {
-#endif
 
 bool RHID3D12::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     try {
@@ -97,8 +95,6 @@ void RHID3D12::waitIdle() const noexcept {
 // - 已经可以处理 CPU 可见 buffer 上传、submit、present 和 waitIdle；
 // - 还没有把 RenderGraph pass 录制成 command list；
 // - 下一步要补的是 resource barrier、RTV/DSV 绑定、descriptor heap 拷贝、root table 设置、Draw/Dispatch。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

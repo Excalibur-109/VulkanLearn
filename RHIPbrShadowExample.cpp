@@ -720,7 +720,7 @@ class GlfwScope {
 public:
     GlfwScope() {
         if (glfwInit() != GLFW_TRUE) {
-            throw std::runtime_error("glfwInit 失败");
+            throw std::runtime_error("glfwInit failed");
         }
     }
 
@@ -748,19 +748,19 @@ int main(int argc, char** argv) {
 
         GlfwScope glfw;
         if (glfwVulkanSupported() != GLFW_TRUE) {
-            throw std::runtime_error("当前系统或 GLFW 不支持 Vulkan");
+            throw std::runtime_error("Vulkan is not supported by the current system or GLFW");
         }
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         GLFWwindow* window = glfwCreateWindow(1280, 720, "RHI PBR Shadow Example", nullptr, nullptr);
         if (window == nullptr) {
-            throw std::runtime_error("glfwCreateWindow 失败");
+            throw std::runtime_error("glfwCreateWindow failed");
         }
 
         u32 extensionCount = 0;
         const char** extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
         if (extensions == nullptr || extensionCount == 0) {
-            throw std::runtime_error("GLFW 未返回 Vulkan 实例扩展");
+            throw std::runtime_error("GLFW did not return any required Vulkan instance extensions");
         }
 
         RHIDevice renderer(RHIGraphicsAPI::Vulkan);
@@ -782,7 +782,7 @@ int main(int argc, char** argv) {
 
         std::string errorMessage;
         if (!renderer.initialize(rendererDesc, &errorMessage)) {
-            throw std::runtime_error("RHIDevice 初始化失败: " + errorMessage);
+            throw std::runtime_error("RHIDevice initialization failed: " + errorMessage);
         }
 
         FrameTargets targets = createFrameTargets(renderer, waitForDrawableSize(window));
@@ -832,6 +832,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
 
 

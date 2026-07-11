@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const RHIStencilFaceState& state) {
     D3D11_DEPTH_STENCILOP_DESC desc{};
@@ -201,8 +199,6 @@ RHIPipeline RHID3D11::createComputePipeline(const RHIComputePipelineDesc& desc) 
 // 和 Vulkan 的 VkPipeline 不同，D3D11 没有一个完整的 graphics pipeline 对象；
 // 本实现把 input layout、shader stages、rasterizer、depth-stencil、blend、topology 等保存在 PipelineResource，
 // 真正绘制时由 RHID3D11Frame.inl 的 applyPipeline 逐项绑定到 immediate context。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

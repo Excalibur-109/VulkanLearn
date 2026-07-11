@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 RHID3D11::RHID3D11()
     : impl_(std::make_unique<Impl>()) {
@@ -174,8 +172,6 @@ const RHID3D11NativeHandles& RHID3D11::nativeHandles() const noexcept {
 // - capabilities/nativeHandles 提供上层查询能力和必要的原生对象访问。
 // 这里对应 Vulkan 后端的 RHIVulkanCore.inl，但 D3D11 只有一个 immediate context，
 // 不需要显式创建 queue、command pool 或 descriptor pool。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

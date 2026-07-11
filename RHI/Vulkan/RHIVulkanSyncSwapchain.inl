@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 RHIQueryPool RHIVulkan::createQueryPool(const RHIQueryPoolDesc& desc) {
     Impl::QueryPoolResource resource{};
@@ -38,7 +36,7 @@ RHIQueryPool RHIVulkan::createQueryPool(const RHIQueryPoolDesc& desc) {
     }
 
     if (vkCreateQueryPool(impl_->native.device, &queryInfo, nullptr, &resource.pool) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateQueryPool 失败");
+        throw std::runtime_error("vkCreateQueryPool failed");
     }
 
     const RHIQueryPool handle = makeRenderHandle<RHIQueryPool>(impl_->queryPools, std::move(resource));
@@ -50,7 +48,7 @@ RHIQueryPool RHIVulkan::createQueryPool(const RHIQueryPoolDesc& desc) {
 // fence 用于 CPU 等 GPU 完成。timeline semaphore 需要 Vulkan 1.2 feature 支持。
 RHISemaphore RHIVulkan::createSemaphore(const RHISemaphoreDesc& desc) {
     if (desc.type == RHISemaphoreType::Timeline && !impl_->supportsTimelineSemaphore) {
-        throw std::runtime_error("当前 Vulkan 设备不支持 timeline semaphore");
+        throw std::runtime_error("The current Vulkan device does not support timeline semaphores");
     }
 
     Impl::SemaphoreResource resource{};
@@ -66,7 +64,7 @@ RHISemaphore RHIVulkan::createSemaphore(const RHISemaphoreDesc& desc) {
     semaphoreInfo.pNext = &typeInfo;
 
     if (vkCreateSemaphore(impl_->native.device, &semaphoreInfo, nullptr, &resource.semaphore) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateSemaphore 失败");
+        throw std::runtime_error("vkCreateSemaphore failed");
     }
 
     const RHISemaphore handle = makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
@@ -83,7 +81,7 @@ RHIFence RHIVulkan::createFence(const RHIFenceDesc& desc) {
     fenceInfo.flags = desc.signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
 
     if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &resource.fence) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateFence 失败");
+        throw std::runtime_error("vkCreateFence failed");
     }
 
     const RHIFence handle = makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
@@ -96,18 +94,18 @@ RHIFence RHIVulkan::createFence(const RHIFenceDesc& desc) {
 // 设为 false；这样上层仍然能用 RHITexture/RHITextureView 统一描述后备缓冲。
 RHISwapchain RHIVulkan::createSwapchain(const RHISwapchainDesc& desc) {
     if (impl_->native.surface == VK_NULL_HANDLE) {
-        throw std::runtime_error("createSwapchain 需要 initialize 时传入有效 VkSurfaceKHR");
+        throw std::runtime_error("createSwapchain requires a valid VkSurfaceKHR during initialization");
     }
 
     const VulkanSwapchainSupport support = querySwapchainSupport(impl_->native.physicalDevice, impl_->native.surface);
     if (!support.isUsable()) {
-        throw std::runtime_error("Vulkan surface 不支持可用 swapchain format/present mode");
+        throw std::runtime_error("The Vulkan surface does not provide a usable swapchain format and present mode");
     }
 
     // VkSwapchainCreateInfoKHR::imageUsage 不能随意填写，必须是 surface capabilities
     // 明确支持的位。COLOR_ATTACHMENT 是直接渲染的硬需求；TRANSFER_DST 仅在支持时启用。
     if ((support.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0) {
-        throw std::runtime_error("Vulkan surface 不支持 swapchain color-attachment usage");
+        throw std::runtime_error("The Vulkan surface does not support swapchain color-attachment usage");
     }
     VkImageUsageFlags swapchainImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if ((support.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0) {
@@ -151,19 +149,19 @@ RHISwapchain RHIVulkan::createSwapchain(const RHISwapchainDesc& desc) {
     resource.format = selectedFormat.format;
     resource.extent = extent;
     if (vkCreateSwapchainKHR(impl_->native.device, &swapchainInfo, nullptr, &resource.swapchain) != VK_SUCCESS) {
-        throw std::runtime_error("vkCreateSwapchainKHR 失败");
+        throw std::runtime_error("vkCreateSwapchainKHR failed");
     }
 
     u32 swapchainImageCount = 0;
     if (vkGetSwapchainImagesKHR(impl_->native.device, resource.swapchain, &swapchainImageCount, nullptr) != VK_SUCCESS ||
         swapchainImageCount == 0) {
         vkDestroySwapchainKHR(impl_->native.device, resource.swapchain, nullptr);
-        throw std::runtime_error("vkGetSwapchainImagesKHR(count) 失败或返回 0 张图像");
+        throw std::runtime_error("vkGetSwapchainImagesKHR(count) failed or returned zero images");
     }
     std::vector<VkImage> images(swapchainImageCount);
     if (vkGetSwapchainImagesKHR(impl_->native.device, resource.swapchain, &swapchainImageCount, images.data()) != VK_SUCCESS) {
         vkDestroySwapchainKHR(impl_->native.device, resource.swapchain, nullptr);
-        throw std::runtime_error("vkGetSwapchainImagesKHR(images) 失败");
+        throw std::runtime_error("vkGetSwapchainImagesKHR(images) failed");
     }
 
     for (u32 index = 0; index < swapchainImageCount; ++index) {
@@ -366,8 +364,7 @@ bool RHIVulkan::present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // recordAndSubmitFrame 是把 RHIFramePacket 真正落成 Vulkan 命令的地方。
 // 当前实现为学习和示例优先：每帧分配一个一次性 command buffer，处理上传、资源状态转换、
 // dynamic rendering begin/end、pipeline/descriptor/buffer 绑定和 draw，然后提交并等待 fence。
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
 
 

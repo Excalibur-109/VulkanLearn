@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 RHIQueryPool RHID3D11::createQueryPool(const RHIQueryPoolDesc& desc) {
     if (!isInitialized()) {
@@ -152,8 +150,6 @@ RHIExtent2D RHID3D11::getSwapchainExtent(RHISwapchain handle) const {
 // query pool、模拟 semaphore/fence、DXGI swapchain、acquire/submit/present。
 // D3D11 immediate context 没有 Vulkan 那种显式 queue submit；submit 多数时候只是对模拟同步状态做标记，
 // 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，present 则通过 IDXGISwapChain::Present 完成。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

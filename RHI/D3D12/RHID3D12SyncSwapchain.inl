@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D12.cpp"
+#include "RHID3D12Private.inl"
 
 namespace rhi {
-#endif
 
 RHIQueryPool RHID3D12::createQueryPool(const RHIQueryPoolDesc& desc) {
     if (!isInitialized()) {
@@ -298,8 +296,6 @@ bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // - Fence 使用真实 ID3D12Fence + Win32 event；
 // - Swapchain 使用 IDXGISwapChain3 并把每个 back buffer 包装成统一 RHITexture；
 // - Semaphore 暂时是 CPU 模拟，后续若需要跨进程/跨队列同步可扩展到 shared fence。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

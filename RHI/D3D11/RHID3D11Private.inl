@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
 #include "RHID3D11.hpp"
 
 #include <d3dcompiler.h>
@@ -15,7 +14,6 @@
 #include <utility>
 
 namespace rhi {
-#endif
 
 using Microsoft::WRL::ComPtr;
 
@@ -982,8 +980,6 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - Impl 中保存的 COM 资源结构；
 // - DXGI adapter 选择和 RHICapabilities 生成。
 // 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

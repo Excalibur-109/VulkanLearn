@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-#include "RHID3D11.cpp"
+#include "RHID3D11Private.inl"
 
 namespace rhi {
-#endif
 
 RHIBuffer RHID3D11::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
@@ -464,8 +462,6 @@ RHIPipelineCache RHID3D11::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // D3D11 没有 Vulkan 的 device memory 分配步骤，CreateBuffer/CreateTexture* 会同时创建资源和隐式分配内存；
 // 但 view 仍然很重要：同一 texture 可以通过 SRV/RTV/DSV/UAV 以不同用途暴露给 shader 或 render target。
 // 学习时可以按“resource 本体 -> view -> bind group 绑定表”的顺序看。
-#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
-} // namespace rhi
-#endif
 
+} // namespace rhi
 

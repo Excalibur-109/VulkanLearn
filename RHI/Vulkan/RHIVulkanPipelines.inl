@@ -1,10 +1,8 @@
 ﻿#pragma once
 
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
-#include "RHIVulkan.cpp"
+#include "RHIVulkanPrivate.inl"
 
 namespace rhi {
-#endif
 
 static VkStencilOpState toVkStencilState(const RHIStencilFaceState& state) {
     VkStencilOpState vkState{};
@@ -23,12 +21,12 @@ static VkStencilOpState toVkStencilState(const RHIStencilFaceState& state) {
 // rendering，所以 pipeline 只记录附件 format，不需要提前创建 VkRenderPass。
 RHIPipeline RHIVulkan::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
     if (!impl_->caps.supportsDynamicRendering) {
-        throw std::runtime_error("当前 Vulkan 图形管线实现需要 dynamic rendering");
+        throw std::runtime_error("The Vulkan graphics pipeline implementation requires dynamic rendering");
     }
 
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-        throw std::runtime_error("RHIGraphicsPipelineDesc::layout 无效");
+        throw std::runtime_error("RHIGraphicsPipelineDesc::layout is invalid");
     }
 
     std::vector<VkShaderModule> temporaryModules;
@@ -214,7 +212,7 @@ RHIPipeline RHIVulkan::createGraphicsPipeline(const RHIGraphicsPipelineDesc& des
     resource.layout = layout->layout;
     if (vkCreateGraphicsPipelines(impl_->native.device, cache, 1, &pipelineInfo, nullptr, &resource.pipeline) != VK_SUCCESS) {
         destroyTemporaryShaderModules();
-        throw std::runtime_error("vkCreateGraphicsPipelines 失败");
+        throw std::runtime_error("vkCreateGraphicsPipelines failed");
     }
 
     destroyTemporaryShaderModules();
@@ -229,7 +227,7 @@ RHIPipeline RHIVulkan::createGraphicsPipeline(const RHIGraphicsPipelineDesc& des
 RHIPipeline RHIVulkan::createComputePipeline(const RHIComputePipelineDesc& desc) {
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-        throw std::runtime_error("RHIComputePipelineDesc::layout 无效");
+        throw std::runtime_error("RHIComputePipelineDesc::layout is invalid");
     }
 
     RHIShader shaderHandle = createShaderModule(desc.shader);
@@ -257,7 +255,7 @@ RHIPipeline RHIVulkan::createComputePipeline(const RHIComputePipelineDesc& desc)
     if (vkCreateComputePipelines(impl_->native.device, cache, 1, &pipelineInfo, nullptr, &resource.pipeline) != VK_SUCCESS) {
         vkDestroyShaderModule(impl_->native.device, shader->module, nullptr);
         shader->module = VK_NULL_HANDLE;
-        throw std::runtime_error("vkCreateComputePipelines 失败");
+        throw std::runtime_error("vkCreateComputePipelines failed");
     }
 
     vkDestroyShaderModule(impl_->native.device, shader->module, nullptr);
@@ -270,8 +268,7 @@ RHIPipeline RHIVulkan::createComputePipeline(const RHIComputePipelineDesc& desc)
 
 // QueryPool 用于 GPU 侧统计：timestamp 量时间，occlusion 量通过深度/模板测试的样本，
 // pipeline statistics 量各阶段调用次数。不是所有统计项都默认可用，所以初始化时会检查 feature。
-#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+
 } // namespace rhi
-#endif
 
 
