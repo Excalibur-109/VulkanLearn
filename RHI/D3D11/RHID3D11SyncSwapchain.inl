@@ -4,8 +4,8 @@
 
 namespace rhi {
 
-RHIQueryPool RHID3D11::createQueryPool(const RHIQueryPoolDesc& desc) {
-    if (!isInitialized()) {
+RHIQueryPool RHID3D11::CreateQueryPool(const RHIQueryPoolDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -30,7 +30,7 @@ RHIQueryPool RHID3D11::createQueryPool(const RHIQueryPoolDesc& desc) {
 
 // D3D11 没有 Vulkan timeline/binary semaphore 的原生等价物。本后端用轻量 CPU 状态模拟
 // 统一接口里的 semaphore，适合示例和跨后端流程对齐，不适合作为跨 queue 精细同步。
-RHIGPUWaitGPUSignal RHID3D11::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
+RHIGPUWaitGPUSignal RHID3D11::CreateGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
     Impl::GPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
@@ -38,9 +38,9 @@ RHIGPUWaitGPUSignal RHID3D11::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDe
     return makeRenderHandle<RHIGPUWaitGPUSignal>(impl_->gpuWaitGPUSignals, std::move(resource));
 }
 
-// Fence 用 D3D11_QUERY_EVENT 实现：submit 时 End 一个 event query，waitIdle/GetData 可检查
+// Fence 用 D3D11_QUERY_EVENT 实现：Submit 时 End 一个 event query，WaitIdle/GetData 可检查
 // GPU 是否执行到该点。
-RHICPUWaitGPUSignal RHID3D11::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
+RHICPUWaitGPUSignal RHID3D11::CreateCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
     Impl::CPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.signaled = desc.signaled;
@@ -49,8 +49,8 @@ RHICPUWaitGPUSignal RHID3D11::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDe
 
 // D3D11 swapchain 通常只有一个当前 back buffer。为了和 Vulkan 多图像 swapchain 接口一致，
 // 这里也把 back buffer 包装成 RHITexture + RHITextureView，供 RenderGraph 统一引用。
-RHISwapchain RHID3D11::createSwapchain(const RHISwapchainDesc& desc) {
-    if (!isInitialized()) {
+RHISwapchain RHID3D11::CreateSwapchain(const RHISwapchainDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (impl_->initDesc.surface.hwnd == nullptr) {
@@ -118,28 +118,28 @@ RHISwapchain RHID3D11::createSwapchain(const RHISwapchainDesc& desc) {
     return makeRenderHandle<RHISwapchain>(impl_->swapchains, std::move(resource));
 }
 
-std::vector<RHITexture> RHID3D11::getSwapchainImages(RHISwapchain handle) const {
+std::vector<RHITexture> RHID3D11::GetSwapchainImages(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->images;
     }
     return {};
 }
 
-std::vector<RHITextureView> RHID3D11::getSwapchainImageViews(RHISwapchain handle) const {
+std::vector<RHITextureView> RHID3D11::GetSwapchainImageViews(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
     }
     return {};
 }
 
-RHIFormat RHID3D11::getSwapchainFormat(RHISwapchain handle) const {
+RHIFormat RHID3D11::GetSwapchainFormat(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->format;
     }
     return RHIFormat::Undefined;
 }
 
-RHIExtent2D RHID3D11::getSwapchainExtent(RHISwapchain handle) const {
+RHIExtent2D RHID3D11::GetSwapchainExtent(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->extent;
     }
@@ -147,11 +147,16 @@ RHIExtent2D RHID3D11::getSwapchainExtent(RHISwapchain handle) const {
 }
 
 // D3D11 sync/swapchain 片段负责和“帧边界”相关的对象：
-// query pool、模拟 semaphore/fence、DXGI swapchain、acquire/submit/present。
-// D3D11 immediate context 没有 Vulkan 那种显式 queue submit；submit 多数时候只是对模拟同步状态做标记，
-// 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，present 则通过 IDXGISwapChain::Present 完成。
+// query pool、模拟 semaphore/fence、DXGI swapchain、acquire/Submit/Present。
+// D3D11 immediate context 没有 Vulkan 那种显式 queue Submit；Submit 多数时候只是对模拟同步状态做标记，
+// 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，Present 则通过 IDXGISwapChain::Present 完成。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

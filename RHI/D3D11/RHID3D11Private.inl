@@ -22,7 +22,7 @@ using Microsoft::WRL::ComPtr;
 // immediate context API：创建资源和状态对象后，绘制时把 input layout、shader、RTV/DSV、
 // constant buffer、SRV、sampler 等绑定到 context，然后调用 Draw/Dispatch。
 //
-// 因为 D3D11 没有 Vulkan 那种 descriptor set、显式 image layout 和 queue submit 模型，
+// 因为 D3D11 没有 Vulkan 那种 descriptor set、显式 image layout 和 queue Submit 模型，
 // 本后端会把 RHIDefinitions.hpp 的 BindSet/Pipeline/RHIFramePacket 翻译成 D3D11 的
 // COM 对象和 context 状态设置，尽量保持上层接口和 Vulkan 后端一致。
 
@@ -52,7 +52,7 @@ static const ResourceT* getRenderResource(const std::vector<ResourceT>& resource
     return &resources[static_cast<size_t>(handle.value - 1)];
 }
 
-// DirectX API 通常用 HRESULT 表达错误；这里集中转换成异常，让 initialize/create* 函数
+// DirectX API 通常用 HRESULT 表达错误；这里集中转换成异常，让 Initialize/create* 函数
 // 可以统一用 try/catch 填 errorMessage。
 static void throwIfFailed(HRESULT hr, const char* message) {
     if (FAILED(hr)) {
@@ -982,6 +982,11 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

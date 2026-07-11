@@ -4,8 +4,8 @@
 
 namespace rhi {
 
-RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
-    if (!isInitialized()) {
+RHIBuffer RHIVulkan::CreateBuffer(const RHIBufferDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
     if (desc.size == 0) {
@@ -61,10 +61,10 @@ RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
 }
 
 // Texture 对应 VkImage。注意 VkImage 只是“存储和布局状态”，真正给 shader 或 render pass
-// 使用时还需要 VkImageView；因此 createTexture 只负责 image + memory，createTextureView
+// 使用时还需要 VkImageView；因此 CreateTexture 只负责 image + memory，CreateTextureView
 // 才负责 format/aspect/mip/layer 这些访问窗口。
-RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
-    if (!isInitialized()) {
+RHITexture RHIVulkan::CreateTexture(const RHITextureDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -117,8 +117,8 @@ RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
 // ImageView 是 Vulkan 访问图片的入口：同一个 VkImage 可以有多个 view，分别选择不同 mip、
 // array layer、format reinterpretation 或 depth/stencil aspect。RenderGraph 找附件时也是
 // 通过 RHITextureView 找到可绑定的 VkImageView。
-RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
-    if (!isInitialized()) {
+RHITextureView RHIVulkan::CreateTextureView(const RHITextureViewDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -154,8 +154,8 @@ RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
 
 // Sampler 只描述采样规则，不拥有纹理数据。Vulkan 把 sampled image 和 sampler 拆开是常见
 // 做法：同一张 texture 可以配多个 sampler，同一个 sampler 也能复用到多张 texture。
-RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
-    if (!isInitialized()) {
+RHISampler RHIVulkan::CreateSampler(const RHISamplerDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -190,8 +190,8 @@ RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
 
 // Vulkan shader module 只接收 SPIR-V bytecode。这里不编译 GLSL/HLSL，而是假定上层已经
 // 提供 bytecode 或文件路径；entry point 和 stage 会在创建 pipeline 时写进 shader stage。
-RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
-    if (!isInitialized()) {
+RHIShader RHIVulkan::CreateShaderModule(const RHIShaderDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -223,8 +223,8 @@ RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
 // BindSetLayout 对应 Vulkan descriptor set layout：它声明某个 set 里有哪些 binding、
 // 每个 binding 是 buffer/image/sampler，以及哪些 shader stage 可见。Push constant 不在
 // descriptor set 中分配，所以这里跳过，稍后交给 PipelineLayout。
-RHIBindSetLayout RHIVulkan::createBindSetLayout(const RHIBindSetLayoutDesc& desc) {
-    if (!isInitialized()) {
+RHIBindSetLayout RHIVulkan::CreateBindSetLayout(const RHIBindSetLayoutDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -265,8 +265,8 @@ RHIBindSetLayout RHIVulkan::createBindSetLayout(const RHIBindSetLayoutDesc& desc
 
 // BindSet 对应实际 descriptor set。layout 只声明“槽位形状”，这里把具体 buffer/view/sampler
 // 写入 VkDescriptorSet。绘制时只需要 vkCmdBindDescriptorSets，不再逐个资源绑定。
-RHIBindSet RHIVulkan::createBindSet(const RHIBindSetDesc& desc) {
-    if (!isInitialized()) {
+RHIBindSet RHIVulkan::CreateBindSet(const RHIBindSetDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -361,8 +361,8 @@ RHIBindSet RHIVulkan::createBindSet(const RHIBindSetDesc& desc) {
 
 // PipelineLayout 是 shader 资源接口的总表：它组合多个 descriptor set layout，并声明 push
 // constant 范围。图形/计算 pipeline 创建和命令绑定 descriptor set 时都必须使用同一个 layout。
-RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
-    if (!isInitialized()) {
+RHIPipelineLayout RHIVulkan::CreatePipelineLayout(const RHIPipelineLayoutDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
@@ -405,7 +405,7 @@ RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& d
     return handle;
 }
 
-RHIPipelineCache RHIVulkan::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHIVulkan::CreatePipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
 
@@ -424,6 +424,11 @@ RHIPipelineCache RHIVulkan::createPipelineCache(const RHIPipelineCacheDesc& desc
 }
 
 } // namespace rhi
+
+
+
+
+
 
 
 

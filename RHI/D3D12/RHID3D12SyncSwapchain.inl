@@ -4,8 +4,8 @@
 
 namespace rhi {
 
-RHIQueryPool RHID3D12::createQueryPool(const RHIQueryPoolDesc& desc) {
-    if (!isInitialized()) {
+RHIQueryPool RHID3D12::CreateQueryPool(const RHIQueryPoolDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -31,7 +31,7 @@ RHIQueryPool RHID3D12::createQueryPool(const RHIQueryPoolDesc& desc) {
     return makeRenderHandle<RHIQueryPool>(impl_->queryPools, std::move(resource));
 }
 
-RHIGPUWaitGPUSignal RHID3D12::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
+RHIGPUWaitGPUSignal RHID3D12::CreateGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
     Impl::GPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
@@ -39,8 +39,8 @@ RHIGPUWaitGPUSignal RHID3D12::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDe
     return makeRenderHandle<RHIGPUWaitGPUSignal>(impl_->gpuWaitGPUSignals, std::move(resource));
 }
 
-RHICPUWaitGPUSignal RHID3D12::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
-    if (!isInitialized()) {
+RHICPUWaitGPUSignal RHID3D12::CreateCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -57,8 +57,8 @@ RHICPUWaitGPUSignal RHID3D12::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDe
     return makeRenderHandle<RHICPUWaitGPUSignal>(impl_->cpuWaitGPUSignals, std::move(resource));
 }
 
-RHISwapchain RHID3D12::createSwapchain(const RHISwapchainDesc& desc) {
-    if (!isInitialized()) {
+RHISwapchain RHID3D12::CreateSwapchain(const RHISwapchainDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
     if (impl_->initDesc.surface.hwnd == nullptr) {
@@ -144,35 +144,35 @@ RHISwapchain RHID3D12::createSwapchain(const RHISwapchainDesc& desc) {
     return makeRenderHandle<RHISwapchain>(impl_->swapchains, std::move(resource));
 }
 
-std::vector<RHITexture> RHID3D12::getSwapchainImages(RHISwapchain handle) const {
+std::vector<RHITexture> RHID3D12::GetSwapchainImages(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->images;
     }
     return {};
 }
 
-std::vector<RHITextureView> RHID3D12::getSwapchainImageViews(RHISwapchain handle) const {
+std::vector<RHITextureView> RHID3D12::GetSwapchainImageViews(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
     }
     return {};
 }
 
-RHIFormat RHID3D12::getSwapchainFormat(RHISwapchain handle) const {
+RHIFormat RHID3D12::GetSwapchainFormat(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->format;
     }
     return RHIFormat::Undefined;
 }
 
-RHIExtent2D RHID3D12::getSwapchainExtent(RHISwapchain handle) const {
+RHIExtent2D RHID3D12::GetSwapchainExtent(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->extent;
     }
     return {};
 }
 
-bool RHID3D12::acquireNextImage(
+bool RHID3D12::AcquireNextImage(
     RHISwapchain swapchain,
     RHIGPUWaitGPUSignal gpuWaitGPUSignal,
     RHICPUWaitGPUSignal cpuWaitGPUSignal,
@@ -181,7 +181,7 @@ bool RHID3D12::acquireNextImage(
     try {
         Impl::SwapchainResource* swapchainResource = getRenderResource(impl_->swapchains, swapchain);
         if (swapchainResource == nullptr || !swapchainResource->swapchain) {
-            throw std::runtime_error("acquireNextImage swapchain is invalid");
+            throw std::runtime_error("AcquireNextImage swapchain is invalid");
         }
 
         swapchainResource->currentImage = swapchainResource->swapchain->GetCurrentBackBufferIndex();
@@ -209,7 +209,7 @@ bool RHID3D12::acquireNextImage(
     }
 }
 
-bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+bool RHID3D12::Submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const RHIQueueWaitDesc& wait : desc.waits) {
             const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
@@ -225,7 +225,7 @@ bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage)
         }
 
         // 当前 skeleton 没有完整 RHIFramePacket command list 录制。若未来 Frame 片段打开 commandList，
-        // submit 会在这里 Close + ExecuteCommandLists，再用 fence 把 GPU 顺序暴露给 CPU。
+        // Submit 会在这里 Close + ExecuteCommandLists，再用 fence 把 GPU 顺序暴露给 CPU。
         if (impl_->commandListOpen) {
             throwIfFailed(impl_->commandList->Close(), "Close command list failed");
             ID3D12CommandList* lists[] = {impl_->commandList.Get()};
@@ -244,7 +244,7 @@ bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage)
 
         if (Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, desc.cpuWaitGPUSignal)) {
             ++fence->value;
-            throwIfFailed(impl_->graphicsQueue->Signal(fence->fence.Get(), fence->value), "ID3D12CommandQueue::Signal submit fence failed");
+            throwIfFailed(impl_->graphicsQueue->Signal(fence->fence.Get(), fence->value), "ID3D12CommandQueue::Signal Submit fence failed");
             fence->signaled = true;
         }
 
@@ -260,7 +260,7 @@ bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage)
     }
 }
 
-bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
+bool RHID3D12::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
         if (swapchain == nullptr || !swapchain->swapchain) {
@@ -273,7 +273,7 @@ bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
                 throw std::runtime_error("RHIPresentDesc contains an invalid wait semaphore");
             }
             if (semaphore->desc.type == RHIGPUWaitGPUSignalType::Binary && !semaphore->signaled) {
-                throw std::runtime_error("D3D12 present wait semaphore has not been signaled");
+                throw std::runtime_error("D3D12 Present wait semaphore has not been signaled");
             }
         }
 
@@ -298,6 +298,11 @@ bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // - Semaphore 暂时是 CPU 模拟，后续若需要跨进程/跨队列同步可扩展到 shared fence。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

@@ -39,7 +39,7 @@ std::variant<
 >;
 ```
 
-上层只调用一次 `RHIDevice::createBuffer()`。`RHIDevice.cpp` 根据当前 variant 中保存的 API 实现 直接转发，不再维护三套内容几乎相同的 Device 头文件，也不使用 `virtual/override`。
+上层只调用一次 `RHIDevice::CreateBuffer()`。`RHIDevice.cpp` 根据当前 variant 中保存的 API 实现 直接转发，不再维护三套内容几乎相同的 Device 头文件，也不使用 `virtual/override`。
 
 ## 数据流
 
@@ -67,7 +67,7 @@ desc.backend.applicationName = "MyEngine";
 desc.backend.preferredApi = rhi::RHIGraphicsAPI::Vulkan;
 
 std::string error;
-std::unique_ptr<rhi::RHIDevice> device = rhi::createInitializedRHIDevice(desc, &error);
+std::unique_ptr<rhi::RHIDevice> device = rhi::CreateInitializedRHIDevice(desc, &error);
 if (device == nullptr) {
     throw std::runtime_error(error);
 }
@@ -75,6 +75,11 @@ if (device == nullptr) {
 rhi::RHIBufferDesc bufferDesc{};
 bufferDesc.size = 4096;
 bufferDesc.memoryUsage = rhi::RHIMemory::GpuOnly;
-rhi::RHIBuffer buffer = device->createBuffer(bufferDesc);
+rhi::RHIBuffer buffer = device->CreateBuffer(bufferDesc);
 ```
+
+
+
+
+
 

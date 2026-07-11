@@ -9,7 +9,7 @@ RHID3D12::RHID3D12()
 }
 
 RHID3D12::~RHID3D12() {
-    shutdown();
+    Shutdown();
 }
 
 RHID3D12::RHID3D12(RHID3D12&&) noexcept = default;
@@ -22,10 +22,10 @@ RHID3D12& RHID3D12::operator=(RHID3D12&&) noexcept = default;
 // 3. 创建 ID3D12Device、graphics queue、command allocator/list 和内部 fence；
 // 4. 创建 CPU descriptor heaps。当前后端先保存 CPU descriptor，后续完整 RHIFramePacket 录制时再拷贝到 shader-visible heap；
 // 5. 生成 RHICapabilities，并校验 requiredFeatures。
-bool RHID3D12::initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
+bool RHID3D12::Initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
     try {
-        if (isInitialized()) {
-            shutdown();
+        if (IsInitialized()) {
+            Shutdown();
         }
 
         impl_ = std::make_unique<Impl>();
@@ -108,32 +108,32 @@ bool RHID3D12::initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
         if (errorMessage != nullptr) {
             *errorMessage = error.what();
         }
-        shutdown();
+        Shutdown();
         return false;
     }
 }
 
-void RHID3D12::shutdown() noexcept {
+void RHID3D12::Shutdown() noexcept {
     if (!impl_) {
         return;
     }
 
-    waitIdle();
+    WaitIdle();
 
-    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
-    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
-    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       Destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        Destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   Destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  Destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       Destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) Destroy(RHIBindSetLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       Destroy(RHIQueryPool(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       Destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           Destroy(RHICPUWaitGPUSignal(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          Destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         Destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
 
     impl_->native = {};
     impl_->cbvSrvUavHeap = {};
@@ -155,15 +155,15 @@ void RHID3D12::shutdown() noexcept {
     impl_->commandListOpen = false;
 }
 
-bool RHID3D12::isInitialized() const noexcept {
+bool RHID3D12::IsInitialized() const noexcept {
     return impl_ != nullptr && impl_->device != nullptr && impl_->graphicsQueue != nullptr;
 }
 
-const RHICapabilities& RHID3D12::capabilities() const noexcept {
+const RHICapabilities& RHID3D12::Capabilities() const noexcept {
     return impl_->caps;
 }
 
-const RHID3D12NativeHandles& RHID3D12::nativeHandles() const noexcept {
+const RHID3D12NativeHandles& RHID3D12::NativeHandles() const noexcept {
     return impl_->native;
 }
 
@@ -172,6 +172,11 @@ const RHID3D12NativeHandles& RHID3D12::nativeHandles() const noexcept {
 // 需要在 Frame 片段中补 command allocator reset、barrier、root signature/descriptor heap 绑定等步骤。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

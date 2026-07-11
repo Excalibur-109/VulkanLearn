@@ -111,7 +111,7 @@ static void applyPipeline(ID3D11DeviceContext* context, const PipelineResourceT&
     context->OMSetBlendState(pipeline.blendState.Get(), pipeline.blendConstants.data(), pipeline.sampleMask);
 }
 
-bool RHID3D11::acquireNextImage(
+bool RHID3D11::AcquireNextImage(
     RHISwapchain swapchain,
     RHIGPUWaitGPUSignal gpuWaitGPUSignal,
     RHICPUWaitGPUSignal cpuWaitGPUSignal,
@@ -121,7 +121,7 @@ bool RHID3D11::acquireNextImage(
         // D3D11 swapchain 后端当前只包装一个 back buffer，所以 imageIndex 固定为 0。
         // semaphore/fence 在这里标记为已 signal，用来保持和 Vulkan 调用流程一致。
         if (getRenderResource(impl_->swapchains, swapchain) == nullptr) {
-            throw std::runtime_error("acquireNextImage swapchain is invalid");
+            throw std::runtime_error("AcquireNextImage swapchain is invalid");
         }
         if (imageIndex != nullptr) {
             *imageIndex = 0;
@@ -146,7 +146,7 @@ bool RHID3D11::acquireNextImage(
 
 // D3D11 immediate context 没有 Vulkan 那样显式提交 command buffer。
 // Flush 会把当前累积的状态/命令推给驱动；semaphore/fence 在本实现中作为统一接口的轻量模拟。
-bool RHID3D11::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+bool RHID3D11::Submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const RHIQueueWaitDesc& wait : desc.waits) {
             const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
@@ -187,7 +187,7 @@ bool RHID3D11::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage)
 
 // Present 把当前 back buffer 交给 DXGI。Immediate 模式/allowTearing 走 syncInterval=0，
 // 其它模式用 syncInterval=1 等待垂直同步。
-bool RHID3D11::present(const RHIPresentDesc& desc, std::string* errorMessage) {
+bool RHID3D11::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
         if (swapchain == nullptr || !swapchain->swapchain) {
@@ -205,10 +205,10 @@ bool RHID3D11::present(const RHIPresentDesc& desc, std::string* errorMessage) {
     }
 }
 
-// D3D11 的 recordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
+// D3D11 的 RecordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
 // 先上传 buffer/texture，再按 RenderGraph pass 绑定 RTV/DSV、viewport/scissor，最后执行
 // draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种 barrier。
-bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     try {
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
             if (upload.data.empty()) {
@@ -443,13 +443,13 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
         }
 
         for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
-            if (!submit(submitDesc, errorMessage)) {
+            if (!Submit(submitDesc, errorMessage)) {
                 return false;
             }
         }
 
         if (packet.present.has_value()) {
-            return present(*packet.present, errorMessage);
+            return Present(*packet.present, errorMessage);
         }
         return true;
     } catch (const std::exception& error) {
@@ -460,25 +460,25 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
     }
 }
 
-bool RHID3D11::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D11::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     // 和 Vulkan 后端保持同一入口：有 workload 就由 renderer 执行帧包；没有 workload 时只处理
-    // 外部传入的 submit/present 描述。
+    // 外部传入的 Submit/Present 描述。
     if (!packet.workloads.empty()) {
-        return recordAndSubmitFrame(packet, errorMessage);
+        return RecordAndSubmitFrame(packet, errorMessage);
     }
     for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
-        if (!submit(submitDesc, errorMessage)) {
+        if (!Submit(submitDesc, errorMessage)) {
             return false;
         }
     }
     if (packet.present.has_value()) {
-        return present(*packet.present, errorMessage);
+        return Present(*packet.present, errorMessage);
     }
     return true;
 }
 
-void RHID3D11::waitIdle() const noexcept {
-    if (!isInitialized()) {
+void RHID3D11::WaitIdle() const noexcept {
+    if (!IsInitialized()) {
         return;
     }
 
@@ -496,10 +496,10 @@ void RHID3D11::waitIdle() const noexcept {
     }
 }
 
-// destroy 系列只清空对应槽位里的 COM 对象和描述，不压缩 vector。
+// Destroy 系列只清空对应槽位里的 COM 对象和描述，不压缩 vector。
 // RHIHandle 是 1-based index，压缩会导致已发出的 RHIHandle 指向错误资源。
 // D3D11 frame 片段负责把 RHIFramePacket 直接执行到 immediate context。
-// 这里和 Vulkan 后端差别最大：Vulkan 是录制 VkCommandBuffer 后 submit；
+// 这里和 Vulkan 后端差别最大：Vulkan 是录制 VkCommandBuffer 后 Submit；
 // D3D11 是边遍历 RHIFramePacket 边设置 context 状态并调用 Draw/Dispatch。
 // 读这部分时重点关注三层映射：
 // - BindSet -> VS/PS/CS 等 stage 的 CBV/SRV/Sampler/UAV slot；
@@ -507,6 +507,11 @@ void RHID3D11::waitIdle() const noexcept {
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

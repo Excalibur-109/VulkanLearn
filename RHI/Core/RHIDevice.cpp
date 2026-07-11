@@ -65,27 +65,27 @@ RHIDevice::RHIDevice(RHIGraphicsAPI requestedApi)
 }
 
 RHIDevice::~RHIDevice() {
-    shutdown();
+    Shutdown();
 }
 
 RHIDevice::RHIDevice(RHIDevice&&) noexcept = default;
 RHIDevice& RHIDevice::operator=(RHIDevice&&) noexcept = default;
 
-RHIGraphicsAPI RHIDevice::api() const noexcept {
+RHIGraphicsAPI RHIDevice::Api() const noexcept {
     return impl_->activeApi != RHIGraphicsAPI::Unknown ? impl_->activeApi : impl_->requestedApi;
 }
 
-const char* RHIDevice::backendName() const noexcept {
-    switch (api()) {
+const char* RHIDevice::BackendName() const noexcept {
+    switch (Api()) {
     case RHIGraphicsAPI::Vulkan:     return "Vulkan";
     case RHIGraphicsAPI::Direct3D11: return "Direct3D 11";
     case RHIGraphicsAPI::Direct3D12: return "Direct3D 12";
-    default:                         return "Uninitialized RHI";
+    default:                         return "UnInitialized RHI";
     }
 }
 
-bool RHIDevice::initialize(const RHIDeviceCreateDesc& desc, std::string* errorMessage) {
-    shutdown();
+bool RHIDevice::Initialize(const RHIDeviceCreateDesc& desc, std::string* errorMessage) {
+    Shutdown();
 
     RHIGraphicsAPI selectedApi = impl_->requestedApi;
     if (selectedApi == RHIGraphicsAPI::Unknown) {
@@ -111,7 +111,7 @@ bool RHIDevice::initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
         nativeDesc.queues = desc.queues;
 
         RHIVulkan& implementation = impl_->implementation.emplace<RHIVulkan>();
-        if (!implementation.initialize(nativeDesc, errorMessage)) {
+        if (!implementation.Initialize(nativeDesc, errorMessage)) {
             impl_->implementation.emplace<std::monostate>();
             return false;
         }
@@ -127,7 +127,7 @@ bool RHIDevice::initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
         nativeDesc.allowWarpFallback = desc.allowSoftwareAdapter;
 
         RHID3D11& implementation = impl_->implementation.emplace<RHID3D11>();
-        if (!implementation.initialize(nativeDesc, errorMessage)) {
+        if (!implementation.Initialize(nativeDesc, errorMessage)) {
             impl_->implementation.emplace<std::monostate>();
             return false;
         }
@@ -142,7 +142,7 @@ bool RHIDevice::initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
         nativeDesc.allowWarpFallback = desc.allowSoftwareAdapter;
 
         RHID3D12& implementation = impl_->implementation.emplace<RHID3D12>();
-        if (!implementation.initialize(nativeDesc, errorMessage)) {
+        if (!implementation.Initialize(nativeDesc, errorMessage)) {
             impl_->implementation.emplace<std::monostate>();
             return false;
         }
@@ -160,26 +160,26 @@ bool RHIDevice::initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
     return true;
 }
 
-void RHIDevice::shutdown() noexcept {
-    visitImplementationNoexcept(impl_->implementation, [](auto& implementation) { implementation.shutdown(); });
+void RHIDevice::Shutdown() noexcept {
+    visitImplementationNoexcept(impl_->implementation, [](auto& implementation) { implementation.Shutdown(); });
     impl_->implementation.emplace<std::monostate>();
     impl_->activeApi = RHIGraphicsAPI::Unknown;
 }
 
-bool RHIDevice::isInitialized() const noexcept {
+bool RHIDevice::IsInitialized() const noexcept {
     return std::visit(
         [](const auto& implementation) noexcept {
             using Implementation = std::remove_cvref_t<decltype(implementation)>;
             if constexpr (std::is_same_v<Implementation, std::monostate>) {
                 return false;
             } else {
-                return implementation.isInitialized();
+                return implementation.IsInitialized();
             }
         },
         impl_->implementation);
 }
 
-const RHICapabilities& RHIDevice::capabilities() const noexcept {
+const RHICapabilities& RHIDevice::Capabilities() const noexcept {
     static const RHICapabilities emptyCapabilities{};
     return std::visit(
         [&](const auto& implementation) -> const RHICapabilities& {
@@ -187,7 +187,7 @@ const RHICapabilities& RHIDevice::capabilities() const noexcept {
             if constexpr (std::is_same_v<Implementation, std::monostate>) {
                 return emptyCapabilities;
             } else {
-                return implementation.capabilities();
+                return implementation.Capabilities();
             }
         },
         impl_->implementation);
@@ -198,63 +198,63 @@ const RHICapabilities& RHIDevice::capabilities() const noexcept {
         return visitImplementation<ReturnType>(impl_->implementation, [&](auto& implementation) { return implementation.Method(desc); }); \
     }
 
-RHI_FORWARD_RETURN(RHIBuffer, createBuffer, RHIBufferDesc)
-RHI_FORWARD_RETURN(RHITexture, createTexture, RHITextureDesc)
-RHI_FORWARD_RETURN(RHITextureView, createTextureView, RHITextureViewDesc)
-RHI_FORWARD_RETURN(RHISampler, createSampler, RHISamplerDesc)
-RHI_FORWARD_RETURN(RHIShader, createShaderModule, RHIShaderDesc)
-RHI_FORWARD_RETURN(RHIBindSetLayout, createBindSetLayout, RHIBindSetLayoutDesc)
-RHI_FORWARD_RETURN(RHIBindSet, createBindSet, RHIBindSetDesc)
-RHI_FORWARD_RETURN(RHIPipelineLayout, createPipelineLayout, RHIPipelineLayoutDesc)
-RHI_FORWARD_RETURN(RHIPipelineCache, createPipelineCache, RHIPipelineCacheDesc)
-RHI_FORWARD_RETURN(RHIPipeline, createGraphicsPipeline, RHIGraphicsPipelineDesc)
-RHI_FORWARD_RETURN(RHIPipeline, createComputePipeline, RHIComputePipelineDesc)
-RHI_FORWARD_RETURN(RHIQueryPool, createQueryPool, RHIQueryPoolDesc)
-RHI_FORWARD_RETURN(RHIGPUWaitGPUSignal, createGPUWaitGPUSignal, RHIGPUWaitGPUSignalDesc)
-RHI_FORWARD_RETURN(RHICPUWaitGPUSignal, createCPUWaitGPUSignal, RHICPUWaitGPUSignalDesc)
-RHI_FORWARD_RETURN(RHISwapchain, createSwapchain, RHISwapchainDesc)
+RHI_FORWARD_RETURN(RHIBuffer, CreateBuffer, RHIBufferDesc)
+RHI_FORWARD_RETURN(RHITexture, CreateTexture, RHITextureDesc)
+RHI_FORWARD_RETURN(RHITextureView, CreateTextureView, RHITextureViewDesc)
+RHI_FORWARD_RETURN(RHISampler, CreateSampler, RHISamplerDesc)
+RHI_FORWARD_RETURN(RHIShader, CreateShaderModule, RHIShaderDesc)
+RHI_FORWARD_RETURN(RHIBindSetLayout, CreateBindSetLayout, RHIBindSetLayoutDesc)
+RHI_FORWARD_RETURN(RHIBindSet, CreateBindSet, RHIBindSetDesc)
+RHI_FORWARD_RETURN(RHIPipelineLayout, CreatePipelineLayout, RHIPipelineLayoutDesc)
+RHI_FORWARD_RETURN(RHIPipelineCache, CreatePipelineCache, RHIPipelineCacheDesc)
+RHI_FORWARD_RETURN(RHIPipeline, CreateGraphicsPipeline, RHIGraphicsPipelineDesc)
+RHI_FORWARD_RETURN(RHIPipeline, CreateComputePipeline, RHIComputePipelineDesc)
+RHI_FORWARD_RETURN(RHIQueryPool, CreateQueryPool, RHIQueryPoolDesc)
+RHI_FORWARD_RETURN(RHIGPUWaitGPUSignal, CreateGPUWaitGPUSignal, RHIGPUWaitGPUSignalDesc)
+RHI_FORWARD_RETURN(RHICPUWaitGPUSignal, CreateCPUWaitGPUSignal, RHICPUWaitGPUSignalDesc)
+RHI_FORWARD_RETURN(RHISwapchain, CreateSwapchain, RHISwapchainDesc)
 
 #undef RHI_FORWARD_RETURN
 
-std::vector<RHITexture> RHIDevice::getSwapchainImages(RHISwapchain handle) const {
-    return visitImplementation<std::vector<RHITexture>>(impl_->implementation, [&](const auto& implementation) { return implementation.getSwapchainImages(handle); });
+std::vector<RHITexture> RHIDevice::GetSwapchainImages(RHISwapchain handle) const {
+    return visitImplementation<std::vector<RHITexture>>(impl_->implementation, [&](const auto& implementation) { return implementation.GetSwapchainImages(handle); });
 }
 
-std::vector<RHITextureView> RHIDevice::getSwapchainImageViews(RHISwapchain handle) const {
-    return visitImplementation<std::vector<RHITextureView>>(impl_->implementation, [&](const auto& implementation) { return implementation.getSwapchainImageViews(handle); });
+std::vector<RHITextureView> RHIDevice::GetSwapchainImageViews(RHISwapchain handle) const {
+    return visitImplementation<std::vector<RHITextureView>>(impl_->implementation, [&](const auto& implementation) { return implementation.GetSwapchainImageViews(handle); });
 }
 
-RHIFormat RHIDevice::getSwapchainFormat(RHISwapchain handle) const {
-    return visitImplementation<RHIFormat>(impl_->implementation, [&](const auto& implementation) { return implementation.getSwapchainFormat(handle); });
+RHIFormat RHIDevice::GetSwapchainFormat(RHISwapchain handle) const {
+    return visitImplementation<RHIFormat>(impl_->implementation, [&](const auto& implementation) { return implementation.GetSwapchainFormat(handle); });
 }
 
-RHIExtent2D RHIDevice::getSwapchainExtent(RHISwapchain handle) const {
-    return visitImplementation<RHIExtent2D>(impl_->implementation, [&](const auto& implementation) { return implementation.getSwapchainExtent(handle); });
+RHIExtent2D RHIDevice::GetSwapchainExtent(RHISwapchain handle) const {
+    return visitImplementation<RHIExtent2D>(impl_->implementation, [&](const auto& implementation) { return implementation.GetSwapchainExtent(handle); });
 }
 
-bool RHIDevice::acquireNextImage(RHISwapchain swapchain, RHIGPUWaitGPUSignal gpuWaitGPUSignal, RHICPUWaitGPUSignal cpuWaitGPUSignal, u32* imageIndex, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.acquireNextImage(swapchain, gpuWaitGPUSignal, cpuWaitGPUSignal, imageIndex, errorMessage); });
+bool RHIDevice::AcquireNextImage(RHISwapchain swapchain, RHIGPUWaitGPUSignal gpuWaitGPUSignal, RHICPUWaitGPUSignal cpuWaitGPUSignal, u32* imageIndex, std::string* errorMessage) {
+    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.AcquireNextImage(swapchain, gpuWaitGPUSignal, cpuWaitGPUSignal, imageIndex, errorMessage); });
 }
 
-bool RHIDevice::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.submit(desc, errorMessage); });
+bool RHIDevice::Submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.Submit(desc, errorMessage); });
 }
 
-bool RHIDevice::present(const RHIPresentDesc& desc, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.present(desc, errorMessage); });
+bool RHIDevice::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
+    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.Present(desc, errorMessage); });
 }
 
-bool RHIDevice::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.submitFrame(packet, errorMessage); });
+bool RHIDevice::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.SubmitFrame(packet, errorMessage); });
 }
 
-void RHIDevice::waitIdle() const noexcept {
-    visitImplementationNoexcept(impl_->implementation, [](const auto& implementation) { implementation.waitIdle(); });
+void RHIDevice::WaitIdle() const noexcept {
+    visitImplementationNoexcept(impl_->implementation, [](const auto& implementation) { implementation.WaitIdle(); });
 }
 
 #define RHI_FORWARD_DESTROY(HandleType) \
-    void RHIDevice::destroy(HandleType handle) noexcept { \
-        visitImplementationNoexcept(impl_->implementation, [&](auto& implementation) { implementation.destroy(handle); }); \
+    void RHIDevice::Destroy(HandleType handle) noexcept { \
+        visitImplementationNoexcept(impl_->implementation, [&](auto& implementation) { implementation.Destroy(handle); }); \
     }
 
 RHI_FORWARD_DESTROY(RHIBuffer)
@@ -275,6 +275,11 @@ RHI_FORWARD_DESTROY(RHISwapchain)
 #undef RHI_FORWARD_DESTROY
 
 } // namespace rhi
+
+
+
+
+
 
 
 

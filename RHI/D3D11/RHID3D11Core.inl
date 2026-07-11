@@ -9,7 +9,7 @@ RHID3D11::RHID3D11()
 }
 
 RHID3D11::~RHID3D11() {
-    shutdown();
+    Shutdown();
 }
 
 RHID3D11::RHID3D11(RHID3D11&&) noexcept = default;
@@ -22,10 +22,10 @@ RHID3D11& RHID3D11::operator=(RHID3D11&&) noexcept = default;
 // 3. 允许在硬件设备失败时 fallback 到 WARP；
 // 4. 生成 RHICapabilities，并检查 minimumFeatureLevel/requiredFeatures；
 // 5. 刷新 native handle，供示例或平台层必要时访问原生对象。
-bool RHID3D11::initialize(const RHID3D11Desc& desc, std::string* errorMessage) {
+bool RHID3D11::Initialize(const RHID3D11Desc& desc, std::string* errorMessage) {
     try {
-        if (isInitialized()) {
-            shutdown();
+        if (IsInitialized()) {
+            Shutdown();
         }
 
         impl_ = std::make_unique<Impl>();
@@ -111,12 +111,12 @@ bool RHID3D11::initialize(const RHID3D11Desc& desc, std::string* errorMessage) {
         if (errorMessage != nullptr) {
             *errorMessage = error.what();
         }
-        shutdown();
+        Shutdown();
         return false;
     }
 }
 
-void RHID3D11::shutdown() noexcept {
+void RHID3D11::Shutdown() noexcept {
     if (!impl_) {
         return;
     }
@@ -130,20 +130,20 @@ void RHID3D11::shutdown() noexcept {
 
     // 按依赖反向释放：swapchain/backbuffer view 先释放，pipeline/bind set 等引用资源的对象
     // 先清掉，最后再释放 texture/buffer。ComPtr 会处理 COM Release，vector 槽位不压缩。
-    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
-    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
-    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       Destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        Destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   Destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  Destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       Destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) Destroy(RHIBindSetLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       Destroy(RHIQueryPool(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       Destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           Destroy(RHICPUWaitGPUSignal(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          Destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         Destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
 
     impl_->native = {};
     impl_->context.Reset();
@@ -152,28 +152,33 @@ void RHID3D11::shutdown() noexcept {
     impl_->factory.Reset();
 }
 
-bool RHID3D11::isInitialized() const noexcept {
+bool RHID3D11::IsInitialized() const noexcept {
     return impl_ != nullptr && impl_->device != nullptr && impl_->context != nullptr;
 }
 
-const RHICapabilities& RHID3D11::capabilities() const noexcept {
+const RHICapabilities& RHID3D11::Capabilities() const noexcept {
     return impl_->caps;
 }
 
-const RHID3D11NativeHandles& RHID3D11::nativeHandles() const noexcept {
+const RHID3D11NativeHandles& RHID3D11::NativeHandles() const noexcept {
     return impl_->native;
 }
 
 // RHIBufferDesc 会映射到 D3D11_BUFFER_DESC。D3D11 constant buffer 要 16 字节对齐；raw storage
 // buffer view 需要 4 字节对齐，并通过 MISC_BUFFER_ALLOW_RAW_VIEWS 允许创建 SRV/UAV。
 // D3D11 core 片段负责“后端从无到可用”的生命周期：
-// - initialize 创建 DXGI factory、选择 adapter、创建 device/context，并填写 RHICapabilities；
-// - shutdown 按依赖反向释放资源，并清掉 immediate context 持有的状态引用；
-// - capabilities/nativeHandles 提供上层查询能力和必要的原生对象访问。
+// - Initialize 创建 DXGI factory、选择 adapter、创建 device/context，并填写 RHICapabilities；
+// - Shutdown 按依赖反向释放资源，并清掉 immediate context 持有的状态引用；
+// - Capabilities/NativeHandles 提供上层查询能力和必要的原生对象访问。
 // 这里对应 Vulkan 后端的 RHIVulkanCore.inl，但 D3D11 只有一个 immediate context，
 // 不需要显式创建 queue、command pool 或 descriptor pool。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

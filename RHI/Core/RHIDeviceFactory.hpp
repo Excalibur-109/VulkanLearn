@@ -7,12 +7,16 @@
 
 namespace rhi {
 
-[[nodiscard]] std::unique_ptr<RHIDevice> createRHIDevice(
+[[nodiscard]] std::unique_ptr<RHIDevice> CreateRHIDevice(
     RHIGraphicsAPI api,
     std::string* errorMessage = nullptr);
 
-[[nodiscard]] std::unique_ptr<RHIDevice> createInitializedRHIDevice(
+[[nodiscard]] std::unique_ptr<RHIDevice> CreateInitializedRHIDevice(
     const RHIDeviceCreateDesc& desc,
     std::string* errorMessage = nullptr);
 
 } // namespace rhi
+
+
+
+

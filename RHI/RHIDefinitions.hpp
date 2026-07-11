@@ -1860,7 +1860,7 @@ struct RHIRenderPassWorkload {
 
 /// GPU-wait-GPU 信号类型。Timeline 使用递增计数，Binary 表达一次依赖。
 enum class RHIGPUWaitGPUSignalType : u8 {
-    Binary, ///< 二值 GPU 信号，只表达一次 wait/signal，用于单个提交或 present 依赖。
+    Binary, ///< 二值 GPU 信号，只表达一次 wait/signal，用于单个提交或 Present 依赖。
     Timeline ///< 时间线 GPU 信号，使用递增 u64 值表达多个 GPU 提交之间的有序同步。
 };
 
@@ -1904,7 +1904,7 @@ struct RHIQueueSubmitDesc {
 struct RHIPresentDesc {
     RHISwapchain swapchain{}; ///< 目标 swapchain。
     u32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
-    std::vector<RHIGPUWaitGPUSignal> waitSignals; ///< present 前需要等待的 GPU-wait-GPU 信号。
+    std::vector<RHIGPUWaitGPUSignal> waitSignals; ///< Present 前需要等待的 GPU-wait-GPU 信号。
     RHIPresentMode presentMode = RHIPresentMode::FIFO; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
     bool allowTearing = false; ///< 本次呈现是否允许 tearing。
 };
@@ -2004,7 +2004,7 @@ struct RHIRenderObjectSetDesc {
 enum class RHIRenderGraphResourceType : u8 {
     Buffer, ///< RenderGraph 管理或引用的 buffer 资源。
     Texture, ///< RenderGraph 管理或引用的普通 texture/image 资源。
-    SwapchainImage ///< 外部导入的 swapchain image，通常作为最终 present 目标。
+    SwapchainImage ///< 外部导入的 swapchain image，通常作为最终 Present 目标。
 };
 
 /// RenderGraph 资源标志，用于别名、导入导出和临时资源优化。
@@ -2171,6 +2171,11 @@ struct RHICapabilities {
 };
 
 } // namespace rhi
+
+
+
+
+
 
 
 

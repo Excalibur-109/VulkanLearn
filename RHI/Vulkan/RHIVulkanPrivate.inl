@@ -888,7 +888,7 @@ static std::vector<VkExtensionProperties> enumerateDeviceExtensions(VkPhysicalDe
 }
 
 /// 参考 Vulkan-Tutorial simple_engine 的 SwapChainSupportDetails：
-/// surface 能力必须集中查询，物理设备筛选和真正 createSwapchain 时都应该用同一套结果语义。
+/// surface 能力必须集中查询，物理设备筛选和真正 CreateSwapchain 时都应该用同一套结果语义。
 struct VulkanSwapchainSupport {
     VkSurfaceCapabilitiesKHR        capabilities{};
     std::vector<VkSurfaceFormatKHR> formats;
@@ -1180,6 +1180,13 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
 }
 
 } // namespace rhi
+
+
+
+
+
+
+
 
 
 

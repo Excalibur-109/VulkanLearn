@@ -9,7 +9,7 @@ RHIVulkan::RHIVulkan()
 }
 
 RHIVulkan::~RHIVulkan() {
-    shutdown();
+    Shutdown();
 }
 
 RHIVulkan::RHIVulkan(RHIVulkan&&) noexcept = default;
@@ -22,10 +22,10 @@ RHIVulkan& RHIVulkan::operator=(RHIVulkan&&) noexcept = default;
 // 3. 枚举物理设备并打分，选出满足 requiredFeatures 的 GPU；
 // 4. 创建 logical device，启用需要的 feature/extension，并取出各类队列；
 // 5. 创建 command pool、descriptor pool，并把设备限制整理成 RHICapabilities。
-bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage) {
+bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage) {
     try {
-        if (isInitialized()) {
-            shutdown();
+        if (IsInitialized()) {
+            Shutdown();
         }
 
         impl_ = std::make_unique<Impl>();
@@ -303,22 +303,22 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         if (errorMessage != nullptr) {
             *errorMessage = error.what();
         }
-        shutdown();
+        Shutdown();
         return false;
     }
 }
 
-void RHIVulkan::shutdown() noexcept {
+void RHIVulkan::Shutdown() noexcept {
     if (!impl_) {
         return;
     }
 
     if (impl_->native.device == VK_NULL_HANDLE) {
         if (impl_->debugMessenger != VK_NULL_HANDLE) {
-            auto destroyDebugMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+            auto DestroyDebugMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
                 vkGetInstanceProcAddr(impl_->native.instance, "vkDestroyDebugUtilsMessengerEXT"));
-            if (destroyDebugMessenger != nullptr) {
-                destroyDebugMessenger(impl_->native.instance, impl_->debugMessenger, nullptr);
+            if (DestroyDebugMessenger != nullptr) {
+                DestroyDebugMessenger(impl_->native.instance, impl_->debugMessenger, nullptr);
             }
             impl_->debugMessenger = VK_NULL_HANDLE;
         }
@@ -340,20 +340,20 @@ void RHIVulkan::shutdown() noexcept {
     // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind set 依赖 layout，
     // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
     // 不会自动追踪这些关系，所以后端需要保持明确顺序。
-    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
-    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
-    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       Destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        Destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   Destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  Destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       Destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) Destroy(RHIBindSetLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       Destroy(RHIQueryPool(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       Destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           Destroy(RHICPUWaitGPUSignal(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          Destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         Destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
 
     if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);
@@ -369,10 +369,10 @@ void RHIVulkan::shutdown() noexcept {
     impl_->native.device = VK_NULL_HANDLE;
 
     if (impl_->debugMessenger != VK_NULL_HANDLE) {
-        auto destroyDebugMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+        auto DestroyDebugMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
             vkGetInstanceProcAddr(impl_->native.instance, "vkDestroyDebugUtilsMessengerEXT"));
-        if (destroyDebugMessenger != nullptr) {
-            destroyDebugMessenger(impl_->native.instance, impl_->debugMessenger, nullptr);
+        if (DestroyDebugMessenger != nullptr) {
+            DestroyDebugMessenger(impl_->native.instance, impl_->debugMessenger, nullptr);
         }
         impl_->debugMessenger = VK_NULL_HANDLE;
     }
@@ -388,15 +388,15 @@ void RHIVulkan::shutdown() noexcept {
     }
 }
 
-bool RHIVulkan::isInitialized() const noexcept {
+bool RHIVulkan::IsInitialized() const noexcept {
     return impl_ != nullptr && impl_->native.device != VK_NULL_HANDLE;
 }
 
-const RHICapabilities& RHIVulkan::capabilities() const noexcept {
+const RHICapabilities& RHIVulkan::Capabilities() const noexcept {
     return impl_->caps;
 }
 
-const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
+const RHIVulkanNativeHandles& RHIVulkan::NativeHandles() const noexcept {
     return impl_->native;
 }
 
@@ -405,6 +405,11 @@ const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

@@ -4,8 +4,8 @@
 
 namespace rhi {
 
-RHIBuffer RHID3D12::createBuffer(const RHIBufferDesc& desc) {
-    if (!isInitialized()) {
+RHIBuffer RHID3D12::CreateBuffer(const RHIBufferDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
     if (desc.size == 0) {
@@ -63,8 +63,8 @@ RHIBuffer RHID3D12::createBuffer(const RHIBufferDesc& desc) {
 
 // D3D12 texture 创建时要同时决定 resource flags、初始 state 和可选 clear value。
 // 深度格式仍然使用 typeless 存储格式创建，再由 SRV/DSV 选择读取或深度测试解释方式。
-RHITexture RHID3D12::createTexture(const RHITextureDesc& desc) {
-    if (!isInitialized()) {
+RHITexture RHID3D12::CreateTexture(const RHITextureDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -130,8 +130,8 @@ RHITexture RHID3D12::createTexture(const RHITextureDesc& desc) {
     return makeRenderHandle<RHITexture>(impl_->textures, std::move(resource));
 }
 
-RHITextureView RHID3D12::createTextureView(const RHITextureViewDesc& desc) {
-    if (!isInitialized()) {
+RHITextureView RHID3D12::CreateTextureView(const RHITextureViewDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -182,8 +182,8 @@ RHITextureView RHID3D12::createTextureView(const RHITextureViewDesc& desc) {
     return makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(resource));
 }
 
-RHISampler RHID3D12::createSampler(const RHISamplerDesc& desc) {
-    if (!isInitialized()) {
+RHISampler RHID3D12::CreateSampler(const RHISamplerDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -297,8 +297,8 @@ static std::vector<std::byte> compileHlsl(const RHIShaderDesc& desc) {
     return result;
 }
 
-RHIShader RHID3D12::createShaderModule(const RHIShaderDesc& desc) {
-    if (!isInitialized()) {
+RHIShader RHID3D12::CreateShaderModule(const RHIShaderDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -311,14 +311,14 @@ RHIShader RHID3D12::createShaderModule(const RHIShaderDesc& desc) {
     return makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
 }
 
-RHIBindSetLayout RHID3D12::createBindSetLayout(const RHIBindSetLayoutDesc& desc) {
+RHIBindSetLayout RHID3D12::CreateBindSetLayout(const RHIBindSetLayoutDesc& desc) {
     Impl::BindSetLayoutResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIBindSetLayout>(impl_->bindSetLayouts, std::move(resource));
 }
 
-RHIBindSet RHID3D12::createBindSet(const RHIBindSetDesc& desc) {
-    if (!isInitialized()) {
+RHIBindSet RHID3D12::CreateBindSet(const RHIBindSetDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -519,8 +519,8 @@ static ComPtr<ID3D12RootSignature> createRootSignatureForLayout(
     return rootSignature;
 }
 
-RHIPipelineLayout RHID3D12::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
-    if (!isInitialized()) {
+RHIPipelineLayout RHID3D12::CreatePipelineLayout(const RHIPipelineLayoutDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -541,7 +541,7 @@ RHIPipelineLayout RHID3D12::createPipelineLayout(const RHIPipelineLayoutDesc& de
     return makeRenderHandle<RHIPipelineLayout>(impl_->pipelineLayouts, std::move(resource));
 }
 
-RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHID3D12::CreatePipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
@@ -554,6 +554,11 @@ RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

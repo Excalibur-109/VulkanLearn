@@ -4,19 +4,19 @@
 
 namespace rhi {
 
-bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     struct StagingResource {
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
     };
 
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    VkFence submitFence = VK_NULL_HANDLE;
+    VkFence SubmitFence = VK_NULL_HANDLE;
     std::vector<StagingResource> stagingResources;
 
     const auto cleanup = [&]() noexcept {
-        if (submitFence != VK_NULL_HANDLE) {
-            vkDestroyFence(impl_->native.device, submitFence, nullptr);
+        if (SubmitFence != VK_NULL_HANDLE) {
+            vkDestroyFence(impl_->native.device, SubmitFence, nullptr);
         }
         if (commandBuffer != VK_NULL_HANDLE) {
             vkFreeCommandBuffers(impl_->native.device, impl_->graphicsCommandPool, 1, &commandBuffer);
@@ -32,7 +32,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     };
 
     try {
-        if (!isInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
+        if (!IsInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
             throw std::runtime_error("RHIVulkan is not initialized or has no graphics command pool");
         }
 
@@ -432,38 +432,38 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         timelineInfo.signalSemaphoreValueCount = static_cast<u32>(signalValues.size());
         timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
-        submitInfo.waitSemaphoreCount = static_cast<u32>(waitSignals.size());
-        submitInfo.pWaitSemaphores = waitSignals.data();
-        submitInfo.pWaitDstStageMask = waitStages.data();
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
-        submitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
-        submitInfo.pSignalSemaphores = signalSemaphores.data();
+        VkSubmitInfo SubmitInfo{};
+        SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        SubmitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
+        SubmitInfo.waitSemaphoreCount = static_cast<u32>(waitSignals.size());
+        SubmitInfo.pWaitSemaphores = waitSignals.data();
+        SubmitInfo.pWaitDstStageMask = waitStages.data();
+        SubmitInfo.commandBufferCount = 1;
+        SubmitInfo.pCommandBuffers = &commandBuffer;
+        SubmitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
+        SubmitInfo.pSignalSemaphores = signalSemaphores.data();
 
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &submitFence) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateFence(submit) failed");
+        if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &SubmitFence) != VK_SUCCESS) {
+            throw std::runtime_error("vkCreateFence(Submit) failed");
         }
 
-        if (vkQueueSubmit(impl_->native.graphicsQueue, 1, &submitInfo, submitFence) != VK_SUCCESS) {
+        if (vkQueueSubmit(impl_->native.graphicsQueue, 1, &SubmitInfo, SubmitFence) != VK_SUCCESS) {
             throw std::runtime_error("vkQueueSubmit(recorded frame) failed");
         }
         const VkResult waitResult = vkWaitForFences(
-            impl_->native.device, 1, &submitFence, VK_TRUE, std::numeric_limits<u64>::max());
+            impl_->native.device, 1, &SubmitFence, VK_TRUE, std::numeric_limits<u64>::max());
         if (waitResult != VK_SUCCESS) {
             throw std::runtime_error("vkWaitForFences(recorded frame) failed");
         }
         cleanup();
         commandBuffer = VK_NULL_HANDLE;
-        submitFence = VK_NULL_HANDLE;
+        SubmitFence = VK_NULL_HANDLE;
         stagingResources.clear();
 
         if (packet.present.has_value()) {
-            return present(*packet.present, errorMessage);
+            return Present(*packet.present, errorMessage);
         }
         return true;
     } catch (const std::exception& error) {
@@ -475,33 +475,38 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     }
 }
 
-bool RHIVulkan::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHIVulkan::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     // RHIFramePacket 有 workload 时走“录制并提交”的路径；没有 workload 时只执行用户提供的
     // RHIQueueSubmitDesc/RHIPresentDesc，方便外部系统自己管理 command buffer。
     if (!packet.workloads.empty()) {
-        return recordAndSubmitFrame(packet, errorMessage);
+        return RecordAndSubmitFrame(packet, errorMessage);
     }
 
     for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
-        if (!submit(submitDesc, errorMessage)) {
+        if (!Submit(submitDesc, errorMessage)) {
             return false;
         }
     }
     if (packet.present.has_value()) {
-        return present(*packet.present, errorMessage);
+        return Present(*packet.present, errorMessage);
     }
     return true;
 }
 
-void RHIVulkan::waitIdle() const noexcept {
-    if (isInitialized()) {
+void RHIVulkan::WaitIdle() const noexcept {
+    if (IsInitialized()) {
         vkDeviceWaitIdle(impl_->native.device);
     }
 }
 
-// destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
+// Destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
 
 } // namespace rhi
+
+
+
+
+
 
 
 

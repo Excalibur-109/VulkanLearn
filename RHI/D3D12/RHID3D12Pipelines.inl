@@ -37,8 +37,8 @@ static D3D12_LOGIC_OP toD3D12LogicOp(RHILogicOp op) {
 
 // D3D12 graphics pipeline 是一个真正的 PSO。它会固定 shader bytecode、input layout、
 // rasterizer/depth/blend、RTV/DSV 格式、MSAA 等状态。后续 command list 只需要 SetPipelineState。
-RHIPipeline RHID3D12::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
-    if (!isInitialized()) {
+RHIPipeline RHID3D12::CreateGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -63,7 +63,7 @@ RHIPipeline RHID3D12::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc
 
     try {
         for (const RHIShaderDesc& shaderDesc : desc.shaders) {
-            RHIShader handle = createShaderModule(shaderDesc);
+            RHIShader handle = CreateShaderModule(shaderDesc);
             temporaryShaders.push_back(handle);
             switch (shaderDesc.stage) {
             case RHIShaderStage::Vertex:
@@ -202,19 +202,19 @@ RHIPipeline RHID3D12::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc
         impl_->setDebugName(resource.pipelineState.Get(), desc.debugName);
     } catch (...) {
         for (RHIShader handle : temporaryShaders) {
-            destroy(handle);
+            Destroy(handle);
         }
         throw;
     }
 
     for (RHIShader handle : temporaryShaders) {
-        destroy(handle);
+        Destroy(handle);
     }
     return makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
 }
 
-RHIPipeline RHID3D12::createComputePipeline(const RHIComputePipelineDesc& desc) {
-    if (!isInitialized()) {
+RHIPipeline RHID3D12::CreateComputePipeline(const RHIComputePipelineDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
@@ -223,10 +223,10 @@ RHIPipeline RHID3D12::createComputePipeline(const RHIComputePipelineDesc& desc) 
         throw std::runtime_error("RHIComputePipelineDesc::layout is invalid");
     }
 
-    RHIShader shaderHandle = createShaderModule(desc.shader);
+    RHIShader shaderHandle = CreateShaderModule(desc.shader);
     const Impl::ShaderResource* shader = getRenderResource(impl_->shaders, shaderHandle);
     if (shader == nullptr || shader->bytecode.empty()) {
-        destroy(shaderHandle);
+        Destroy(shaderHandle);
         throw std::runtime_error("RHIComputePipelineDesc requires a compute shader");
     }
 
@@ -246,7 +246,7 @@ RHIPipeline RHID3D12::createComputePipeline(const RHIComputePipelineDesc& desc) 
 
     throwIfFailed(impl_->device->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&resource.pipelineState)), "CreateComputePipelineState failed");
     impl_->setDebugName(resource.pipelineState.Get(), desc.debugName);
-    destroy(shaderHandle);
+    Destroy(shaderHandle);
     return makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
 }
 
@@ -255,4 +255,9 @@ RHIPipeline RHID3D12::createComputePipeline(const RHIComputePipelineDesc& desc) 
 // 但前提是 command list 还要正确绑定 root signature、descriptor heap 和具体 descriptor table。
 
 } // namespace rhi
+
+
+
+
+
 

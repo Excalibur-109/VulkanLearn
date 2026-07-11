@@ -221,13 +221,13 @@ GeneratedMesh generatePlaneAndSphere() {
     return mesh;
 }
 
-RHIBuffer createBuffer(RHIDevice& renderer, const char* name, u64 size, RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
+RHIBuffer CreateBuffer(RHIDevice& renderer, const char* name, u64 size, RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
     RHIBufferDesc desc{};
     desc.debugName = name;
     desc.size = size;
     desc.usage = usage;
     desc.memoryUsage = memoryUsage;
-    return renderer.createBuffer(desc);
+    return renderer.CreateBuffer(desc);
 }
 
 RHIShaderDesc makeShader(RHIShaderStage stage, const char* fileName, const char* debugName) {
@@ -306,11 +306,11 @@ FrameTargets createFrameTargets(RHIDevice& renderer, RHIExtent2D requestedExtent
     swapchainDesc.colorSpace = RHIColorSpace::SRGBNonlinear;
     swapchainDesc.presentMode = RHIPresentMode::FIFO;
     swapchainDesc.imageCount = 2;
-    targets.swapchain = renderer.createSwapchain(swapchainDesc);
-    targets.extent = renderer.getSwapchainExtent(targets.swapchain);
-    targets.colorFormat = renderer.getSwapchainFormat(targets.swapchain);
-    targets.swapchainImages = renderer.getSwapchainImages(targets.swapchain);
-    targets.swapchainImageViews = renderer.getSwapchainImageViews(targets.swapchain);
+    targets.swapchain = renderer.CreateSwapchain(swapchainDesc);
+    targets.extent = renderer.GetSwapchainExtent(targets.swapchain);
+    targets.colorFormat = renderer.GetSwapchainFormat(targets.swapchain);
+    targets.swapchainImages = renderer.GetSwapchainImages(targets.swapchain);
+    targets.swapchainImageViews = renderer.GetSwapchainImageViews(targets.swapchain);
 
     RHITextureDesc depthDesc{};
     depthDesc.debugName = "Example.SceneDepth";
@@ -318,22 +318,22 @@ FrameTargets createFrameTargets(RHIDevice& renderer, RHIExtent2D requestedExtent
     depthDesc.extent = {targets.extent.width, targets.extent.height, 1};
     depthDesc.format = RHIFormat::D32_Float;
     depthDesc.usage = RHITextureUsage::DepthStencilAttachment;
-    targets.depthTexture = renderer.createTexture(depthDesc);
+    targets.depthTexture = renderer.CreateTexture(depthDesc);
 
     RHITextureViewDesc depthViewDesc{};
     depthViewDesc.debugName = "Example.SceneDepthView";
     depthViewDesc.texture = targets.depthTexture;
     depthViewDesc.dimension = RHITextureViewDimension::View2D;
     depthViewDesc.aspect = RHITextureAspect::Depth;
-    targets.depthView = renderer.createTextureView(depthViewDesc);
+    targets.depthView = renderer.CreateTextureView(depthViewDesc);
 
     return targets;
 }
 
-void destroyFrameTargets(RHIDevice& renderer, FrameTargets& targets) {
-    renderer.destroy(targets.depthView);
-    renderer.destroy(targets.depthTexture);
-    renderer.destroy(targets.swapchain);
+void DestroyFrameTargets(RHIDevice& renderer, FrameTargets& targets) {
+    renderer.Destroy(targets.depthView);
+    renderer.Destroy(targets.depthTexture);
+    renderer.Destroy(targets.swapchain);
     targets = {};
 }
 
@@ -341,25 +341,25 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     ExampleResources resources{};
     resources.cpuMesh = generatePlaneAndSphere();
 
-    resources.vertexBuffer = createBuffer(
+    resources.vertexBuffer = CreateBuffer(
         renderer,
         "Example.GeometryVertices",
         sizeof(PbrVertex) * resources.cpuMesh.vertices.size(),
         RHIBufferUsage::Vertex | RHIBufferUsage::TransferDestination,
         RHIMemoryUsage::GpuOnly);
-    resources.indexBuffer = createBuffer(
+    resources.indexBuffer = CreateBuffer(
         renderer,
         "Example.GeometryIndices",
         sizeof(u32) * resources.cpuMesh.indices.size(),
         RHIBufferUsage::Index | RHIBufferUsage::TransferDestination,
         RHIMemoryUsage::GpuOnly);
-    resources.sceneUniformBuffer = createBuffer(
+    resources.sceneUniformBuffer = CreateBuffer(
         renderer,
         "Example.SceneUniforms",
         sizeof(SceneUniforms),
         RHIBufferUsage::Uniform | RHIBufferUsage::TransferDestination,
         RHIMemoryUsage::CpuToGpu);
-    resources.lightUniformBuffer = createBuffer(
+    resources.lightUniformBuffer = CreateBuffer(
         renderer,
         "Example.LightUniforms",
         sizeof(LightUniforms),
@@ -379,13 +379,13 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {{0.95F, 0.64F, 0.31F, 1.0F}, {0.85F, 0.28F, 0.0F, 0.0F}}
     };
 
-    resources.objectBuffer = createBuffer(
+    resources.objectBuffer = CreateBuffer(
         renderer,
         "Example.ObjectBuffer",
         sizeof(ObjectGpuData) * resources.objectData.size(),
         RHIBufferUsage::Storage | RHIBufferUsage::TransferDestination,
         RHIMemoryUsage::GpuOnly);
-    resources.materialBuffer = createBuffer(
+    resources.materialBuffer = CreateBuffer(
         renderer,
         "Example.MaterialBuffer",
         sizeof(MaterialGpuData) * resources.materialData.size(),
@@ -398,14 +398,14 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     shadowDesc.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1};
     shadowDesc.format = RHIFormat::D32_Float;
     shadowDesc.usage = RHITextureUsage::DepthStencilAttachment | RHITextureUsage::Sampled;
-    resources.shadowMap = renderer.createTexture(shadowDesc);
+    resources.shadowMap = renderer.CreateTexture(shadowDesc);
 
     RHITextureViewDesc shadowViewDesc{};
     shadowViewDesc.debugName = "Example.ShadowMapView";
     shadowViewDesc.texture = resources.shadowMap;
     shadowViewDesc.dimension = RHITextureViewDimension::View2D;
     shadowViewDesc.aspect = RHITextureAspect::Depth;
-    resources.shadowMapView = renderer.createTextureView(shadowViewDesc);
+    resources.shadowMapView = renderer.CreateTextureView(shadowViewDesc);
 
     RHISamplerDesc shadowSamplerDesc{};
     shadowSamplerDesc.debugName = "Example.ShadowCompareSampler";
@@ -418,7 +418,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     shadowSamplerDesc.enableCompare = true;
     shadowSamplerDesc.compareOp = RHICompareOp::LessOrEqual;
     shadowSamplerDesc.borderColor = RHIBorderColor::OpaqueWhite;
-    resources.shadowSampler = renderer.createSampler(shadowSamplerDesc);
+    resources.shadowSampler = renderer.CreateSampler(shadowSamplerDesc);
 
     RHIBindSetLayoutDesc sceneLayout{};
     sceneLayout.debugName = "Example.SceneLayout";
@@ -428,7 +428,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {1, RHIBindingType::UniformBuffer, RHIShaderStage::Fragment, 1},
         {2, RHIBindingType::CombinedTextureSampler, RHIShaderStage::Fragment, 1, false, RHITextureViewDimension::View2D, RHITextureSampleType::Depth}
     };
-    resources.sceneLayout = renderer.createBindSetLayout(sceneLayout);
+    resources.sceneLayout = renderer.CreateBindSetLayout(sceneLayout);
 
     RHIBindSetLayoutDesc objectLayout{};
     objectLayout.debugName = "Example.ObjectLayout";
@@ -437,16 +437,16 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {0, RHIBindingType::StorageBuffer, RHIShaderStage::Vertex, 1, false},
         {1, RHIBindingType::StorageBuffer, RHIShaderStage::Fragment, 1, false}
     };
-    resources.objectLayout = renderer.createBindSetLayout(objectLayout);
+    resources.objectLayout = renderer.CreateBindSetLayout(objectLayout);
 
     RHIPipelineLayoutDesc pipelineLayoutDesc{};
     pipelineLayoutDesc.debugName = "Example.PipelineLayout";
     pipelineLayoutDesc.bindSetLayouts = {resources.sceneLayout, resources.objectLayout};
-    resources.pipelineLayout = renderer.createPipelineLayout(pipelineLayoutDesc);
+    resources.pipelineLayout = renderer.CreatePipelineLayout(pipelineLayoutDesc);
 
     RHIPipelineCacheDesc cacheDesc{};
     cacheDesc.debugName = "Example.PipelineCache";
-    resources.pipelineCache = renderer.createPipelineCache(cacheDesc);
+    resources.pipelineCache = renderer.CreatePipelineCache(cacheDesc);
 
     RHIBindSetDesc sceneBindSet{};
     sceneBindSet.debugName = "Example.SceneBindSet";
@@ -456,7 +456,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {1, 0, RHIBindingType::UniformBuffer, {resources.lightUniformBuffer, 0, sizeof(LightUniforms)}},
         {2, 0, RHIBindingType::CombinedTextureSampler, {}, {resources.shadowMapView, resources.shadowMap}, resources.shadowSampler}
     };
-    resources.sceneBindSet = renderer.createBindSet(sceneBindSet);
+    resources.sceneBindSet = renderer.CreateBindSet(sceneBindSet);
 
     RHIBindSetDesc objectBindSet{};
     objectBindSet.debugName = "Example.ObjectBindSet";
@@ -465,10 +465,10 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {0, 0, RHIBindingType::StorageBuffer, {resources.objectBuffer, 0, sizeof(ObjectGpuData) * resources.objectData.size()}},
         {1, 0, RHIBindingType::StorageBuffer, {resources.materialBuffer, 0, sizeof(MaterialGpuData) * resources.materialData.size()}}
     };
-    resources.objectBindSet = renderer.createBindSet(objectBindSet);
+    resources.objectBindSet = renderer.CreateBindSet(objectBindSet);
 
-    resources.pbrPipeline = renderer.createGraphicsPipeline(makePbrPipelineDesc(resources.pipelineLayout, resources.pipelineCache, colorFormat));
-    resources.shadowPipeline = renderer.createGraphicsPipeline(makeShadowPipelineDesc(resources.pipelineLayout, resources.pipelineCache));
+    resources.pbrPipeline = renderer.CreateGraphicsPipeline(makePbrPipelineDesc(resources.pipelineLayout, resources.pipelineCache, colorFormat));
+    resources.shadowPipeline = renderer.CreateGraphicsPipeline(makeShadowPipelineDesc(resources.pipelineLayout, resources.pipelineCache));
 
     resources.meshDesc.debugName = "Example.GeneratedPlaneAndSphere";
     resources.meshDesc.vertexStreams = {{resources.vertexBuffer, 0, 0, sizeof(PbrVertex)}};
@@ -695,24 +695,24 @@ RHIFramePacket buildFramePacket(
     return packet;
 }
 
-void destroyExampleResources(RHIDevice& renderer, ExampleResources& resources) {
-    renderer.destroy(resources.pbrPipeline);
-    renderer.destroy(resources.shadowPipeline);
-    renderer.destroy(resources.pipelineCache);
-    renderer.destroy(resources.pipelineLayout);
-    renderer.destroy(resources.sceneBindSet);
-    renderer.destroy(resources.objectBindSet);
-    renderer.destroy(resources.sceneLayout);
-    renderer.destroy(resources.objectLayout);
-    renderer.destroy(resources.shadowSampler);
-    renderer.destroy(resources.shadowMapView);
-    renderer.destroy(resources.shadowMap);
-    renderer.destroy(resources.materialBuffer);
-    renderer.destroy(resources.objectBuffer);
-    renderer.destroy(resources.lightUniformBuffer);
-    renderer.destroy(resources.sceneUniformBuffer);
-    renderer.destroy(resources.indexBuffer);
-    renderer.destroy(resources.vertexBuffer);
+void DestroyExampleResources(RHIDevice& renderer, ExampleResources& resources) {
+    renderer.Destroy(resources.pbrPipeline);
+    renderer.Destroy(resources.shadowPipeline);
+    renderer.Destroy(resources.pipelineCache);
+    renderer.Destroy(resources.pipelineLayout);
+    renderer.Destroy(resources.sceneBindSet);
+    renderer.Destroy(resources.objectBindSet);
+    renderer.Destroy(resources.sceneLayout);
+    renderer.Destroy(resources.objectLayout);
+    renderer.Destroy(resources.shadowSampler);
+    renderer.Destroy(resources.shadowMapView);
+    renderer.Destroy(resources.shadowMap);
+    renderer.Destroy(resources.materialBuffer);
+    renderer.Destroy(resources.objectBuffer);
+    renderer.Destroy(resources.lightUniformBuffer);
+    renderer.Destroy(resources.sceneUniformBuffer);
+    renderer.Destroy(resources.indexBuffer);
+    renderer.Destroy(resources.vertexBuffer);
     resources = {};
 }
 
@@ -781,7 +781,7 @@ int main(int argc, char** argv) {
         };
 
         std::string errorMessage;
-        if (!renderer.initialize(rendererDesc, &errorMessage)) {
+        if (!renderer.Initialize(rendererDesc, &errorMessage)) {
             throw std::runtime_error("RHIDevice initialization failed: " + errorMessage);
         }
 
@@ -789,8 +789,8 @@ int main(int argc, char** argv) {
         ExampleResources resources = createExampleResources(renderer, targets.colorFormat);
         updateSceneUniforms(resources, targets.extent);
 
-        RHIGPUWaitGPUSignal imageAvailable = renderer.createGPUWaitGPUSignal({"Example.ImageAvailable", RHIGPUWaitGPUSignalType::Binary});
-        RHIGPUWaitGPUSignal renderFinished = renderer.createGPUWaitGPUSignal({"Example.RenderFinished", RHIGPUWaitGPUSignalType::Binary});
+        RHIGPUWaitGPUSignal imageAvailable = renderer.CreateGPUWaitGPUSignal({"Example.ImageAvailable", RHIGPUWaitGPUSignalType::Binary});
+        RHIGPUWaitGPUSignal renderFinished = renderer.CreateGPUWaitGPUSignal({"Example.RenderFinished", RHIGPUWaitGPUSignalType::Binary});
 
         u64 frameIndex = 0;
         while (!glfwWindowShouldClose(window) && (maxFrames == 0 || frameIndex < maxFrames)) {
@@ -798,33 +798,33 @@ int main(int argc, char** argv) {
 
             const RHIExtent2D drawableSize = waitForDrawableSize(window);
             if (drawableSize.width != targets.extent.width || drawableSize.height != targets.extent.height) {
-                renderer.waitIdle();
-                destroyFrameTargets(renderer, targets);
+                renderer.WaitIdle();
+                DestroyFrameTargets(renderer, targets);
                 targets = createFrameTargets(renderer, drawableSize);
             }
 
             updateSceneUniforms(resources, targets.extent);
 
             u32 imageIndex = 0;
-            if (!renderer.acquireNextImage(targets.swapchain, imageAvailable, RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
-                std::cerr << "acquireNextImage 失败: " << errorMessage << '\n';
+            if (!renderer.AcquireNextImage(targets.swapchain, imageAvailable, RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
+                std::cerr << "AcquireNextImage 失败: " << errorMessage << '\n';
                 break;
             }
 
             RHIFramePacket packet = buildFramePacket(resources, targets, imageIndex, imageAvailable, renderFinished, frameIndex++);
             // RHIFramePacket 将上传、阴影 Pass、PBR Pass、提交和呈现组织成一帧。
-            if (!renderer.submitFrame(packet, &errorMessage)) {
-                std::cerr << "submitFrame 失败: " << errorMessage << '\n';
+            if (!renderer.SubmitFrame(packet, &errorMessage)) {
+                std::cerr << "SubmitFrame 失败: " << errorMessage << '\n';
                 break;
             }
         }
 
-        renderer.waitIdle();
-        renderer.destroy(renderFinished);
-        renderer.destroy(imageAvailable);
-        destroyExampleResources(renderer, resources);
-        destroyFrameTargets(renderer, targets);
-        renderer.shutdown();
+        renderer.WaitIdle();
+        renderer.Destroy(renderFinished);
+        renderer.Destroy(imageAvailable);
+        DestroyExampleResources(renderer, resources);
+        DestroyFrameTargets(renderer, targets);
+        renderer.Shutdown();
         glfwDestroyWindow(window);
         return 0;
     } catch (const std::exception& error) {
@@ -832,6 +832,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
+
+
 
 
 

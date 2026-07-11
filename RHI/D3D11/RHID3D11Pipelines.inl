@@ -16,8 +16,8 @@ static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const RHIStencilFaceState& st
 // 图形 pipeline 在 D3D11 里不是一个原生大对象，而是一组状态对象和 shader 组合：
 // input layout、shader stages、rasterizer state、depth-stencil state、blend state。
 // applyPipeline 会在绘制时把这些对象依次设置到 immediate context。
-RHIPipeline RHID3D11::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
-    if (!isInitialized()) {
+RHIPipeline RHID3D11::CreateGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (getRenderResource(impl_->pipelineLayouts, desc.layout) == nullptr) {
@@ -36,7 +36,7 @@ RHIPipeline RHID3D11::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc
 
     try {
         for (const RHIShaderDesc& shaderDesc : desc.shaders) {
-            RHIShader handle = createShaderModule(shaderDesc);
+            RHIShader handle = CreateShaderModule(shaderDesc);
             temporaryShaders.push_back(handle);
             const Impl::ShaderResource* shader = getRenderResource(impl_->shaders, handle);
             switch (shaderDesc.stage) {
@@ -159,38 +159,38 @@ RHIPipeline RHID3D11::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc
         impl_->setDebugName(resource.blendState.Get(), desc.debugName + ".Blend");
     } catch (...) {
         for (RHIShader handle : temporaryShaders) {
-            destroy(handle);
+            Destroy(handle);
         }
         throw;
     }
 
     for (RHIShader handle : temporaryShaders) {
-        destroy(handle);
+        Destroy(handle);
     }
     return makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
 }
 
 // Compute pipeline 只需要 compute shader。为了和统一 RHIPipeline 对齐，仍然存到
 // PipelineResource，并用 compute=true 区分 applyPipeline 的绑定路径。
-RHIPipeline RHID3D11::createComputePipeline(const RHIComputePipelineDesc& desc) {
-    if (!isInitialized()) {
+RHIPipeline RHID3D11::CreateComputePipeline(const RHIComputePipelineDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (getRenderResource(impl_->pipelineLayouts, desc.layout) == nullptr) {
         throw std::runtime_error("RHIComputePipelineDesc::layout is invalid");
     }
 
-    RHIShader shaderHandle = createShaderModule(desc.shader);
+    RHIShader shaderHandle = CreateShaderModule(desc.shader);
     const Impl::ShaderResource* shader = getRenderResource(impl_->shaders, shaderHandle);
     if (shader == nullptr || !shader->computeShader) {
-        destroy(shaderHandle);
+        Destroy(shaderHandle);
         throw std::runtime_error("RHIComputePipelineDesc requires a compute shader");
     }
 
     Impl::PipelineResource resource{};
     resource.compute = true;
     resource.computeShader = shader->computeShader;
-    destroy(shaderHandle);
+    Destroy(shaderHandle);
     return makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
 }
 
@@ -201,4 +201,9 @@ RHIPipeline RHID3D11::createComputePipeline(const RHIComputePipelineDesc& desc) 
 // 真正绘制时由 RHID3D11Frame.inl 的 applyPipeline 逐项绑定到 immediate context。
 
 } // namespace rhi
+
+
+
+
+
 

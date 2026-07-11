@@ -4,8 +4,8 @@
 
 namespace rhi {
 
-RHIBuffer RHID3D11::createBuffer(const RHIBufferDesc& desc) {
-    if (!isInitialized()) {
+RHIBuffer RHID3D11::CreateBuffer(const RHIBufferDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (desc.size == 0) {
@@ -34,8 +34,8 @@ RHIBuffer RHID3D11::createBuffer(const RHIBufferDesc& desc) {
 
 // D3D11 texture 分成 Texture1D/2D/3D 三套接口；这里用 RHITextureDesc::dimension 选择创建函数。
 // 深度格式会先创建成 typeless，之后再由 SRV/DSV 决定“采样视图”还是“深度视图”。
-RHITexture RHID3D11::createTexture(const RHITextureDesc& desc) {
-    if (!isInitialized()) {
+RHITexture RHID3D11::CreateTexture(const RHITextureDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -101,8 +101,8 @@ RHITexture RHID3D11::createTexture(const RHITextureDesc& desc) {
 
 // D3D11 的 view 是资源用途的入口：SRV 给 shader 读，RTV 给 color attachment 写，DSV 给深度
 // 测试，UAV 给 compute/像素 shader 随机读写。一个 RHITextureViewDesc 可能按 usage 创建多个 view。
-RHITextureView RHID3D11::createTextureView(const RHITextureViewDesc& desc) {
-    if (!isInitialized()) {
+RHITextureView RHID3D11::CreateTextureView(const RHITextureViewDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -166,8 +166,8 @@ RHITextureView RHID3D11::createTextureView(const RHITextureViewDesc& desc) {
 
 // SamplerState 描述采样过滤、寻址、比较采样等规则。和 Vulkan 一样，sampler 不拥有纹理；
 // 具体纹理通过 SRV 绑定，采样规则通过 sampler slot 绑定。
-RHISampler RHID3D11::createSampler(const RHISamplerDesc& desc) {
-    if (!isInitialized()) {
+RHISampler RHID3D11::CreateSampler(const RHISamplerDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -285,8 +285,8 @@ static std::vector<std::byte> compileHlsl(const RHIShaderDesc& desc) {
 
 // ShaderResource 保存具体 stage 的 D3D11 shader 对象，同时保留 bytecode。
 // 顶点 shader 的 bytecode 后续还要用于 CreateInputLayout，因为 D3D11 需要用它校验顶点输入签名。
-RHIShader RHID3D11::createShaderModule(const RHIShaderDesc& desc) {
-    if (!isInitialized()) {
+RHIShader RHID3D11::CreateShaderModule(const RHIShaderDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -331,9 +331,9 @@ RHIShader RHID3D11::createShaderModule(const RHIShaderDesc& desc) {
     return makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
 }
 
-// D3D11 没有原生 DescriptorSetLayout；这里保存 layout 描述，用来在 createBindSet 时校验
+// D3D11 没有原生 DescriptorSetLayout；这里保存 layout 描述，用来在 CreateBindSet 时校验
 // binding 是否存在、可见 shader stage 是哪些、storage 是否可写。
-RHIBindSetLayout RHID3D11::createBindSetLayout(const RHIBindSetLayoutDesc& desc) {
+RHIBindSetLayout RHID3D11::CreateBindSetLayout(const RHIBindSetLayoutDesc& desc) {
     Impl::BindSetLayoutResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIBindSetLayout>(impl_->bindSetLayouts, std::move(resource));
@@ -341,8 +341,8 @@ RHIBindSetLayout RHID3D11::createBindSetLayout(const RHIBindSetLayoutDesc& desc)
 
 // D3D11 的 BindSet 是“延迟绑定记录”：创建时把统一 RHIResourceBinding 解析成 COM view/state，
 // 绘制/dispatch 时 applyBindSet 再把这些对象设置到 VS/PS/CS 等具体 shader stage。
-RHIBindSet RHID3D11::createBindSet(const RHIBindSetDesc& desc) {
-    if (!isInitialized()) {
+RHIBindSet RHID3D11::CreateBindSet(const RHIBindSetDesc& desc) {
+    if (!IsInitialized()) {
         throw std::runtime_error("RHID3D11 is not initialized");
     }
 
@@ -438,7 +438,7 @@ RHIBindSet RHID3D11::createBindSet(const RHIBindSetDesc& desc) {
 
 // PipelineLayout 在 D3D11 中主要用于统一抽象校验：确认它引用的 bind set layout 都存在。
 // 真正的资源槽位绑定在 applyBindSet 时按每个 binding 的 slot 和 visibility 执行。
-RHIPipelineLayout RHID3D11::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
+RHIPipelineLayout RHID3D11::CreatePipelineLayout(const RHIPipelineLayoutDesc& desc) {
     for (RHIBindSetLayout handle : desc.bindSetLayouts) {
         if (getRenderResource(impl_->bindSetLayouts, handle) == nullptr) {
             throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind set layout");
@@ -451,7 +451,7 @@ RHIPipelineLayout RHID3D11::createPipelineLayout(const RHIPipelineLayoutDesc& de
 
 // D3D11 没有 Vulkan/D3D12 那种 pipeline cache；保留这个资源类型是为了让统一接口完整，
 // 以后接入 D3D12/Vulkan 离线缓存时，上层 API 不需要改变。
-RHIPipelineCache RHID3D11::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHID3D11::CreatePipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
@@ -464,6 +464,11 @@ RHIPipelineCache RHID3D11::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // 学习时可以按“resource 本体 -> view -> bind set 绑定表”的顺序看。
 
 } // namespace rhi
+
+
+
+
+
 
 
 
