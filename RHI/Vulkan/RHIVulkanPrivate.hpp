@@ -1,13 +1,13 @@
 ﻿#pragma once
 
 #include "RHIVulkanDevice.hpp"
-#include "../../RenderVulkan/RenderVulkan.hpp"
+#include "RHIVulkanBackend.hpp"
 
 namespace rhi {
 
-/// 兼容桥只存在于后端实现内部，上层不会看到旧 Renderer 类型。
+/// 公共 RHIDevice 门面持有同目录内的原生 API 后端，不依赖任何目录外实现。
 struct RHIVulkanDevice::Impl {
-    VulkanRenderer renderer;
+    RHIVulkanBackend backend;
 };
 
 } // namespace rhi
