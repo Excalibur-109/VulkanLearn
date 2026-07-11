@@ -2,80 +2,85 @@
 
 #include "RHIDeviceDesc.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace rhi {
 
-/// 所有图形 API 后端必须实现的统一 RHI 设备接口。
+/// 唯一的跨 API RHI 设备门面。
 ///
-/// RHIDevice 只负责 GPU 资源、管线、交换链和命令提交。Scene、相机、灯光、
-/// RenderCollector、RenderQueue 与 RenderGraph 都属于更高层。
+/// Vulkan、D3D11、D3D12 后端都是普通类，不继承 RHIDevice。RHIDevice 在实现文件中
+/// 持有当前选中的后端，并把公共方法直接分发给它，从而消除三套重复的 Device 包装类。
 class RHIDevice {
 public:
-    virtual ~RHIDevice() = default;
+    explicit RHIDevice(RHIGraphicsAPI requestedApi = RHIGraphicsAPI::Unknown);
+    ~RHIDevice();
 
     RHIDevice(const RHIDevice&) = delete;
     RHIDevice& operator=(const RHIDevice&) = delete;
+    RHIDevice(RHIDevice&&) noexcept;
+    RHIDevice& operator=(RHIDevice&&) noexcept;
 
-    [[nodiscard]] virtual RHIGraphicsAPI api() const noexcept = 0;
-    [[nodiscard]] virtual const char* backendName() const noexcept = 0;
-    [[nodiscard]] virtual bool initialize(const RHIDeviceCreateDesc& desc, std::string* errorMessage = nullptr) = 0;
-    virtual void shutdown() noexcept = 0;
-    [[nodiscard]] virtual bool isInitialized() const noexcept = 0;
-    [[nodiscard]] virtual const RHICapabilities& capabilities() const noexcept = 0;
+    [[nodiscard]] RHIGraphicsAPI api() const noexcept;
+    [[nodiscard]] const char* backendName() const noexcept;
+    [[nodiscard]] bool initialize(const RHIDeviceCreateDesc& desc, std::string* errorMessage = nullptr);
+    void shutdown() noexcept;
+    [[nodiscard]] bool isInitialized() const noexcept;
+    [[nodiscard]] const RHICapabilities& capabilities() const noexcept;
 
-    [[nodiscard]] virtual RHIBuffer createBuffer(const RHIBufferDesc& desc) = 0;
-    [[nodiscard]] virtual RHITexture createTexture(const RHITextureDesc& desc) = 0;
-    [[nodiscard]] virtual RHITextureView createTextureView(const RHITextureViewDesc& desc) = 0;
-    [[nodiscard]] virtual RHISampler createSampler(const RHISamplerDesc& desc) = 0;
-    [[nodiscard]] virtual RHIShader createShaderModule(const RHIShaderDesc& desc) = 0;
-    [[nodiscard]] virtual RHIBindGroupLayout createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) = 0;
-    [[nodiscard]] virtual RHIBindGroup createBindGroup(const RHIBindGroupDesc& desc) = 0;
+    [[nodiscard]] RHIBuffer createBuffer(const RHIBufferDesc& desc);
+    [[nodiscard]] RHITexture createTexture(const RHITextureDesc& desc);
+    [[nodiscard]] RHITextureView createTextureView(const RHITextureViewDesc& desc);
+    [[nodiscard]] RHISampler createSampler(const RHISamplerDesc& desc);
+    [[nodiscard]] RHIShader createShaderModule(const RHIShaderDesc& desc);
+    [[nodiscard]] RHIBindGroupLayout createBindGroupLayout(const RHIBindGroupLayoutDesc& desc);
+    [[nodiscard]] RHIBindGroup createBindGroup(const RHIBindGroupDesc& desc);
 
-    [[nodiscard]] virtual RHIPipelineLayout createPipelineLayout(const RHIPipelineLayoutDesc& desc) = 0;
-    [[nodiscard]] virtual RHIPipelineCache createPipelineCache(const RHIPipelineCacheDesc& desc) = 0;
-    [[nodiscard]] virtual RHIPipeline createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) = 0;
-    [[nodiscard]] virtual RHIPipeline createComputePipeline(const RHIComputePipelineDesc& desc) = 0;
+    [[nodiscard]] RHIPipelineLayout createPipelineLayout(const RHIPipelineLayoutDesc& desc);
+    [[nodiscard]] RHIPipelineCache createPipelineCache(const RHIPipelineCacheDesc& desc);
+    [[nodiscard]] RHIPipeline createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc);
+    [[nodiscard]] RHIPipeline createComputePipeline(const RHIComputePipelineDesc& desc);
 
-    [[nodiscard]] virtual RHIQueryPool createQueryPool(const RHIQueryPoolDesc& desc) = 0;
-    [[nodiscard]] virtual RHISemaphore createSemaphore(const RHISemaphoreDesc& desc) = 0;
-    [[nodiscard]] virtual RHIFence createFence(const RHIFenceDesc& desc) = 0;
+    [[nodiscard]] RHIQueryPool createQueryPool(const RHIQueryPoolDesc& desc);
+    [[nodiscard]] RHISemaphore createSemaphore(const RHISemaphoreDesc& desc);
+    [[nodiscard]] RHIFence createFence(const RHIFenceDesc& desc);
 
-    [[nodiscard]] virtual RHISwapchain createSwapchain(const RHISwapchainDesc& desc) = 0;
-    [[nodiscard]] virtual std::vector<RHITexture> getSwapchainImages(RHISwapchain handle) const = 0;
-    [[nodiscard]] virtual std::vector<RHITextureView> getSwapchainImageViews(RHISwapchain handle) const = 0;
-    [[nodiscard]] virtual RHIFormat getSwapchainFormat(RHISwapchain handle) const = 0;
-    [[nodiscard]] virtual RHIExtent2D getSwapchainExtent(RHISwapchain handle) const = 0;
-    [[nodiscard]] virtual bool acquireNextImage(
+    [[nodiscard]] RHISwapchain createSwapchain(const RHISwapchainDesc& desc);
+    [[nodiscard]] std::vector<RHITexture> getSwapchainImages(RHISwapchain handle) const;
+    [[nodiscard]] std::vector<RHITextureView> getSwapchainImageViews(RHISwapchain handle) const;
+    [[nodiscard]] RHIFormat getSwapchainFormat(RHISwapchain handle) const;
+    [[nodiscard]] RHIExtent2D getSwapchainExtent(RHISwapchain handle) const;
+    [[nodiscard]] bool acquireNextImage(
         RHISwapchain swapchain,
         RHISemaphore signalSemaphore,
         RHIFence signalFence,
         RHIUInt32* imageIndex,
-        std::string* errorMessage = nullptr) = 0;
+        std::string* errorMessage = nullptr);
 
-    [[nodiscard]] virtual bool submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr) = 0;
-    [[nodiscard]] virtual bool present(const RHIPresentDesc& desc, std::string* errorMessage = nullptr) = 0;
-    [[nodiscard]] virtual bool submitFrame(const RHIFramePacket& packet, std::string* errorMessage = nullptr) = 0;
-    virtual void waitIdle() const noexcept = 0;
+    [[nodiscard]] bool submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool present(const RHIPresentDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool submitFrame(const RHIFramePacket& packet, std::string* errorMessage = nullptr);
+    void waitIdle() const noexcept;
 
-    virtual void destroy(RHIBuffer handle) noexcept = 0;
-    virtual void destroy(RHITexture handle) noexcept = 0;
-    virtual void destroy(RHITextureView handle) noexcept = 0;
-    virtual void destroy(RHISampler handle) noexcept = 0;
-    virtual void destroy(RHIShader handle) noexcept = 0;
-    virtual void destroy(RHIBindGroupLayout handle) noexcept = 0;
-    virtual void destroy(RHIBindGroup handle) noexcept = 0;
-    virtual void destroy(RHIPipelineLayout handle) noexcept = 0;
-    virtual void destroy(RHIPipelineCache handle) noexcept = 0;
-    virtual void destroy(RHIPipeline handle) noexcept = 0;
-    virtual void destroy(RHIQueryPool handle) noexcept = 0;
-    virtual void destroy(RHISemaphore handle) noexcept = 0;
-    virtual void destroy(RHIFence handle) noexcept = 0;
-    virtual void destroy(RHISwapchain handle) noexcept = 0;
+    void destroy(RHIBuffer handle) noexcept;
+    void destroy(RHITexture handle) noexcept;
+    void destroy(RHITextureView handle) noexcept;
+    void destroy(RHISampler handle) noexcept;
+    void destroy(RHIShader handle) noexcept;
+    void destroy(RHIBindGroupLayout handle) noexcept;
+    void destroy(RHIBindGroup handle) noexcept;
+    void destroy(RHIPipelineLayout handle) noexcept;
+    void destroy(RHIPipelineCache handle) noexcept;
+    void destroy(RHIPipeline handle) noexcept;
+    void destroy(RHIQueryPool handle) noexcept;
+    void destroy(RHISemaphore handle) noexcept;
+    void destroy(RHIFence handle) noexcept;
+    void destroy(RHISwapchain handle) noexcept;
 
-protected:
-    RHIDevice() = default;
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace rhi

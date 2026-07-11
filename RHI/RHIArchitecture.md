@@ -1,22 +1,22 @@
 ﻿# Standalone RHI
 
-`RHI/` 是一套完全独立的跨图形 API 接口和后端实现。它不包含、不链接、不调用根目录中的旧 `Render*` 定义或后端。
+`RHI/` 是完全独立的跨图形 API 接口和后端实现，不依赖根目录旧 `Render*` 代码。
 
-## 目录职责
+## 当前结构
 
 ```text
 RHI/
 ├── RHIDefinitions.hpp              # 独立句柄、枚举、资源描述、命令和帧数据
-├── RHI.hpp                         # 上层唯一公共入口
+├── RHI.hpp                         # 上层唯一入口
 ├── Core/
-│   ├── RHIDevice.hpp               # 跨 API 纯虚接口
+│   ├── RHIDevice.hpp               # 唯一的非虚设备门面
+│   ├── RHIDevice.cpp               # 使用 variant 分发到当前 Backend
 │   ├── RHIDeviceDesc.hpp           # 跨 API 初始化参数
-│   └── RHIDeviceFactory.*          # 按 RHIGraphicsAPI 创建设备
+│   └── RHIDeviceFactory.*          # 创建和初始化 RHIDevice
 ├── Vulkan/
-│   ├── RHIVulkanDevice.*           # 公共门面
-│   ├── RHIVulkanBackend.*          # 原生 Vulkan 后端主体
-│   ├── RHIVulkanBackendPrivate.inl # 类型转换、资源池和内部状态
-│   ├── RHIVulkanBackendCore.inl    # Instance/Device/Queue
+│   ├── RHIVulkanBackend.hpp/.cpp
+│   ├── RHIVulkanBackendPrivate.inl
+│   ├── RHIVulkanBackendCore.inl
 │   ├── RHIVulkanBackendResources.inl
 │   ├── RHIVulkanBackendPipelines.inl
 │   ├── RHIVulkanBackendFrame.inl
@@ -25,6 +25,21 @@ RHI/
 ├── D3D11/                          # 与 Vulkan 相同的职责拆分
 └── D3D12/                          # 与 Vulkan 相同的职责拆分
 ```
+
+## 为什么只有一个 RHIDevice
+
+三个原生 Backend 的公共方法签名一致，但它们不继承同一个虚基类。`RHIDevice` 内部使用：
+
+```cpp
+std::variant<
+    std::monostate,
+    RHIVulkanBackend,
+    RHID3D11Backend,
+    RHID3D12Backend
+>;
+```
+
+上层只调用一次 `RHIDevice::createBuffer()`。`RHIDevice.cpp` 根据当前 variant 中保存的 Backend 直接转发，不再维护三套内容几乎相同的 Device 头文件，也不使用 `virtual/override`。
 
 ## 数据流
 
@@ -35,20 +50,12 @@ Scene / ECS
     -> RenderQueue
     -> RenderGraph
     -> RHIDevice
-       -> RHIVulkanDevice -> RHIVulkanBackend -> Vulkan
-       -> RHID3D11Device  -> RHID3D11Backend  -> D3D11
-       -> RHID3D12Device  -> RHID3D12Backend  -> D3D12
+       -> RHIVulkanBackend
+       -> RHID3D11Backend
+       -> RHID3D12Backend
 ```
 
-`RHIDevice` 只消费 `RHIFramePacket`。它不访问游戏物体、相机、灯光和 ECS。
-
-## 类型示例
-
-- `RHIBuffer`、`RHITexture`：类型安全的逻辑资源句柄。
-- `RHIMemory`、`RHIMemoryUsage`：GPU/CPU 内存访问方向。
-- `RHIBufferDesc`、`RHITextureDesc`：资源创建描述。
-- `RHIGraphicsPipelineDesc`：图形管线描述。
-- `RHIFramePacket`：一帧已经整理好的 GPU 工作。
+`RHIDevice` 只消费 `RHIFramePacket`，不访问游戏对象、相机、灯光或 ECS。
 
 ## 最小使用方式
 

@@ -178,6 +178,7 @@ add_library(RHI STATIC
     RHI/RHIDefinitions.hpp
     RHI/RHIArchitecture.md
     RHI/Core/RHIDevice.hpp
+    RHI/Core/RHIDevice.cpp
     RHI/Core/RHIDeviceDesc.hpp
     RHI/Core/RHIDeviceFactory.hpp
     RHI/Core/RHIDeviceFactory.cpp
@@ -210,7 +211,39 @@ if(WIN32)
     target_sources(RHI PRIVATE ${RHI_D3D11_SOURCES} ${RHI_D3D12_SOURCES})
     target_link_libraries(RHI PUBLIC d3d11 d3d12 dxgi dxguid d3dcompiler)
 endif()
+
+add_executable(RHIPbrShadowExample
+    RHIPbrShadowExample.cpp
+)
+
+add_dependencies(RHIPbrShadowExample PbrShadowExampleShaders)
+
+target_include_directories(RHIPbrShadowExample PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_compile_features(RHIPbrShadowExample PRIVATE cxx_std_20)
+
+target_compile_definitions(RHIPbrShadowExample PRIVATE
+    RHI_PBR_SHADOW_EXAMPLE_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/Shaders"
+)
+
+target_link_libraries(RHIPbrShadowExample PRIVATE
+    RHI
+    glfw
+    glm::glm
+)
+
+if(MSVC)
+    target_compile_options(RHIPbrShadowExample PRIVATE /utf-8)
+endif()
 if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    add_custom_command(TARGET RHIPbrShadowExample POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
+            $<TARGET_FILE_DIR:RHIPbrShadowExample>
+    )
+
     add_custom_command(TARGET PbrShadowExample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
@@ -225,3 +258,5 @@ if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
         )
     endif()
 endif()
+
+
