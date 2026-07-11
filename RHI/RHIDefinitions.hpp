@@ -277,7 +277,7 @@ constexpr RHIRenderFeature& operator|=(RHIRenderFeature& lhs, RHIRenderFeature r
 /// 渲染后端初始化参数。窗口原生句柄由平台层保存，这里只描述渲染器自己的需求。
 struct RHIBackendDesc {
     std::string applicationName; ///< 应用名称，用于后端实例创建和调试器显示。
-    std::string engineName = "VulkanLearn"; ///< 引擎名称，用于后端实例创建和调试器显示。
+    std::string engineName = ""; ///< 引擎名称，用于后端实例创建和调试器显示。
     RHIGraphicsAPI preferredApi = RHIGraphicsAPI::Vulkan; ///< 优先使用的图形 API。
     RHIPowerPreference powerPreference = RHIPowerPreference::HighPerformance; ///< GPU 选择偏好。
     RHIValidationMode validation = RHIValidationMode::Enabled; ///< 是否启用验证层/调试层。
