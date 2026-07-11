@@ -47,14 +47,14 @@ void RHID3D12::destroy(RHIShader handle) noexcept {
     }
 }
 
-void RHID3D12::destroy(RHIBindGroupLayout handle) noexcept {
-    if (Impl::BindGroupLayoutResource* resource = getRenderResource(impl_->bindGroupLayouts, handle)) {
+void RHID3D12::destroy(RHIBindSetLayout handle) noexcept {
+    if (Impl::BindSetLayoutResource* resource = getRenderResource(impl_->bindSetLayouts, handle)) {
         resource->desc = {};
     }
 }
 
-void RHID3D12::destroy(RHIBindGroup handle) noexcept {
-    if (Impl::BindGroupResource* resource = getRenderResource(impl_->bindGroups, handle)) {
+void RHID3D12::destroy(RHIBindSet handle) noexcept {
+    if (Impl::BindSetResource* resource = getRenderResource(impl_->bindSets, handle)) {
         resource->bindings.clear();
         resource->desc = {};
     }
@@ -132,6 +132,7 @@ void RHID3D12::destroy(RHISwapchain handle) noexcept {
 // 后续如果做长期运行编辑器，需要再补 descriptor free-list 或按帧 ring allocator。
 
 } // namespace rhi
+
 
 
 

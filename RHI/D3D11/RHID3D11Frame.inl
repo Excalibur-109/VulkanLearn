@@ -47,11 +47,11 @@ static void setSamplerForStages(ID3D11DeviceContext* context, RHIShaderStage vis
     if (stageVisible(visibility, RHIShaderStage::Compute))        context->CSSetSamplers(slot, 1, &sampler);
 }
 
-// 把 BindGroup 中预解析好的资源真正绑定到 context。
+// 把 BindSet 中预解析好的资源真正绑定到 context。
 // 图形路径通常绑定 CBV/SRV/Sampler；compute 路径还允许把 StorageTexture 的 UAV 绑定到 CS。
-template <typename BindGroupResourceT>
-static void applyBindGroup(ID3D11DeviceContext* context, const BindGroupResourceT& bindGroup, bool compute) {
-    for (const auto& binding : bindGroup.bindings) {
+template <typename BindSetResourceT>
+static void applyBindSet(ID3D11DeviceContext* context, const BindSetResourceT& bindSet, bool compute) {
+    for (const auto& binding : bindSet.bindings) {
         ID3D11Buffer* buffer = binding.buffer.Get();
         ID3D11ShaderResourceView* srv = binding.srv.Get();
         ID3D11SamplerState* sampler = binding.sampler.Get();
@@ -289,15 +289,15 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             return it == packet.workloads.end() ? nullptr : &*it;
         };
 
-        const auto bindDrawResources = [&](const std::vector<RHIBindGroup>& bindGroups, bool compute) {
-            // workload 只携带 RHIBindGroup；真正把资源铺到 shader slot 的逻辑集中在
-            // applyBindGroup，draw/dispatch 代码不需要知道资源具体是 buffer、texture 还是 sampler。
-            for (RHIBindGroup bindGroupHandle : bindGroups) {
-                const Impl::BindGroupResource* bindGroup = getRenderResource(impl_->bindGroups, bindGroupHandle);
-                if (bindGroup == nullptr) {
-                    throw std::runtime_error("Draw/dispatch bind group is invalid");
+        const auto bindDrawResources = [&](const std::vector<RHIBindSet>& bindSets, bool compute) {
+            // workload 只携带 RHIBindSet；真正把资源铺到 shader slot 的逻辑集中在
+            // applyBindSet，draw/dispatch 代码不需要知道资源具体是 buffer、texture 还是 sampler。
+            for (RHIBindSet bindSetHandle : bindSets) {
+                const Impl::BindSetResource* bindSet = getRenderResource(impl_->bindSets, bindSetHandle);
+                if (bindSet == nullptr) {
+                    throw std::runtime_error("Draw/dispatch bind set is invalid");
                 }
-                applyBindGroup(impl_->context.Get(), *bindGroup, compute);
+                applyBindSet(impl_->context.Get(), *bindSet, compute);
             }
         };
 
@@ -320,7 +320,7 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
                 throw std::runtime_error("RHIDrawCommand pipeline is invalid");
             }
             applyPipeline(impl_->context.Get(), *pipeline);
-            bindDrawResources(draw.bindGroups, false);
+            bindDrawResources(draw.bindSets, false);
             bindVertexStreams(draw.vertexStreams);
             impl_->context->DrawInstanced(draw.vertexCount, draw.instanceCount, draw.firstVertex, draw.firstInstance);
         };
@@ -331,7 +331,7 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
                 throw std::runtime_error("RHIDrawIndexedCommand pipeline is invalid");
             }
             applyPipeline(impl_->context.Get(), *pipeline);
-            bindDrawResources(draw.bindGroups, false);
+            bindDrawResources(draw.bindSets, false);
             bindVertexStreams(draw.vertexStreams);
 
             const Impl::BufferResource* indexBuffer = getRenderResource(impl_->buffers, draw.indexStream.buffer);
@@ -354,7 +354,7 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
                 throw std::runtime_error("RHIDispatchCommand pipeline is invalid");
             }
             applyPipeline(impl_->context.Get(), *pipeline);
-            bindDrawResources(dispatch.bindGroups, true);
+            bindDrawResources(dispatch.bindSets, true);
             impl_->context->Dispatch(dispatch.groupCountX, dispatch.groupCountY, dispatch.groupCountZ);
         };
 
@@ -502,11 +502,13 @@ void RHID3D11::waitIdle() const noexcept {
 // 这里和 Vulkan 后端差别最大：Vulkan 是录制 VkCommandBuffer 后 submit；
 // D3D11 是边遍历 RHIFramePacket 边设置 context 状态并调用 Draw/Dispatch。
 // 读这部分时重点关注三层映射：
-// - BindGroup -> VS/PS/CS 等 stage 的 CBV/SRV/Sampler/UAV slot；
+// - BindSet -> VS/PS/CS 等 stage 的 CBV/SRV/Sampler/UAV slot；
 // - Pipeline -> IA/InputLayout/Shader/Rasterizer/DepthStencil/Blend 状态；
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
 
 } // namespace rhi
+
+
 
 
 

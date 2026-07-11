@@ -251,7 +251,7 @@ bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         impl_->caps.maxTextureCubeSize = support.properties.limits.maxImageDimensionCube;
         impl_->caps.maxTextureArrayLayers = support.properties.limits.maxImageArrayLayers;
         impl_->caps.maxColorAttachments = support.properties.limits.maxColorAttachments;
-        impl_->caps.maxBindGroups = support.properties.limits.maxBoundDescriptorSets;
+        impl_->caps.maxBindSets = support.properties.limits.maxBoundDescriptorSets;
         impl_->caps.maxVertexBuffers = support.properties.limits.maxVertexInputBindings;
         impl_->caps.maxVertexAttributes = support.properties.limits.maxVertexInputAttributes;
         impl_->caps.maxPushConstantSize = support.properties.limits.maxPushConstantsSize;
@@ -337,15 +337,15 @@ void RHIVulkan::shutdown() noexcept {
 
     vkDeviceWaitIdle(impl_->native.device);
 
-    // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind group 依赖 layout，
+    // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind set 依赖 layout，
     // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
     // 不会自动追踪这些关系，所以后端需要保持明确顺序。
     for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
     for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
     for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
     for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
-    for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
     for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
     for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
     for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
@@ -405,6 +405,8 @@ const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
 
 } // namespace rhi
+
+
 
 
 

@@ -203,8 +203,8 @@ RHI_FORWARD_RETURN(RHITexture, createTexture, RHITextureDesc)
 RHI_FORWARD_RETURN(RHITextureView, createTextureView, RHITextureViewDesc)
 RHI_FORWARD_RETURN(RHISampler, createSampler, RHISamplerDesc)
 RHI_FORWARD_RETURN(RHIShader, createShaderModule, RHIShaderDesc)
-RHI_FORWARD_RETURN(RHIBindGroupLayout, createBindGroupLayout, RHIBindGroupLayoutDesc)
-RHI_FORWARD_RETURN(RHIBindGroup, createBindGroup, RHIBindGroupDesc)
+RHI_FORWARD_RETURN(RHIBindSetLayout, createBindSetLayout, RHIBindSetLayoutDesc)
+RHI_FORWARD_RETURN(RHIBindSet, createBindSet, RHIBindSetDesc)
 RHI_FORWARD_RETURN(RHIPipelineLayout, createPipelineLayout, RHIPipelineLayoutDesc)
 RHI_FORWARD_RETURN(RHIPipelineCache, createPipelineCache, RHIPipelineCacheDesc)
 RHI_FORWARD_RETURN(RHIPipeline, createGraphicsPipeline, RHIGraphicsPipelineDesc)
@@ -262,8 +262,8 @@ RHI_FORWARD_DESTROY(RHITexture)
 RHI_FORWARD_DESTROY(RHITextureView)
 RHI_FORWARD_DESTROY(RHISampler)
 RHI_FORWARD_DESTROY(RHIShader)
-RHI_FORWARD_DESTROY(RHIBindGroupLayout)
-RHI_FORWARD_DESTROY(RHIBindGroup)
+RHI_FORWARD_DESTROY(RHIBindSetLayout)
+RHI_FORWARD_DESTROY(RHIBindSet)
 RHI_FORWARD_DESTROY(RHIPipelineLayout)
 RHI_FORWARD_DESTROY(RHIPipelineCache)
 RHI_FORWARD_DESTROY(RHIPipeline)
@@ -275,6 +275,7 @@ RHI_FORWARD_DESTROY(RHISwapchain)
 #undef RHI_FORWARD_DESTROY
 
 } // namespace rhi
+
 
 
 

@@ -128,14 +128,14 @@ void RHID3D11::shutdown() noexcept {
         impl_->context->Flush();
     }
 
-    // 按依赖反向释放：swapchain/backbuffer view 先释放，pipeline/bind group 等引用资源的对象
+    // 按依赖反向释放：swapchain/backbuffer view 先释放，pipeline/bind set 等引用资源的对象
     // 先清掉，最后再释放 texture/buffer。ComPtr 会处理 COM Release，vector 槽位不压缩。
     for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
     for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
     for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
     for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
-    for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
     for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
     for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
     for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
@@ -174,6 +174,8 @@ const RHID3D11NativeHandles& RHID3D11::nativeHandles() const noexcept {
 // 不需要显式创建 queue、command pool 或 descriptor pool。
 
 } // namespace rhi
+
+
 
 
 

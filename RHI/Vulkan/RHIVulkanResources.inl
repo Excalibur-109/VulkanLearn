@@ -220,17 +220,17 @@ RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
     return handle;
 }
 
-// BindGroupLayout 对应 Vulkan descriptor set layout：它声明某个 set 里有哪些 binding、
+// BindSetLayout 对应 Vulkan descriptor set layout：它声明某个 set 里有哪些 binding、
 // 每个 binding 是 buffer/image/sampler，以及哪些 shader stage 可见。Push constant 不在
 // descriptor set 中分配，所以这里跳过，稍后交给 PipelineLayout。
-RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
+RHIBindSetLayout RHIVulkan::createBindSetLayout(const RHIBindSetLayoutDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     bindings.reserve(desc.entries.size());
-    for (const RHIBindGroupLayoutEntry& entry : desc.entries) {
+    for (const RHIBindSetLayoutEntry& entry : desc.entries) {
         if (entry.type == RHIBindingType::PushConstant) {
             // Vulkan push constant 属于 pipeline layout，不占用 descriptor set binding。
             continue;
@@ -246,7 +246,7 @@ RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc
         bindings.push_back(binding);
     }
 
-    Impl::BindGroupLayoutResource resource{};
+    Impl::BindSetLayoutResource resource{};
     resource.desc = desc;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -258,24 +258,24 @@ RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc
         throw std::runtime_error("vkCreateDescriptorSetLayout failed");
     }
 
-    const RHIBindGroupLayout handle = makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<u64>(impl_->bindGroupLayouts.back().layout), desc.debugName);
+    const RHIBindSetLayout handle = makeRenderHandle<RHIBindSetLayout>(impl_->bindSetLayouts, std::move(resource));
+    impl_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<u64>(impl_->bindSetLayouts.back().layout), desc.debugName);
     return handle;
 }
 
-// BindGroup 对应实际 descriptor set。layout 只声明“槽位形状”，这里把具体 buffer/view/sampler
+// BindSet 对应实际 descriptor set。layout 只声明“槽位形状”，这里把具体 buffer/view/sampler
 // 写入 VkDescriptorSet。绘制时只需要 vkCmdBindDescriptorSets，不再逐个资源绑定。
-RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
+RHIBindSet RHIVulkan::createBindSet(const RHIBindSetDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("RHIVulkan is not initialized");
     }
 
-    const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
+    const Impl::BindSetLayoutResource* layout = getRenderResource(impl_->bindSetLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-        throw std::runtime_error("RHIBindGroupDesc::layout is invalid");
+        throw std::runtime_error("RHIBindSetDesc::layout is invalid");
     }
 
-    Impl::BindGroupResource resource{};
+    Impl::BindSetResource resource{};
     resource.desc = desc;
 
     VkDescriptorSetAllocateInfo allocateInfo{};
@@ -356,7 +356,7 @@ RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
         vkUpdateDescriptorSets(impl_->native.device, static_cast<u32>(writes.size()), writes.data(), 0, nullptr);
     }
 
-    return makeRenderHandle<RHIBindGroup>(impl_->bindGroups, std::move(resource));
+    return makeRenderHandle<RHIBindSet>(impl_->bindSets, std::move(resource));
 }
 
 // PipelineLayout 是 shader 资源接口的总表：它组合多个 descriptor set layout，并声明 push
@@ -367,11 +367,11 @@ RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& d
     }
 
     std::vector<VkDescriptorSetLayout> setLayouts;
-    setLayouts.reserve(desc.bindGroupLayouts.size());
-    for (RHIBindGroupLayout handle : desc.bindGroupLayouts) {
-        const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, handle);
+    setLayouts.reserve(desc.bindSetLayouts.size());
+    for (RHIBindSetLayout handle : desc.bindSetLayouts) {
+        const Impl::BindSetLayoutResource* layout = getRenderResource(impl_->bindSetLayouts, handle);
         if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
-            throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind group layout");
+            throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind set layout");
         }
         setLayouts.push_back(layout->layout);
     }
@@ -424,6 +424,8 @@ RHIPipelineCache RHIVulkan::createPipelineCache(const RHIPipelineCacheDesc& desc
 }
 
 } // namespace rhi
+
+
 
 
 

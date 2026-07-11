@@ -333,13 +333,13 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 vkCmdBindPipeline(commandBuffer, pipeline->bindPoint, pipeline->pipeline);
 
                 std::vector<VkDescriptorSet> descriptorSets;
-                descriptorSets.reserve(draw.bindGroups.size());
-                for (RHIBindGroup bindGroupHandle : draw.bindGroups) {
-                    const Impl::BindGroupResource* bindGroup = getRenderResource(impl_->bindGroups, bindGroupHandle);
-                    if (bindGroup == nullptr || bindGroup->set == VK_NULL_HANDLE) {
-                        throw std::runtime_error("RHIDrawIndexedCommand bind group is invalid");
+                descriptorSets.reserve(draw.bindSets.size());
+                for (RHIBindSet bindSetHandle : draw.bindSets) {
+                    const Impl::BindSetResource* bindSet = getRenderResource(impl_->bindSets, bindSetHandle);
+                    if (bindSet == nullptr || bindSet->set == VK_NULL_HANDLE) {
+                        throw std::runtime_error("RHIDrawIndexedCommand bind set is invalid");
                     }
-                    descriptorSets.push_back(bindGroup->set);
+                    descriptorSets.push_back(bindSet->set);
                 }
                 if (!descriptorSets.empty()) {
                     vkCmdBindDescriptorSets(
@@ -502,6 +502,8 @@ void RHIVulkan::waitIdle() const noexcept {
 // destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
 
 } // namespace rhi
+
+
 
 
 

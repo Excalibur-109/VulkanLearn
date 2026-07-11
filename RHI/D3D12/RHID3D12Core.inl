@@ -124,8 +124,8 @@ void RHID3D12::shutdown() noexcept {
     for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
     for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
     for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
-    for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)       destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) destroy(RHIBindSetLayout(i));
     for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
     for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
     for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
@@ -172,6 +172,7 @@ const RHID3D12NativeHandles& RHID3D12::nativeHandles() const noexcept {
 // 需要在 Frame 片段中补 command allocator reset、barrier、root signature/descriptor heap 绑定等步骤。
 
 } // namespace rhi
+
 
 
 

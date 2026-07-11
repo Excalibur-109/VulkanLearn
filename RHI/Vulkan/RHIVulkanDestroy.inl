@@ -58,16 +58,16 @@ void RHIVulkan::destroy(RHIShader handle) noexcept {
     }
 }
 
-void RHIVulkan::destroy(RHIBindGroupLayout handle) noexcept {
-    Impl::BindGroupLayoutResource* resource = getRenderResource(impl_->bindGroupLayouts, handle);
+void RHIVulkan::destroy(RHIBindSetLayout handle) noexcept {
+    Impl::BindSetLayoutResource* resource = getRenderResource(impl_->bindSetLayouts, handle);
     if (resource != nullptr && resource->layout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(impl_->native.device, resource->layout, nullptr);
         resource->layout = VK_NULL_HANDLE;
     }
 }
 
-void RHIVulkan::destroy(RHIBindGroup handle) noexcept {
-    Impl::BindGroupResource* resource = getRenderResource(impl_->bindGroups, handle);
+void RHIVulkan::destroy(RHIBindSet handle) noexcept {
+    Impl::BindSetResource* resource = getRenderResource(impl_->bindSets, handle);
     if (resource != nullptr && resource->set != VK_NULL_HANDLE) {
         vkFreeDescriptorSets(impl_->native.device, impl_->descriptorPool, 1, &resource->set);
         resource->set = VK_NULL_HANDLE;
@@ -143,6 +143,7 @@ void RHIVulkan::destroy(RHISwapchain handle) noexcept {
 }
 
 } // namespace rhi
+
 
 
 

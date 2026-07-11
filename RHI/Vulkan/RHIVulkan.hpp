@@ -50,7 +50,7 @@ struct RHIVulkanNativeHandles {
 ///
 /// 这个类负责把通用渲染描述转换成 Vulkan 对象：
 /// - RHIBufferDesc / RHITextureDesc / RHISamplerDesc -> VkBuffer / VkImage / VkSampler
-/// - RHIBindGroupLayoutDesc / RHIBindGroupDesc -> VkDescriptorSetLayout / VkDescriptorSet
+/// - RHIBindSetLayoutDesc / RHIBindSetDesc -> VkDescriptorSetLayout / VkDescriptorSet
 /// - RHIGraphicsPipelineDesc / RHIComputePipelineDesc -> VkPipeline
 /// - RHISwapchainDesc / RHIPresentDesc -> VkSwapchainKHR / vkQueuePresentKHR
 class RHIVulkan {
@@ -94,10 +94,10 @@ public:
     [[nodiscard]] RHIShader createShaderModule(const RHIShaderDesc& desc);
 
     /// 创建 descriptor set layout。
-    [[nodiscard]] RHIBindGroupLayout createBindGroupLayout(const RHIBindGroupLayoutDesc& desc);
+    [[nodiscard]] RHIBindSetLayout createBindSetLayout(const RHIBindSetLayoutDesc& desc);
 
     /// 创建并更新 descriptor set。
-    [[nodiscard]] RHIBindGroup createBindGroup(const RHIBindGroupDesc& desc);
+    [[nodiscard]] RHIBindSet createBindSet(const RHIBindSetDesc& desc);
 
     /// 创建 pipeline layout。
     [[nodiscard]] RHIPipelineLayout createPipelineLayout(const RHIPipelineLayoutDesc& desc);
@@ -161,8 +161,8 @@ public:
     void destroy(RHITextureView handle) noexcept;
     void destroy(RHISampler handle) noexcept;
     void destroy(RHIShader handle) noexcept;
-    void destroy(RHIBindGroupLayout handle) noexcept;
-    void destroy(RHIBindGroup handle) noexcept;
+    void destroy(RHIBindSetLayout handle) noexcept;
+    void destroy(RHIBindSet handle) noexcept;
     void destroy(RHIPipelineLayout handle) noexcept;
     void destroy(RHIPipelineCache handle) noexcept;
     void destroy(RHIPipeline handle) noexcept;
@@ -180,6 +180,7 @@ private:
 };
 
 } // namespace rhi
+
 
 
 

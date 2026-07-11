@@ -773,8 +773,8 @@ struct RHID3D12::Impl {
         std::vector<std::byte> bytecode;
     };
 
-    struct BindGroupLayoutResource {
-        RHIBindGroupLayoutDesc desc{};
+    struct BindSetLayoutResource {
+        RHIBindSetLayoutDesc desc{};
     };
 
     struct ResolvedBinding {
@@ -785,8 +785,8 @@ struct RHID3D12::Impl {
         CpuDescriptor samplerDescriptor{};
     };
 
-    struct BindGroupResource {
-        RHIBindGroupDesc desc{};
+    struct BindSetResource {
+        RHIBindSetDesc desc{};
         std::vector<ResolvedBinding> bindings;
     };
 
@@ -863,8 +863,8 @@ struct RHID3D12::Impl {
     std::vector<TextureViewResource> textureViews;
     std::vector<SamplerResource> samplers;
     std::vector<ShaderResource> shaders;
-    std::vector<BindGroupLayoutResource> bindGroupLayouts;
-    std::vector<BindGroupResource> bindGroups;
+    std::vector<BindSetLayoutResource> bindSetLayouts;
+    std::vector<BindSetResource> bindSets;
     std::vector<PipelineLayoutResource> pipelineLayouts;
     std::vector<PipelineCacheResource> pipelineCaches;
     std::vector<PipelineResource> pipelines;
@@ -930,8 +930,8 @@ struct RHID3D12::Impl {
         return descriptor;
     }
 
-    const RHIBindGroupLayoutEntry* findLayoutEntry(const BindGroupLayoutResource& layout, u32 binding) const {
-        const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(), [&](const RHIBindGroupLayoutEntry& entry) {
+    const RHIBindSetLayoutEntry* findLayoutEntry(const BindSetLayoutResource& layout, u32 binding) const {
+        const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(), [&](const RHIBindSetLayoutEntry& entry) {
             return entry.binding == binding;
         });
         return it == layout.desc.entries.end() ? nullptr : &*it;
@@ -1064,7 +1064,7 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
     caps.maxTextureCubeSize = D3D12_REQ_TEXTURECUBE_DIMENSION;
     caps.maxTextureArrayLayers = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
     caps.maxColorAttachments = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
-    caps.maxBindGroups = 8;
+    caps.maxBindSets = 8;
     caps.maxBindingsPerGroup = D3D12_COMMONSHADER_INPUT_RESOURCE_REGISTER_COUNT;
     caps.maxVertexBuffers = D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
     caps.maxVertexAttributes = D3D12_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT;
@@ -1113,6 +1113,8 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - DXGI adapter 选择、feature level 和 RHICapabilities 生成。
 
 } // namespace rhi
+
+
 
 
 

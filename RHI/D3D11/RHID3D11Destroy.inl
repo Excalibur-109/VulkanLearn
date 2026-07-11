@@ -43,14 +43,14 @@ void RHID3D11::destroy(RHIShader handle) noexcept {
     }
 }
 
-void RHID3D11::destroy(RHIBindGroupLayout handle) noexcept {
-    if (Impl::BindGroupLayoutResource* resource = getRenderResource(impl_->bindGroupLayouts, handle)) {
+void RHID3D11::destroy(RHIBindSetLayout handle) noexcept {
+    if (Impl::BindSetLayoutResource* resource = getRenderResource(impl_->bindSetLayouts, handle)) {
         resource->desc = {};
     }
 }
 
-void RHID3D11::destroy(RHIBindGroup handle) noexcept {
-    if (Impl::BindGroupResource* resource = getRenderResource(impl_->bindGroups, handle)) {
+void RHID3D11::destroy(RHIBindSet handle) noexcept {
+    if (Impl::BindSetResource* resource = getRenderResource(impl_->bindSets, handle)) {
         resource->bindings.clear();
         resource->desc = {};
     }
@@ -128,6 +128,7 @@ void RHID3D11::destroy(RHISwapchain handle) noexcept {
 // shutdown 会按反向依赖顺序调用这些 destroy，避免 context 或 view 还持有底层资源。
 
 } // namespace rhi
+
 
 
 

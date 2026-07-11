@@ -104,8 +104,8 @@ struct RHIPipelineTag {};
 struct RHIRenderPassTag {};
 struct RHIFramebufferTag {};
 struct RHISwapchainTag {};
-struct RHIBindGroupLayoutTag {};
-struct RHIBindGroupTag {};
+struct RHIBindSetLayoutTag {};
+struct RHIBindSetTag {};
 struct RHIQueryPoolTag {};
 struct RHIPipelineCacheTag {};
 struct RHIGPUWaitGPUSignalTag {};
@@ -144,10 +144,10 @@ using RHIFramebuffer = RHIHandle<RHIFramebufferTag>;
 using RHISwapchain = RHIHandle<RHISwapchainTag>;
 
 /// 一组资源槽位的布局，对应 Vulkan descriptor set layout / D3D descriptor table。
-using RHIBindGroupLayout = RHIHandle<RHIBindGroupLayoutTag>;
+using RHIBindSetLayout = RHIHandle<RHIBindSetLayoutTag>;
 
 /// 一组实际绑定资源，对应 Vulkan descriptor set / D3D descriptor heap 区间 / Metal argument buffer。
-using RHIBindGroup = RHIHandle<RHIBindGroupTag>;
+using RHIBindSet = RHIHandle<RHIBindSetTag>;
 
 /// GPU 查询池句柄，例如 timestamp、occlusion、pipeline statistics。
 using RHIQueryPool = RHIHandle<RHIQueryPoolTag>;
@@ -976,7 +976,7 @@ enum class RHITextureSampleType : u8 {
 };
 
 /// 单个绑定槽的布局信息，相当于 descriptor binding/root parameter/argument entry。
-struct RHIBindGroupLayoutEntry {
+struct RHIBindSetLayoutEntry {
     u32 binding = 0; ///< 绑定槽编号，对应 shader 中的 binding/register/argument index。
     RHIBindingType type = RHIBindingType::UniformBuffer; ///< 该槽位资源类型。
     RHIShaderStage visibility = RHIShaderStage::AllGraphics; ///< 哪些 shader stage 可以访问该槽位。
@@ -988,10 +988,10 @@ struct RHIBindGroupLayoutEntry {
 };
 
 /// 一组绑定槽布局。Vulkan 中通常对应一个 descriptor set layout。
-struct RHIBindGroupLayoutDesc {
+struct RHIBindSetLayoutDesc {
     std::string debugName; ///< 调试名称。
     u32 set = 0; ///< 绑定组编号，对应 Vulkan set / D3D register space / Metal buffer index 分组。
-    std::vector<RHIBindGroupLayoutEntry> entries; ///< 该组内所有 binding 声明。
+    std::vector<RHIBindSetLayoutEntry> entries; ///< 该组内所有 binding 声明。
 };
 
 /// buffer 绑定到 shader 时的范围。
@@ -1009,7 +1009,7 @@ struct RHITextureBinding {
 
 /// 一个实际资源绑定写入项。
 struct RHIResourceBinding {
-    u32 binding = 0; ///< 目标绑定槽编号，必须存在于 RHIBindGroupLayoutEntry 中。
+    u32 binding = 0; ///< 目标绑定槽编号，必须存在于 RHIBindSetLayoutEntry 中。
     u32 arrayElement = 0; ///< 写入资源数组的第几个元素。
     RHIBindingType type = RHIBindingType::UniformBuffer; ///< 本次写入的资源类型。
     RHIBufferBinding buffer{}; ///< buffer 类型绑定时使用。
@@ -1017,10 +1017,10 @@ struct RHIResourceBinding {
     RHISampler sampler{}; ///< sampler 或 combined texture sampler 绑定时使用。
 };
 
-/// 一组实际绑定资源。渲染命令只绑定 RHIBindGroup，不直接散落绑定单个资源。
-struct RHIBindGroupDesc {
+/// 一组实际绑定资源。渲染命令只绑定 RHIBindSet，不直接散落绑定单个资源。
+struct RHIBindSetDesc {
     std::string debugName; ///< 调试名称。
-    RHIBindGroupLayout layout{}; ///< 该绑定组使用的布局。
+    RHIBindSetLayout layout{}; ///< 该绑定组使用的布局。
     std::vector<RHIResourceBinding> bindings; ///< 初始资源绑定列表。
 };
 
@@ -1034,11 +1034,11 @@ struct RHIPushConstantRange {
 /// 管线资源布局。所有 graphics/compute pipeline 都应该引用一个布局。
 struct RHIPipelineLayoutDesc {
     std::string debugName; ///< 调试名称。
-    std::vector<RHIBindGroupLayout> bindGroupLayouts; ///< 管线可绑定的 bind group layout 列表，顺序代表 set/space。
+    std::vector<RHIBindSetLayout> bindSetLayouts; ///< 管线可绑定的 bind set layout 列表，顺序代表 set/space。
     std::vector<RHIPushConstantRange> pushConstants; ///< 小块高频常量范围。
 };
 
-/// shader 反射得到的资源绑定信息，可用于自动生成 RHIBindGroupLayoutDesc。
+/// shader 反射得到的资源绑定信息，可用于自动生成 RHIBindSetLayoutDesc。
 struct RHIShaderResourceReflection {
     std::string name; ///< shader 中的资源名称。
     u32 set = 0; ///< 资源所在 set/space。
@@ -1688,8 +1688,7 @@ struct RHISubmeshDesc {
     u32 firstInstance = 0; ///< 默认起始实例。
     u32 instanceCount = 1; ///< 默认实例数量。
     i32 materialIndex = -1; ///< 默认材质索引，-1 表示未指定。
-    glm::vec3 boundsMin{0.0F}; ///< 本地空间 AABB 最小点。
-    glm::vec3 boundsMax{0.0F}; ///< 本地空间 AABB 最大点。
+    RHIBoundingBox boundsBox{}; ///< 本地空间轴对齐包围盒，用于子网格裁剪和空间查询。
     RHIBoundingSphere boundsSphere{}; ///< 本地空间包围球。
 };
 
@@ -1730,7 +1729,7 @@ struct RHIMaterialParameter {
 struct RHIMaterialDesc {
     std::string debugName; ///< 调试名称。
     RHIPipeline pipeline{}; ///< 材质默认管线。
-    std::vector<RHIBindGroup> bindGroups; ///< 材质级资源绑定组。
+    std::vector<RHIBindSet> bindSets; ///< 材质级资源绑定组。
     std::vector<RHITextureSlot> textureSlots; ///< 材质贴图槽。
     std::vector<RHIMaterialParameter> parameters; ///< 命名材质参数。
     std::vector<std::byte> pushConstantData; ///< 材质 push constant/root constant 数据。
@@ -1739,7 +1738,7 @@ struct RHIMaterialDesc {
 /// 非索引绘制命令。通常由可见性裁剪和排序阶段生成。
 struct RHIDrawCommand {
     RHIPipeline pipeline{}; ///< 使用的图形管线。
-    std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流，可覆盖 mesh 默认流。
     u32 vertexCount = 0; ///< 绘制顶点数。
     u32 instanceCount = 1; ///< 实例数量。
@@ -1750,7 +1749,7 @@ struct RHIDrawCommand {
 /// 索引绘制命令。
 struct RHIDrawIndexedCommand {
     RHIPipeline pipeline{}; ///< 使用的图形管线。
-    std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIIndexStream indexStream{}; ///< 索引流。
     u32 indexCount = 0; ///< 绘制索引数。
@@ -1763,7 +1762,7 @@ struct RHIDrawIndexedCommand {
 /// compute dispatch 命令。
 struct RHIDispatchCommand {
     RHIPipeline pipeline{}; ///< 使用的计算管线。
-    std::vector<RHIBindGroup> bindGroups; ///< dispatch 前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< dispatch 前需要绑定的资源组。
     u32 groupCountX = 1; ///< X 方向 workgroup 数量。
     u32 groupCountY = 1; ///< Y 方向 workgroup 数量。
     u32 groupCountZ = 1; ///< Z 方向 workgroup 数量。
@@ -1772,7 +1771,7 @@ struct RHIDispatchCommand {
 /// 间接非索引绘制命令，参数从 GPU buffer 读取。
 struct RHIDrawIndirectCommand {
     RHIPipeline pipeline{}; ///< 使用的图形管线。
-    std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
     u64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
@@ -1785,7 +1784,7 @@ struct RHIDrawIndirectCommand {
 /// 间接索引绘制命令。
 struct RHIDrawIndexedIndirectCommand {
     RHIPipeline pipeline{}; ///< 使用的图形管线。
-    std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIIndexStream indexStream{}; ///< 索引流。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
@@ -1799,7 +1798,7 @@ struct RHIDrawIndexedIndirectCommand {
 /// 间接 compute dispatch 命令，groupCount 从 GPU buffer 读取。
 struct RHIDispatchIndirectCommand {
     RHIPipeline pipeline{}; ///< 使用的计算管线。
-    std::vector<RHIBindGroup> bindGroups; ///< dispatch 前需要绑定的资源组。
+    std::vector<RHIBindSet> bindSets; ///< dispatch 前需要绑定的资源组。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
     u64 argumentOffset = 0; ///< 参数字节偏移。
 };
@@ -2140,8 +2139,8 @@ struct RHICapabilities {
     u32 maxTextureCubeSize = 0; ///< 支持的最大 cube texture 边长。
     u32 maxTextureArrayLayers = 0; ///< 最大 texture array 层数。
     u32 maxColorAttachments = 0; ///< 单个 pass 最大 color attachment 数。
-    u32 maxBindGroups = 0; ///< 单个 pipeline 最大 bind group 数。
-    u32 maxBindingsPerGroup = 0; ///< 单个 bind group 最大 binding 数。
+    u32 maxBindSets = 0; ///< 单个 pipeline 最大 bind set 数。
+    u32 maxBindingsPerGroup = 0; ///< 单个 bind set 最大 binding 数。
     u32 maxVertexBuffers = 0; ///< 单次绘制最大 vertex buffer binding 数。
     u32 maxVertexAttributes = 0; ///< 单个 pipeline 最大顶点属性数。
     u32 maxPushConstantSize = 0; ///< push constant/root constant 最大字节数。
@@ -2172,6 +2171,9 @@ struct RHICapabilities {
 };
 
 } // namespace rhi
+
+
+
 
 
 

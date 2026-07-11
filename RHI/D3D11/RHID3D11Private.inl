@@ -23,7 +23,7 @@ using Microsoft::WRL::ComPtr;
 // constant buffer、SRV、sampler 等绑定到 context，然后调用 Draw/Dispatch。
 //
 // 因为 D3D11 没有 Vulkan 那种 descriptor set、显式 image layout 和 queue submit 模型，
-// 本后端会把 RHIDefinitions.hpp 的 BindGroup/Pipeline/RHIFramePacket 翻译成 D3D11 的
+// 本后端会把 RHIDefinitions.hpp 的 BindSet/Pipeline/RHIFramePacket 翻译成 D3D11 的
 // COM 对象和 context 状态设置，尽量保持上层接口和 Vulkan 后端一致。
 
 // D3D11 资源句柄同样使用 1-based index；0 是无效句柄。真实 COM 对象保存在 Impl 的
@@ -681,8 +681,8 @@ static D3D11_DEPTH_STENCIL_VIEW_DESC makeDsvDesc(const RHITextureDesc& texture, 
 
 // Impl 是 RHID3D11 的后端状态仓库。
 // D3D11 对象都是 COM 对象，这里用 ComPtr 管生命周期；公共 RHIHandle 只保存 1-based index。
-// 注意 BindGroupLayout/PipelineLayout 在 D3D11 中没有原生等价物，它们主要作为统一抽象的
-// 描述和校验数据存在，真正的绑定发生在 applyBindGroup/applyPipeline 里。
+// 注意 BindSetLayout/PipelineLayout 在 D3D11 中没有原生等价物，它们主要作为统一抽象的
+// 描述和校验数据存在，真正的绑定发生在 applyBindSet/applyPipeline 里。
 struct RHID3D11::Impl {
     struct BufferResource {
         RHIBufferDesc desc{};
@@ -720,8 +720,8 @@ struct RHID3D11::Impl {
         ComPtr<ID3D11ComputeShader> computeShader;
     };
 
-    struct BindGroupLayoutResource {
-        RHIBindGroupLayoutDesc desc{};
+    struct BindSetLayoutResource {
+        RHIBindSetLayoutDesc desc{};
     };
 
     struct ResolvedBinding {
@@ -734,8 +734,8 @@ struct RHID3D11::Impl {
         ComPtr<ID3D11SamplerState> sampler;
     };
 
-    struct BindGroupResource {
-        RHIBindGroupDesc desc{};
+    struct BindSetResource {
+        RHIBindSetDesc desc{};
         std::vector<ResolvedBinding> bindings;
     };
 
@@ -806,8 +806,8 @@ struct RHID3D11::Impl {
     std::vector<TextureViewResource> textureViews;
     std::vector<SamplerResource> samplers;
     std::vector<ShaderResource> shaders;
-    std::vector<BindGroupLayoutResource> bindGroupLayouts;
-    std::vector<BindGroupResource> bindGroups;
+    std::vector<BindSetLayoutResource> bindSetLayouts;
+    std::vector<BindSetResource> bindSets;
     std::vector<PipelineLayoutResource> pipelineLayouts;
     std::vector<PipelineCacheResource> pipelineCaches;
     std::vector<PipelineResource> pipelines;
@@ -832,8 +832,8 @@ struct RHID3D11::Impl {
         object->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(name.size()), name.data());
     }
 
-    const RHIBindGroupLayoutEntry* findLayoutEntry(const BindGroupLayoutResource& layout, u32 binding) const {
-        const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(), [&](const RHIBindGroupLayoutEntry& entry) {
+    const RHIBindSetLayoutEntry* findLayoutEntry(const BindSetLayoutResource& layout, u32 binding) const {
+        const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(), [&](const RHIBindSetLayoutEntry& entry) {
             return entry.binding == binding;
         });
         return it == layout.desc.entries.end() ? nullptr : &*it;
@@ -932,7 +932,7 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
     caps.maxTextureCubeSize = D3D11_REQ_TEXTURECUBE_DIMENSION;
     caps.maxTextureArrayLayers = D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
     caps.maxColorAttachments = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
-    caps.maxBindGroups = 1;
+    caps.maxBindSets = 1;
     caps.maxBindingsPerGroup = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
     caps.maxVertexBuffers = D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
     caps.maxVertexAttributes = D3D11_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT;
@@ -982,6 +982,8 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
 
 } // namespace rhi
+
+
 
 
 

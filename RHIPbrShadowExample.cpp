@@ -105,10 +105,10 @@ struct ExampleResources {
     RHITextureView shadowMapView{};
     RHISampler shadowSampler{};
 
-    RHIBindGroupLayout sceneLayout{};
-    RHIBindGroupLayout objectLayout{};
-    RHIBindGroup sceneBindGroup{};
-    RHIBindGroup objectBindGroup{};
+    RHIBindSetLayout sceneLayout{};
+    RHIBindSetLayout objectLayout{};
+    RHIBindSet sceneBindSet{};
+    RHIBindSet objectBindSet{};
     RHIPipelineLayout pipelineLayout{};
     RHIPipelineCache pipelineCache{};
     RHIPipeline pbrPipeline{};
@@ -164,8 +164,8 @@ GeneratedMesh generatePlaneAndSphere() {
     mesh.planeSubmesh.firstIndex = 0;
     mesh.planeSubmesh.indexCount = 6;
     mesh.planeSubmesh.materialIndex = 0;
-    mesh.planeSubmesh.boundsMin = {-halfSize, 0.0F, -halfSize};
-    mesh.planeSubmesh.boundsMax = {halfSize, 0.0F, halfSize};
+    mesh.planeSubmesh.boundsBox.min = {-halfSize, 0.0F, -halfSize};
+    mesh.planeSubmesh.boundsBox.max = {halfSize, 0.0F, halfSize};
     mesh.planeSubmesh.boundsSphere = {{0.0F, 0.0F, 0.0F}, halfSize * 1.41421356F};
 
     mesh.vertices.push_back({{-halfSize, 0.0F, -halfSize}, {0.0F, 1.0F, 0.0F}, {0.0F, 0.0F}});
@@ -214,8 +214,8 @@ GeneratedMesh generatePlaneAndSphere() {
     mesh.sphereSubmesh.firstIndex = sphereFirstIndex;
     mesh.sphereSubmesh.indexCount = static_cast<u32>(mesh.indices.size()) - sphereFirstIndex;
     mesh.sphereSubmesh.materialIndex = 1;
-    mesh.sphereSubmesh.boundsMin = center - glm::vec3(radius);
-    mesh.sphereSubmesh.boundsMax = center + glm::vec3(radius);
+    mesh.sphereSubmesh.boundsBox.min = center - glm::vec3(radius);
+    mesh.sphereSubmesh.boundsBox.max = center + glm::vec3(radius);
     mesh.sphereSubmesh.boundsSphere = {center, radius};
 
     return mesh;
@@ -420,7 +420,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     shadowSamplerDesc.borderColor = RHIBorderColor::OpaqueWhite;
     resources.shadowSampler = renderer.createSampler(shadowSamplerDesc);
 
-    RHIBindGroupLayoutDesc sceneLayout{};
+    RHIBindSetLayoutDesc sceneLayout{};
     sceneLayout.debugName = "Example.SceneLayout";
     sceneLayout.set = 0;
     sceneLayout.entries = {
@@ -428,44 +428,44 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
         {1, RHIBindingType::UniformBuffer, RHIShaderStage::Fragment, 1},
         {2, RHIBindingType::CombinedTextureSampler, RHIShaderStage::Fragment, 1, false, RHITextureViewDimension::View2D, RHITextureSampleType::Depth}
     };
-    resources.sceneLayout = renderer.createBindGroupLayout(sceneLayout);
+    resources.sceneLayout = renderer.createBindSetLayout(sceneLayout);
 
-    RHIBindGroupLayoutDesc objectLayout{};
+    RHIBindSetLayoutDesc objectLayout{};
     objectLayout.debugName = "Example.ObjectLayout";
     objectLayout.set = 1;
     objectLayout.entries = {
         {0, RHIBindingType::StorageBuffer, RHIShaderStage::Vertex, 1, false},
         {1, RHIBindingType::StorageBuffer, RHIShaderStage::Fragment, 1, false}
     };
-    resources.objectLayout = renderer.createBindGroupLayout(objectLayout);
+    resources.objectLayout = renderer.createBindSetLayout(objectLayout);
 
     RHIPipelineLayoutDesc pipelineLayoutDesc{};
     pipelineLayoutDesc.debugName = "Example.PipelineLayout";
-    pipelineLayoutDesc.bindGroupLayouts = {resources.sceneLayout, resources.objectLayout};
+    pipelineLayoutDesc.bindSetLayouts = {resources.sceneLayout, resources.objectLayout};
     resources.pipelineLayout = renderer.createPipelineLayout(pipelineLayoutDesc);
 
     RHIPipelineCacheDesc cacheDesc{};
     cacheDesc.debugName = "Example.PipelineCache";
     resources.pipelineCache = renderer.createPipelineCache(cacheDesc);
 
-    RHIBindGroupDesc sceneBindGroup{};
-    sceneBindGroup.debugName = "Example.SceneBindGroup";
-    sceneBindGroup.layout = resources.sceneLayout;
-    sceneBindGroup.bindings = {
+    RHIBindSetDesc sceneBindSet{};
+    sceneBindSet.debugName = "Example.SceneBindSet";
+    sceneBindSet.layout = resources.sceneLayout;
+    sceneBindSet.bindings = {
         {0, 0, RHIBindingType::UniformBuffer, {resources.sceneUniformBuffer, 0, sizeof(SceneUniforms)}},
         {1, 0, RHIBindingType::UniformBuffer, {resources.lightUniformBuffer, 0, sizeof(LightUniforms)}},
         {2, 0, RHIBindingType::CombinedTextureSampler, {}, {resources.shadowMapView, resources.shadowMap}, resources.shadowSampler}
     };
-    resources.sceneBindGroup = renderer.createBindGroup(sceneBindGroup);
+    resources.sceneBindSet = renderer.createBindSet(sceneBindSet);
 
-    RHIBindGroupDesc objectBindGroup{};
-    objectBindGroup.debugName = "Example.ObjectBindGroup";
-    objectBindGroup.layout = resources.objectLayout;
-    objectBindGroup.bindings = {
+    RHIBindSetDesc objectBindSet{};
+    objectBindSet.debugName = "Example.ObjectBindSet";
+    objectBindSet.layout = resources.objectLayout;
+    objectBindSet.bindings = {
         {0, 0, RHIBindingType::StorageBuffer, {resources.objectBuffer, 0, sizeof(ObjectGpuData) * resources.objectData.size()}},
         {1, 0, RHIBindingType::StorageBuffer, {resources.materialBuffer, 0, sizeof(MaterialGpuData) * resources.materialData.size()}}
     };
-    resources.objectBindGroup = renderer.createBindGroup(objectBindGroup);
+    resources.objectBindSet = renderer.createBindSet(objectBindSet);
 
     resources.pbrPipeline = renderer.createGraphicsPipeline(makePbrPipelineDesc(resources.pipelineLayout, resources.pipelineCache, colorFormat));
     resources.shadowPipeline = renderer.createGraphicsPipeline(makeShadowPipelineDesc(resources.pipelineLayout, resources.pipelineCache));
@@ -478,7 +478,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     RHIMaterialDesc planeMaterial{};
     planeMaterial.debugName = "Example.PlaneMaterial";
     planeMaterial.pipeline = resources.pbrPipeline;
-    planeMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    planeMaterial.bindSets = {resources.sceneBindSet, resources.objectBindSet};
     planeMaterial.parameters = {
         {"baseColorFactor", RHIMaterialParameterType::Float4, resources.materialData[0].baseColor},
         {"metallic", RHIMaterialParameterType::Float, {resources.materialData[0].metallicRoughness.x, 0.0F, 0.0F, 0.0F}},
@@ -488,7 +488,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     RHIMaterialDesc sphereMaterial{};
     sphereMaterial.debugName = "Example.SphereMaterial";
     sphereMaterial.pipeline = resources.pbrPipeline;
-    sphereMaterial.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    sphereMaterial.bindSets = {resources.sceneBindSet, resources.objectBindSet};
     sphereMaterial.parameters = {
         {"baseColorFactor", RHIMaterialParameterType::Float4, resources.materialData[1].baseColor},
         {"metallic", RHIMaterialParameterType::Float, {resources.materialData[1].metallicRoughness.x, 0.0F, 0.0F, 0.0F}},
@@ -540,7 +540,7 @@ RHIUploadBatchDesc makeUploadBatch(const ExampleResources& resources) {
 RHIDrawIndexedCommand makeDraw(const ExampleResources& resources, const RHISubmeshDesc& submesh, RHIPipeline pipeline, u32 objectIndex) {
     RHIDrawIndexedCommand draw{};
     draw.pipeline = pipeline;
-    draw.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
+    draw.bindSets = {resources.sceneBindSet, resources.objectBindSet};
     draw.vertexStreams = resources.meshDesc.vertexStreams;
     draw.indexStream = *resources.meshDesc.indexStream;
     draw.indexCount = submesh.indexCount;
@@ -587,7 +587,7 @@ RHIRenderObjectSetDesc makeObjectSetDesc(const ExampleResources& resources) {
     plane.submeshIndex = 0;
     plane.transform.localToWorld = resources.objectData[0].localToWorld;
     plane.transform.previousLocalToWorld = resources.objectData[0].localToWorld;
-    plane.worldBounds = {resources.cpuMesh.planeSubmesh.boundsMin, resources.cpuMesh.planeSubmesh.boundsMax};
+    plane.worldBounds = resources.cpuMesh.planeSubmesh.boundsBox;
     plane.worldBoundsSphere = resources.cpuMesh.planeSubmesh.boundsSphere;
 
     RHIRenderObjectDesc sphere{};
@@ -597,7 +597,7 @@ RHIRenderObjectSetDesc makeObjectSetDesc(const ExampleResources& resources) {
     sphere.submeshIndex = 1;
     sphere.transform.localToWorld = resources.objectData[1].localToWorld;
     sphere.transform.previousLocalToWorld = resources.objectData[1].localToWorld;
-    sphere.worldBounds = {resources.cpuMesh.sphereSubmesh.boundsMin, resources.cpuMesh.sphereSubmesh.boundsMax};
+    sphere.worldBounds = resources.cpuMesh.sphereSubmesh.boundsBox;
     sphere.worldBoundsSphere = resources.cpuMesh.sphereSubmesh.boundsSphere;
 
     objects.items = {plane, sphere};
@@ -700,8 +700,8 @@ void destroyExampleResources(RHIDevice& renderer, ExampleResources& resources) {
     renderer.destroy(resources.shadowPipeline);
     renderer.destroy(resources.pipelineCache);
     renderer.destroy(resources.pipelineLayout);
-    renderer.destroy(resources.sceneBindGroup);
-    renderer.destroy(resources.objectBindGroup);
+    renderer.destroy(resources.sceneBindSet);
+    renderer.destroy(resources.objectBindSet);
     renderer.destroy(resources.sceneLayout);
     renderer.destroy(resources.objectLayout);
     renderer.destroy(resources.shadowSampler);
@@ -832,6 +832,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
+
+
+
 
 
 

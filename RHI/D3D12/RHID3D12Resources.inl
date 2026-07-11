@@ -311,30 +311,30 @@ RHIShader RHID3D12::createShaderModule(const RHIShaderDesc& desc) {
     return makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
 }
 
-RHIBindGroupLayout RHID3D12::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
-    Impl::BindGroupLayoutResource resource{};
+RHIBindSetLayout RHID3D12::createBindSetLayout(const RHIBindSetLayoutDesc& desc) {
+    Impl::BindSetLayoutResource resource{};
     resource.desc = desc;
-    return makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
+    return makeRenderHandle<RHIBindSetLayout>(impl_->bindSetLayouts, std::move(resource));
 }
 
-RHIBindGroup RHID3D12::createBindGroup(const RHIBindGroupDesc& desc) {
+RHIBindSet RHID3D12::createBindSet(const RHIBindSetDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
-    const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
+    const Impl::BindSetLayoutResource* layout = getRenderResource(impl_->bindSetLayouts, desc.layout);
     if (layout == nullptr) {
-        throw std::runtime_error("RHIBindGroupDesc::layout is invalid");
+        throw std::runtime_error("RHIBindSetDesc::layout is invalid");
     }
 
-    Impl::BindGroupResource resource{};
+    Impl::BindSetResource resource{};
     resource.desc = desc;
     resource.bindings.reserve(desc.bindings.size());
 
     for (const RHIResourceBinding& binding : desc.bindings) {
-        const RHIBindGroupLayoutEntry* layoutEntry = impl_->findLayoutEntry(*layout, binding.binding);
+        const RHIBindSetLayoutEntry* layoutEntry = impl_->findLayoutEntry(*layout, binding.binding);
         if (layoutEntry == nullptr) {
-            throw std::runtime_error("RHIResourceBinding has no matching RHIBindGroupLayoutEntry");
+            throw std::runtime_error("RHIResourceBinding has no matching RHIBindSetLayoutEntry");
         }
 
         Impl::ResolvedBinding resolved{};
@@ -418,10 +418,10 @@ RHIBindGroup RHID3D12::createBindGroup(const RHIBindGroupDesc& desc) {
         resource.bindings.push_back(std::move(resolved));
     }
 
-    return makeRenderHandle<RHIBindGroup>(impl_->bindGroups, std::move(resource));
+    return makeRenderHandle<RHIBindSet>(impl_->bindSets, std::move(resource));
 }
 
-static D3D12_DESCRIPTOR_RANGE_TYPE toDescriptorRangeType(const RHIBindGroupLayoutEntry& entry) {
+static D3D12_DESCRIPTOR_RANGE_TYPE toDescriptorRangeType(const RHIBindSetLayoutEntry& entry) {
     switch (entry.type) {
     case RHIBindingType::UniformBuffer:          return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
     case RHIBindingType::StorageBuffer:          return entry.writable ? D3D12_DESCRIPTOR_RANGE_TYPE_UAV : D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -438,8 +438,8 @@ static D3D12_DESCRIPTOR_RANGE_TYPE toDescriptorRangeType(const RHIBindGroupLayou
 static void addDescriptorTableParameter(
     std::vector<D3D12_ROOT_PARAMETER>& parameters,
     std::vector<std::vector<D3D12_DESCRIPTOR_RANGE>>& rangeStorage,
-    const RHIBindGroupLayoutDesc& layoutDesc,
-    const RHIBindGroupLayoutEntry& entry,
+    const RHIBindSetLayoutDesc& layoutDesc,
+    const RHIBindSetLayoutEntry& entry,
     D3D12_DESCRIPTOR_RANGE_TYPE rangeType) {
     rangeStorage.emplace_back(1);
     D3D12_DESCRIPTOR_RANGE& range = rangeStorage.back()[0];
@@ -468,7 +468,7 @@ static ComPtr<ID3D12RootSignature> createRootSignatureForLayout(
     rangeStorage.reserve(32);
 
     for (const LayoutResourceT* layout : layouts) {
-        for (const RHIBindGroupLayoutEntry& entry : layout->desc.entries) {
+        for (const RHIBindSetLayoutEntry& entry : layout->desc.entries) {
             if (entry.type == RHIBindingType::PushConstant) {
                 continue;
             }
@@ -524,12 +524,12 @@ RHIPipelineLayout RHID3D12::createPipelineLayout(const RHIPipelineLayoutDesc& de
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
-    std::vector<Impl::BindGroupLayoutResource*> layouts;
-    layouts.reserve(desc.bindGroupLayouts.size());
-    for (RHIBindGroupLayout handle : desc.bindGroupLayouts) {
-        Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, handle);
+    std::vector<Impl::BindSetLayoutResource*> layouts;
+    layouts.reserve(desc.bindSetLayouts.size());
+    for (RHIBindSetLayout handle : desc.bindSetLayouts) {
+        Impl::BindSetLayoutResource* layout = getRenderResource(impl_->bindSetLayouts, handle);
         if (layout == nullptr) {
-            throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind group layout");
+            throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind set layout");
         }
         layouts.push_back(layout);
     }
@@ -550,10 +550,12 @@ RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // D3D12 resources 片段负责“能被 GPU 使用的对象”：
 // - buffer/texture 是 ID3D12Resource；
 // - texture view、sampler、CBV/SRV/UAV 是 descriptor heap 中的槽位；
-// - BindGroup 先解析成 CPU descriptor，后续完整命令录制时再拷贝到 shader-visible heap；
+// - BindSet 先解析成 CPU descriptor，后续完整命令录制时再拷贝到 shader-visible heap；
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
 
 } // namespace rhi
+
+
 
 
 

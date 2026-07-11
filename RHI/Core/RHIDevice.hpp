@@ -34,8 +34,8 @@ public:
     [[nodiscard]] RHITextureView createTextureView(const RHITextureViewDesc& desc);
     [[nodiscard]] RHISampler createSampler(const RHISamplerDesc& desc);
     [[nodiscard]] RHIShader createShaderModule(const RHIShaderDesc& desc);
-    [[nodiscard]] RHIBindGroupLayout createBindGroupLayout(const RHIBindGroupLayoutDesc& desc);
-    [[nodiscard]] RHIBindGroup createBindGroup(const RHIBindGroupDesc& desc);
+    [[nodiscard]] RHIBindSetLayout createBindSetLayout(const RHIBindSetLayoutDesc& desc);
+    [[nodiscard]] RHIBindSet createBindSet(const RHIBindSetDesc& desc);
 
     [[nodiscard]] RHIPipelineLayout createPipelineLayout(const RHIPipelineLayoutDesc& desc);
     [[nodiscard]] RHIPipelineCache createPipelineCache(const RHIPipelineCacheDesc& desc);
@@ -68,8 +68,8 @@ public:
     void destroy(RHITextureView handle) noexcept;
     void destroy(RHISampler handle) noexcept;
     void destroy(RHIShader handle) noexcept;
-    void destroy(RHIBindGroupLayout handle) noexcept;
-    void destroy(RHIBindGroup handle) noexcept;
+    void destroy(RHIBindSetLayout handle) noexcept;
+    void destroy(RHIBindSet handle) noexcept;
     void destroy(RHIPipelineLayout handle) noexcept;
     void destroy(RHIPipelineCache handle) noexcept;
     void destroy(RHIPipeline handle) noexcept;
@@ -84,5 +84,6 @@ private:
 };
 
 } // namespace rhi
+
 
 

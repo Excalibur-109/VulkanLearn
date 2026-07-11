@@ -722,13 +722,13 @@ struct RHIVulkan::Impl {
         VkShaderModule module = VK_NULL_HANDLE;
     };
 
-    struct BindGroupLayoutResource {
-        RHIBindGroupLayoutDesc desc{};
+    struct BindSetLayoutResource {
+        RHIBindSetLayoutDesc desc{};
         VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     };
 
-    struct BindGroupResource {
-        RHIBindGroupDesc desc{};
+    struct BindSetResource {
+        RHIBindSetDesc desc{};
         VkDescriptorSet set = VK_NULL_HANDLE;
     };
 
@@ -789,8 +789,8 @@ struct RHIVulkan::Impl {
     std::vector<TextureViewResource> textureViews;
     std::vector<SamplerResource> samplers;
     std::vector<ShaderResource> shaders;
-    std::vector<BindGroupLayoutResource> bindGroupLayouts;
-    std::vector<BindGroupResource> bindGroups;
+    std::vector<BindSetLayoutResource> bindSetLayouts;
+    std::vector<BindSetResource> bindSets;
     std::vector<PipelineLayoutResource> pipelineLayouts;
     std::vector<PipelineResource> pipelines;
     std::vector<PipelineCacheResource> pipelineCaches;
@@ -1180,6 +1180,7 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
 }
 
 } // namespace rhi
+
 
 
 
