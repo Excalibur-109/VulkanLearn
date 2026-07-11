@@ -176,6 +176,7 @@ file(GLOB RHI_VULKAN_SOURCES CONFIGURE_DEPENDS
 add_library(RHI STATIC
     RHI/RHI.hpp
     RHI/RHIDefinitions.hpp
+    RHI/RHIDefinitions.cpp
     RHI/RHIArchitecture.md
     RHI/Core/RHIDevice.hpp
     RHI/Core/RHIDevice.cpp
@@ -258,6 +259,7 @@ if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
         )
     endif()
 endif()
+
 
 
 
