@@ -169,25 +169,33 @@ using RHIMaterial = RHIHandle<RHIMaterialTag>;
 
 template <typename Enum>
 [[nodiscard]] constexpr auto RHIEnumToUnderlying(Enum value) noexcept {
+    static_assert(std::is_enum_v<Enum>, "RHIEnumToUnderlying requires an enum type");
     return static_cast<std::underlying_type_t<Enum>>(value);
 }
 
+/// 默认枚举是互斥单值，不能按位组合。只有显式特化为 true 的枚举才是 flags。
 template <typename Enum>
+struct RHIEnableEnumFlags : std::false_type {};
+
+template <typename Enum>
+concept RHIEnumFlags = std::is_enum_v<Enum> && RHIEnableEnumFlags<Enum>::value;
+
+template <RHIEnumFlags Enum>
 [[nodiscard]] constexpr Enum RHIEnumBitOr(Enum lhs, Enum rhs) noexcept {
     return static_cast<Enum>(RHIEnumToUnderlying(lhs) | RHIEnumToUnderlying(rhs));
 }
 
-template <typename Enum>
+template <RHIEnumFlags Enum>
 [[nodiscard]] constexpr Enum RHIEnumBitAnd(Enum lhs, Enum rhs) noexcept {
     return static_cast<Enum>(RHIEnumToUnderlying(lhs) & RHIEnumToUnderlying(rhs));
 }
 
-template <typename Enum>
+template <RHIEnumFlags Enum>
 [[nodiscard]] constexpr bool RHIHasAny(Enum value, Enum flags) noexcept {
     return (RHIEnumToUnderlying(value) & RHIEnumToUnderlying(flags)) != 0;
 }
 
-template <typename Enum>
+template <RHIEnumFlags Enum>
 [[nodiscard]] constexpr bool RHIHasAll(Enum value, Enum flags) noexcept {
     return (RHIEnumToUnderlying(value) & RHIEnumToUnderlying(flags)) == RHIEnumToUnderlying(flags);
 }
@@ -249,6 +257,9 @@ enum class RHIRenderFeature : u64 {
     Multiview = 1ull << 18, ///< 启用单次 pass 渲染多个 view，常用于 VR/立体渲染。
     DebugMarkers = 1ull << 19 ///< 启用 GPU 调试标记和对象命名。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHIRenderFeature> : std::true_type {};
 
 [[nodiscard]] constexpr RHIRenderFeature operator|(RHIRenderFeature lhs, RHIRenderFeature rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -472,6 +483,9 @@ enum class RHIPipelineStage : u64 {
     AllCommands = 1ull << 20 ///< 覆盖队列中所有命令和阶段的保守同步标志。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHIPipelineStage> : std::true_type {};
+
 [[nodiscard]] constexpr RHIPipelineStage operator|(RHIPipelineStage lhs, RHIPipelineStage rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -508,6 +522,9 @@ enum class RHIAccessFlags : u64 {
     AccelerationStructureRead = 1ull << 17, ///< ray tracing 或构建过程读取加速结构。
     AccelerationStructureWrite = 1ull << 18 ///< 构建或更新过程写入加速结构。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHIAccessFlags> : std::true_type {};
 
 [[nodiscard]] constexpr RHIAccessFlags operator|(RHIAccessFlags lhs, RHIAccessFlags rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -596,6 +613,9 @@ enum class RHITextureAspect : u32 {
     All = 0xFFFFFFFFu ///< 覆盖资源所有可用 aspect；后端可按实际格式展开。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHITextureAspect> : std::true_type {};
+
 [[nodiscard]] constexpr RHITextureAspect operator|(RHITextureAspect lhs, RHITextureAspect rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -622,6 +642,9 @@ enum class RHIBufferUsage : u32 {
     ShaderDeviceAddress = 1u << 7 ///< 允许 shader 通过设备地址访问 buffer，常用于 bindless 或光追数据。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHIBufferUsage> : std::true_type {};
+
 [[nodiscard]] constexpr RHIBufferUsage operator|(RHIBufferUsage lhs, RHIBufferUsage rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -643,6 +666,9 @@ enum class RHIBufferCreateFlags : u32 {
     RingBuffer = 1u << 2, ///< 表示 buffer 用作环形分配区，常用于动态 uniform 或 per-frame 上传。
     Transient = 1u << 3 ///< 表示短生命周期临时 buffer，资源分配器可优先复用或延迟实际分配。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHIBufferCreateFlags> : std::true_type {};
 
 [[nodiscard]] constexpr RHIBufferCreateFlags operator|(RHIBufferCreateFlags lhs, RHIBufferCreateFlags rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -670,6 +696,9 @@ enum class RHITextureUsage : u32 {
     Transient = 1u << 7 ///< 表示临时 attachment，后端可使用 lazily allocated 或 RenderGraph 复用策略。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHITextureUsage> : std::true_type {};
+
 [[nodiscard]] constexpr RHITextureUsage operator|(RHITextureUsage lhs, RHITextureUsage rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -693,6 +722,9 @@ enum class RHITextureCreateFlags : u32 {
     GenerateMips = 1u << 4, ///< 表示资源创建后需要生成 mipmap，后端可预留必要 usage 和状态。
     RenderGraphTransient = 1u << 5 ///< 表示 RenderGraph 内部临时纹理，可参与别名和生命周期裁剪。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHITextureCreateFlags> : std::true_type {};
 
 [[nodiscard]] constexpr RHITextureCreateFlags operator|(RHITextureCreateFlags lhs, RHITextureCreateFlags rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -854,6 +886,9 @@ enum class RHIShaderStage : u32 {
     AllGraphics = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 6) | (1u << 7), ///< 覆盖所有图形 shader 阶段，不包含 compute。
     All = 0xFFFFFFFFu ///< 覆盖所有 shader 阶段，适合全局资源可见性或保守绑定布局。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHIShaderStage> : std::true_type {};
 
 [[nodiscard]] constexpr RHIShaderStage operator|(RHIShaderStage lhs, RHIShaderStage rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -1182,6 +1217,9 @@ enum class RHIColorWriteMask : u8 {
     All = 0x0F ///< 允许写入 RGBA 四个颜色通道。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHIColorWriteMask> : std::true_type {};
+
 [[nodiscard]] constexpr RHIColorWriteMask operator|(RHIColorWriteMask lhs, RHIColorWriteMask rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -1337,6 +1375,9 @@ enum class RHIPipelineStatisticFlags : u32 {
     TessEvaluationShaderInvocations = 1u << 9, ///< 统计 tessellation evaluation shader 调用次数。
     ComputeShaderInvocations = 1u << 10 ///< 统计 compute shader invocation 数量。
 };
+
+template <>
+struct RHIEnableEnumFlags<RHIPipelineStatisticFlags> : std::true_type {};
 
 [[nodiscard]] constexpr RHIPipelineStatisticFlags operator|(RHIPipelineStatisticFlags lhs, RHIPipelineStatisticFlags rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
@@ -1977,6 +2018,9 @@ enum class RHIRenderGraphResourceFlags : u32 {
     NeverCull = 1u << 4 ///< 即使看起来未被读取也不能裁剪，适合有调试、读回或外部副作用的资源。
 };
 
+template <>
+struct RHIEnableEnumFlags<RHIRenderGraphResourceFlags> : std::true_type {};
+
 [[nodiscard]] constexpr RHIRenderGraphResourceFlags operator|(RHIRenderGraphResourceFlags lhs, RHIRenderGraphResourceFlags rhs) noexcept {
     return RHIEnumBitOr(lhs, rhs);
 }
@@ -2128,6 +2172,8 @@ struct RHICapabilities {
 };
 
 } // namespace rhi
+
+
 
 
 

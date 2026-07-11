@@ -120,9 +120,9 @@ RHITextureView RHID3D11::createTextureView(const RHITextureViewDesc& desc) {
         throwIfFailed(impl_->device->CreateShaderResourceView(texture->resource.Get(), &srvDesc, &resource.srv), "CreateShaderResourceView failed");
     }
 
-    const bool wantsDepth = desc.aspect == RHITextureAspect::Depth ||
-                            desc.aspect == RHITextureAspect::Stencil ||
-                            desc.aspect == RHITextureAspect::All ||
+    const bool wantsDepth = RHIHasAny(
+        desc.aspect,
+        RHITextureAspect::Depth | RHITextureAspect::Stencil) ||
                             isDepthFormat(viewFormat) ||
                             hasStencilFormat(viewFormat);
     if (RHIHasAny(texture->desc.usage, RHITextureUsage::DepthStencilAttachment) && wantsDepth) {
@@ -464,4 +464,6 @@ RHIPipelineCache RHID3D11::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // 学习时可以按“resource 本体 -> view -> bind group 绑定表”的顺序看。
 
 } // namespace rhi
+
+
 

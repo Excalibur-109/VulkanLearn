@@ -273,7 +273,9 @@ bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
                 const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
                 if (view.desc.texture == texture &&
-                    (aspect == RHITextureAspect::All || view.desc.aspect == aspect || view.desc.aspect == RHITextureAspect::All)) {
+                    (aspect == RHITextureAspect::All ||
+                     view.desc.aspect == RHITextureAspect::All ||
+                     RHIHasAny(view.desc.aspect, aspect))) {
                     return RHITextureView(index + 1);
                 }
             }
@@ -505,6 +507,7 @@ void RHID3D11::waitIdle() const noexcept {
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
 
 } // namespace rhi
+
 
 
 

@@ -150,9 +150,9 @@ RHITextureView RHID3D12::createTextureView(const RHITextureViewDesc& desc) {
         impl_->device->CreateShaderResourceView(texture->resource.Get(), &srvDesc, resource.srv.handle);
     }
 
-    const bool wantsDepth = desc.aspect == RHITextureAspect::Depth ||
-                            desc.aspect == RHITextureAspect::Stencil ||
-                            desc.aspect == RHITextureAspect::All ||
+    const bool wantsDepth = RHIHasAny(
+        desc.aspect,
+        RHITextureAspect::Depth | RHITextureAspect::Stencil) ||
                             isDepthFormat(viewFormat) ||
                             hasStencilFormat(viewFormat);
     if (RHIHasAny(texture->desc.usage, RHITextureUsage::DepthStencilAttachment) && wantsDepth) {
@@ -554,4 +554,6 @@ RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc)
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
 
 } // namespace rhi
+
+
 

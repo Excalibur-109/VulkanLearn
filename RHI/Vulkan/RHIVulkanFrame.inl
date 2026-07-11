@@ -159,7 +159,9 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
                 const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
                 if (view.view != VK_NULL_HANDLE && view.desc.texture == texture &&
-                    (aspect == RHITextureAspect::All || view.desc.aspect == aspect || view.desc.aspect == RHITextureAspect::All)) {
+                    (aspect == RHITextureAspect::All ||
+                     view.desc.aspect == RHITextureAspect::All ||
+                     RHIHasAny(view.desc.aspect, aspect))) {
                     return RHITextureView(index + 1);
                 }
             }
@@ -500,6 +502,7 @@ void RHIVulkan::waitIdle() const noexcept {
 // destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
 
 } // namespace rhi
+
 
 
 
