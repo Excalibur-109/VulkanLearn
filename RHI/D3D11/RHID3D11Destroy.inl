@@ -90,16 +90,16 @@ void RHID3D11::destroy(RHIQueryPool handle) noexcept {
     }
 }
 
-void RHID3D11::destroy(RHISemaphore handle) noexcept {
-    if (Impl::SemaphoreResource* resource = getRenderResource(impl_->semaphores, handle)) {
+void RHID3D11::destroy(RHIGPUWaitGPUSignal handle) noexcept {
+    if (Impl::GPUWaitGPUSignalResource* resource = getRenderResource(impl_->gpuWaitGPUSignals, handle)) {
         resource->desc = {};
         resource->value = 0;
         resource->signaled = false;
     }
 }
 
-void RHID3D11::destroy(RHIFence handle) noexcept {
-    if (Impl::FenceResource* resource = getRenderResource(impl_->fences, handle)) {
+void RHID3D11::destroy(RHICPUWaitGPUSignal handle) noexcept {
+    if (Impl::CPUWaitGPUSignalResource* resource = getRenderResource(impl_->cpuWaitGPUSignals, handle)) {
         resource->eventQuery.Reset();
         resource->desc = {};
         resource->signaled = false;
@@ -128,4 +128,6 @@ void RHID3D11::destroy(RHISwapchain handle) noexcept {
 // shutdown 会按反向依赖顺序调用这些 destroy，避免 context 或 view 还持有底层资源。
 
 } // namespace rhi
+
+
 

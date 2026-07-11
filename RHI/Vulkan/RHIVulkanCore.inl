@@ -347,8 +347,8 @@ void RHIVulkan::shutdown() noexcept {
     for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
     for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
     for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
-    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
     for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
     for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
     for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
@@ -405,5 +405,7 @@ const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
 
 } // namespace rhi
+
+
 
 

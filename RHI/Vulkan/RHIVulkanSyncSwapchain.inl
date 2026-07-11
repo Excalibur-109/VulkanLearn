@@ -46,17 +46,17 @@ RHIQueryPool RHIVulkan::createQueryPool(const RHIQueryPoolDesc& desc) {
 
 // Semaphore/Fence 都是同步对象：semaphore 主要在 queue 之间或 acquire/present 之间传递依赖，
 // fence 用于 CPU 等 GPU 完成。timeline semaphore 需要 Vulkan 1.2 feature 支持。
-RHISemaphore RHIVulkan::createSemaphore(const RHISemaphoreDesc& desc) {
-    if (desc.type == RHISemaphoreType::Timeline && !impl_->supportsTimelineSemaphore) {
-        throw std::runtime_error("The current Vulkan device does not support timeline semaphores");
+RHIGPUWaitGPUSignal RHIVulkan::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
+    if (desc.type == RHIGPUWaitGPUSignalType::Timeline && !impl_->supportsTimelineSemaphore) {
+        throw std::runtime_error("The current Vulkan device does not support timeline gpuWaitGPUSignals");
     }
 
-    Impl::SemaphoreResource resource{};
+    Impl::GPUWaitGPUSignalResource resource{};
     resource.desc = desc;
 
     VkSemaphoreTypeCreateInfo typeInfo{};
     typeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-    typeInfo.semaphoreType = desc.type == RHISemaphoreType::Timeline ? VK_SEMAPHORE_TYPE_TIMELINE : VK_SEMAPHORE_TYPE_BINARY;
+    typeInfo.semaphoreType = desc.type == RHIGPUWaitGPUSignalType::Timeline ? VK_SEMAPHORE_TYPE_TIMELINE : VK_SEMAPHORE_TYPE_BINARY;
     typeInfo.initialValue = desc.initialValue;
 
     VkSemaphoreCreateInfo semaphoreInfo{};
@@ -67,13 +67,13 @@ RHISemaphore RHIVulkan::createSemaphore(const RHISemaphoreDesc& desc) {
         throw std::runtime_error("vkCreateSemaphore failed");
     }
 
-    const RHISemaphore handle = makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<u64>(impl_->semaphores.back().semaphore), desc.debugName);
+    const RHIGPUWaitGPUSignal handle = makeRenderHandle<RHIGPUWaitGPUSignal>(impl_->gpuWaitGPUSignals, std::move(resource));
+    impl_->setObjectName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<u64>(impl_->gpuWaitGPUSignals.back().semaphore), desc.debugName);
     return handle;
 }
 
-RHIFence RHIVulkan::createFence(const RHIFenceDesc& desc) {
-    Impl::FenceResource resource{};
+RHICPUWaitGPUSignal RHIVulkan::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
+    Impl::CPUWaitGPUSignalResource resource{};
     resource.desc = desc;
 
     VkFenceCreateInfo fenceInfo{};
@@ -84,8 +84,8 @@ RHIFence RHIVulkan::createFence(const RHIFenceDesc& desc) {
         throw std::runtime_error("vkCreateFence failed");
     }
 
-    const RHIFence handle = makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_FENCE, reinterpret_cast<u64>(impl_->fences.back().fence), desc.debugName);
+    const RHICPUWaitGPUSignal handle = makeRenderHandle<RHICPUWaitGPUSignal>(impl_->cpuWaitGPUSignals, std::move(resource));
+    impl_->setObjectName(VK_OBJECT_TYPE_FENCE, reinterpret_cast<u64>(impl_->cpuWaitGPUSignals.back().fence), desc.debugName);
     return handle;
 }
 
@@ -226,15 +226,15 @@ RHIExtent2D RHIVulkan::getSwapchainExtent(RHISwapchain handle) const {
 
 bool RHIVulkan::acquireNextImage(
     RHISwapchain swapchainHandle,
-    RHISemaphore signalSemaphore,
-    RHIFence signalFence,
+    RHIGPUWaitGPUSignal gpuWaitGPUSignal,
+    RHICPUWaitGPUSignal cpuWaitGPUSignal,
     u32* imageIndex,
     std::string* errorMessage) {
     // acquire 只是向 swapchain 取下一张可写图像的索引，并可选 signal semaphore/fence。
     // 真正把图像从 Present 转到 ColorAttachment 的 layout transition 在 frame 录制阶段完成。
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, swapchainHandle);
-    const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signalSemaphore);
-    const Impl::FenceResource* fence = getRenderResource(impl_->fences, signalFence);
+    const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, gpuWaitGPUSignal);
+    const Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, cpuWaitGPUSignal);
     if (swapchain == nullptr || swapchain->swapchain == VK_NULL_HANDLE || imageIndex == nullptr) {
         if (errorMessage != nullptr) *errorMessage = "acquireNextImage 参数无效";
         return false;
@@ -258,7 +258,7 @@ bool RHIVulkan::acquireNextImage(
 // 低层 submit：把外部已经准备好的同步关系提交到指定 queue。
 // 这个函数不录制命令，只把 wait/signal semaphore、timeline value 和 fence 翻译成 VkSubmitInfo。
 bool RHIVulkan::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
-    std::vector<VkSemaphore> waitSemaphores;
+    std::vector<VkSemaphore> waitSignals;
     std::vector<VkPipelineStageFlags> waitStages;
     std::vector<VkSemaphore> signalSemaphores;
     std::vector<u64> waitValues;
@@ -266,24 +266,24 @@ bool RHIVulkan::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage
     bool usesTimelineSemaphore = false;
 
     for (const RHIQueueWaitDesc& wait : desc.waits) {
-        const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
+        const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
         if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
             if (errorMessage != nullptr) *errorMessage = "RHIQueueSubmitDesc 包含无效 wait semaphore";
             return false;
         }
-        usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
-        waitSemaphores.push_back(semaphore->semaphore);
+        usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline;
+        waitSignals.push_back(semaphore->semaphore);
         waitStages.push_back(toVkPipelineStages(wait.stages));
         waitValues.push_back(wait.value);
     }
 
     for (const RHIQueueSignalDesc& signal : desc.signals) {
-        const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signal.semaphore);
+        const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, signal.signal);
         if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
             if (errorMessage != nullptr) *errorMessage = "RHIQueueSubmitDesc 包含无效 signal semaphore";
             return false;
         }
-        usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
+        usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline;
         signalSemaphores.push_back(semaphore->semaphore);
         signalValues.push_back(signal.value);
     }
@@ -298,13 +298,13 @@ bool RHIVulkan::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
-    submitInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
-    submitInfo.pWaitSemaphores = waitSemaphores.data();
+    submitInfo.waitSemaphoreCount = static_cast<u32>(waitSignals.size());
+    submitInfo.pWaitSemaphores = waitSignals.data();
     submitInfo.pWaitDstStageMask = waitStages.data();
     submitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
     submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-    const Impl::FenceResource* fence = getRenderResource(impl_->fences, desc.fence);
+    const Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, desc.cpuWaitGPUSignal);
     VkQueue queue = impl_->queueForType(desc.queue);
     if (queue == VK_NULL_HANDLE) {
         if (errorMessage != nullptr) *errorMessage = "RHIQueueSubmitDesc 请求的队列类型当前设备不支持";
@@ -333,22 +333,22 @@ bool RHIVulkan::present(const RHIPresentDesc& desc, std::string* errorMessage) {
         return false;
     }
 
-    std::vector<VkSemaphore> waitSemaphores;
-    waitSemaphores.reserve(desc.waitSemaphores.size());
-    for (RHISemaphore handle : desc.waitSemaphores) {
-        const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, handle);
+    std::vector<VkSemaphore> waitSignals;
+    waitSignals.reserve(desc.waitSignals.size());
+    for (RHIGPUWaitGPUSignal handle : desc.waitSignals) {
+        const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, handle);
         if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
             if (errorMessage != nullptr) *errorMessage = "RHIPresentDesc 包含无效 wait semaphore";
             return false;
         }
-        waitSemaphores.push_back(semaphore->semaphore);
+        waitSignals.push_back(semaphore->semaphore);
     }
 
     VkSwapchainKHR vkSwapchain = swapchain->swapchain;
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
-    presentInfo.pWaitSemaphores = waitSemaphores.data();
+    presentInfo.waitSemaphoreCount = static_cast<u32>(waitSignals.size());
+    presentInfo.pWaitSemaphores = waitSignals.data();
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &vkSwapchain;
     presentInfo.pImageIndices = &desc.imageIndex;
@@ -366,5 +366,8 @@ bool RHIVulkan::present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // dynamic rendering begin/end、pipeline/descriptor/buffer 绑定和 draw，然后提交并等待 fence。
 
 } // namespace rhi
+
+
+
 
 

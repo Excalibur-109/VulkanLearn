@@ -608,8 +608,8 @@ RHIFramePacket buildFramePacket(
     const ExampleResources& resources,
     const FrameTargets& targets,
     u32 imageIndex,
-    RHISemaphore imageAvailable,
-    RHISemaphore renderFinished,
+    RHIGPUWaitGPUSignal imageAvailable,
+    RHIGPUWaitGPUSignal renderFinished,
     u64 frameIndex) {
     RHIFramePacket packet{};
     packet.settings.drawableSize = targets.extent;
@@ -689,7 +689,7 @@ RHIFramePacket buildFramePacket(
     RHIPresentDesc present{};
     present.swapchain = targets.swapchain;
     present.imageIndex = imageIndex;
-    present.waitSemaphores = {renderFinished};
+    present.waitSignals = {renderFinished};
     present.presentMode = RHIPresentMode::FIFO;
     packet.present = present;
     return packet;
@@ -789,8 +789,8 @@ int main(int argc, char** argv) {
         ExampleResources resources = createExampleResources(renderer, targets.colorFormat);
         updateSceneUniforms(resources, targets.extent);
 
-        RHISemaphore imageAvailable = renderer.createSemaphore({"Example.ImageAvailable", RHISemaphoreType::Binary});
-        RHISemaphore renderFinished = renderer.createSemaphore({"Example.RenderFinished", RHISemaphoreType::Binary});
+        RHIGPUWaitGPUSignal imageAvailable = renderer.createGPUWaitGPUSignal({"Example.ImageAvailable", RHIGPUWaitGPUSignalType::Binary});
+        RHIGPUWaitGPUSignal renderFinished = renderer.createGPUWaitGPUSignal({"Example.RenderFinished", RHIGPUWaitGPUSignalType::Binary});
 
         u64 frameIndex = 0;
         while (!glfwWindowShouldClose(window) && (maxFrames == 0 || frameIndex < maxFrames)) {
@@ -806,7 +806,7 @@ int main(int argc, char** argv) {
             updateSceneUniforms(resources, targets.extent);
 
             u32 imageIndex = 0;
-            if (!renderer.acquireNextImage(targets.swapchain, imageAvailable, RHIFence{}, &imageIndex, &errorMessage)) {
+            if (!renderer.acquireNextImage(targets.swapchain, imageAvailable, RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
                 std::cerr << "acquireNextImage 失败: " << errorMessage << '\n';
                 break;
             }
@@ -832,6 +832,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
+
 
 
 

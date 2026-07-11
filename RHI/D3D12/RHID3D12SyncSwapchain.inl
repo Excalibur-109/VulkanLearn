@@ -31,20 +31,20 @@ RHIQueryPool RHID3D12::createQueryPool(const RHIQueryPoolDesc& desc) {
     return makeRenderHandle<RHIQueryPool>(impl_->queryPools, std::move(resource));
 }
 
-RHISemaphore RHID3D12::createSemaphore(const RHISemaphoreDesc& desc) {
-    Impl::SemaphoreResource resource{};
+RHIGPUWaitGPUSignal RHID3D12::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
+    Impl::GPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
-    resource.signaled = desc.type == RHISemaphoreType::Timeline && desc.initialValue > 0;
-    return makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
+    resource.signaled = desc.type == RHIGPUWaitGPUSignalType::Timeline && desc.initialValue > 0;
+    return makeRenderHandle<RHIGPUWaitGPUSignal>(impl_->gpuWaitGPUSignals, std::move(resource));
 }
 
-RHIFence RHID3D12::createFence(const RHIFenceDesc& desc) {
+RHICPUWaitGPUSignal RHID3D12::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
     if (!isInitialized()) {
         throw std::runtime_error("RHID3D12 is not initialized");
     }
 
-    Impl::FenceResource resource{};
+    Impl::CPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.value = desc.signaled ? 1 : 0;
     resource.signaled = desc.signaled;
@@ -54,7 +54,7 @@ RHIFence RHID3D12::createFence(const RHIFenceDesc& desc) {
     if (resource.eventHandle == nullptr) {
         throw std::runtime_error("CreateEventW for D3D12 fence failed");
     }
-    return makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
+    return makeRenderHandle<RHICPUWaitGPUSignal>(impl_->cpuWaitGPUSignals, std::move(resource));
 }
 
 RHISwapchain RHID3D12::createSwapchain(const RHISwapchainDesc& desc) {
@@ -174,8 +174,8 @@ RHIExtent2D RHID3D12::getSwapchainExtent(RHISwapchain handle) const {
 
 bool RHID3D12::acquireNextImage(
     RHISwapchain swapchain,
-    RHISemaphore signalSemaphore,
-    RHIFence signalFence,
+    RHIGPUWaitGPUSignal gpuWaitGPUSignal,
+    RHICPUWaitGPUSignal cpuWaitGPUSignal,
     u32* imageIndex,
     std::string* errorMessage) {
     try {
@@ -189,13 +189,13 @@ bool RHID3D12::acquireNextImage(
             *imageIndex = swapchainResource->currentImage;
         }
 
-        if (Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signalSemaphore)) {
+        if (Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, gpuWaitGPUSignal)) {
             semaphore->signaled = true;
-            if (semaphore->desc.type == RHISemaphoreType::Timeline) {
+            if (semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline) {
                 ++semaphore->value;
             }
         }
-        if (Impl::FenceResource* fence = getRenderResource(impl_->fences, signalFence)) {
+        if (Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, cpuWaitGPUSignal)) {
             ++fence->value;
             throwIfFailed(fence->fence->Signal(fence->value), "ID3D12Fence::Signal acquire fence failed");
             fence->signaled = true;
@@ -212,14 +212,14 @@ bool RHID3D12::acquireNextImage(
 bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const RHIQueueWaitDesc& wait : desc.waits) {
-            const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
+            const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
             if (semaphore == nullptr) {
                 throw std::runtime_error("RHIQueueSubmitDesc contains an invalid wait semaphore");
             }
-            if (semaphore->desc.type == RHISemaphoreType::Timeline && semaphore->value < wait.value) {
+            if (semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline && semaphore->value < wait.value) {
                 throw std::runtime_error("D3D12 timeline semaphore wait value has not been reached");
             }
-            if (semaphore->desc.type == RHISemaphoreType::Binary && !semaphore->signaled) {
+            if (semaphore->desc.type == RHIGPUWaitGPUSignalType::Binary && !semaphore->signaled) {
                 throw std::runtime_error("D3D12 binary semaphore wait has not been signaled");
             }
         }
@@ -234,15 +234,15 @@ bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage)
         }
 
         for (const RHIQueueSignalDesc& signal : desc.signals) {
-            Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signal.semaphore);
+            Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, signal.signal);
             if (semaphore == nullptr) {
                 throw std::runtime_error("RHIQueueSubmitDesc contains an invalid signal semaphore");
             }
             semaphore->signaled = true;
-            semaphore->value = semaphore->desc.type == RHISemaphoreType::Timeline ? signal.value : semaphore->value + 1;
+            semaphore->value = semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline ? signal.value : semaphore->value + 1;
         }
 
-        if (Impl::FenceResource* fence = getRenderResource(impl_->fences, desc.fence)) {
+        if (Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, desc.cpuWaitGPUSignal)) {
             ++fence->value;
             throwIfFailed(impl_->graphicsQueue->Signal(fence->fence.Get(), fence->value), "ID3D12CommandQueue::Signal submit fence failed");
             fence->signaled = true;
@@ -267,12 +267,12 @@ bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
             throw std::runtime_error("RHIPresentDesc::swapchain is invalid");
         }
 
-        for (RHISemaphore waitSemaphore : desc.waitSemaphores) {
-            const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, waitSemaphore);
+        for (RHIGPUWaitGPUSignal waitSemaphore : desc.waitSignals) {
+            const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, waitSemaphore);
             if (semaphore == nullptr) {
                 throw std::runtime_error("RHIPresentDesc contains an invalid wait semaphore");
             }
-            if (semaphore->desc.type == RHISemaphoreType::Binary && !semaphore->signaled) {
+            if (semaphore->desc.type == RHIGPUWaitGPUSignalType::Binary && !semaphore->signaled) {
                 throw std::runtime_error("D3D12 present wait semaphore has not been signaled");
             }
         }
@@ -298,4 +298,7 @@ bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // - Semaphore 暂时是 CPU 模拟，后续若需要跨进程/跨队列同步可扩展到 shared fence。
 
 } // namespace rhi
+
+
+
 

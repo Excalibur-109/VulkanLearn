@@ -108,8 +108,8 @@ struct RHIBindGroupLayoutTag {};
 struct RHIBindGroupTag {};
 struct RHIQueryPoolTag {};
 struct RHIPipelineCacheTag {};
-struct RHISemaphoreTag {};
-struct RHIFenceTag {};
+struct RHIGPUWaitGPUSignalTag {};
+struct RHICPUWaitGPUSignalTag {};
 struct RHIMeshTag {};
 struct RHIMaterialTag {};
 
@@ -155,11 +155,11 @@ using RHIQueryPool = RHIHandle<RHIQueryPoolTag>;
 /// 管线缓存句柄，用于复用后端 pipeline 编译结果。
 using RHIPipelineCache = RHIHandle<RHIPipelineCacheTag>;
 
-/// GPU 队列间同步信号句柄，可映射到 binary semaphore、timeline semaphore 或 shared event。
-using RHISemaphore = RHIHandle<RHISemaphoreTag>;
+/// GPU 等待 GPU 的同步信号；Vulkan 映射为 binary/timeline semaphore。
+using RHIGPUWaitGPUSignal = RHIHandle<RHIGPUWaitGPUSignalTag>;
 
-/// CPU 等待 GPU 完成的同步对象句柄。
-using RHIFence = RHIHandle<RHIFenceTag>;
+/// CPU 等待 GPU 完成的同步信号；Vulkan 映射为 fence。
+using RHICPUWaitGPUSignal = RHIHandle<RHICPUWaitGPUSignalTag>;
 
 /// 引擎层 mesh 资源句柄。
 using RHIMesh = RHIHandle<RHIMeshTag>;
@@ -1818,36 +1818,36 @@ struct RHIRenderPassWorkload {
     std::vector<RHIDispatchIndirectCommand> indirectDispatches; ///< 间接计算 dispatch 列表。
 };
 
-/// semaphore 类型。timeline semaphore 能表达递增计数，binary semaphore 只表达一次信号。
-enum class RHISemaphoreType : u8 {
-    Binary, ///< 二值 semaphore，只表达一次 wait/signal，同步单个提交或 present 依赖。
-    Timeline ///< 时间线 semaphore，使用递增 u64 值表达多个提交之间的有序同步。
+/// GPU-wait-GPU 信号类型。Timeline 使用递增计数，Binary 表达一次依赖。
+enum class RHIGPUWaitGPUSignalType : u8 {
+    Binary, ///< 二值 GPU 信号，只表达一次 wait/signal，用于单个提交或 present 依赖。
+    Timeline ///< 时间线 GPU 信号，使用递增 u64 值表达多个 GPU 提交之间的有序同步。
 };
 
-/// semaphore 创建描述。
-struct RHISemaphoreDesc {
+/// GPU-wait-GPU 信号创建描述。
+struct RHIGPUWaitGPUSignalDesc {
     std::string debugName; ///< 调试名称。
-    RHISemaphoreType type = RHISemaphoreType::Binary; ///< 同步对象类型。
-    u64 initialValue = 0; ///< timeline semaphore 初始值，binary semaphore 忽略。
+    RHIGPUWaitGPUSignalType type = RHIGPUWaitGPUSignalType::Binary; ///< 同步对象类型。
+    u64 initialValue = 0; ///< Timeline 信号初始值，Binary 信号忽略。
 };
 
-/// fence 创建描述。fence 通常用于 CPU 等待某帧 GPU 工作完成。
-struct RHIFenceDesc {
+/// CPU-wait-GPU 信号创建描述，用于 CPU 等待某次 GPU 提交完成。
+struct RHICPUWaitGPUSignalDesc {
     std::string debugName; ///< 调试名称。
     bool signaled = false; ///< 创建时是否为已触发状态。
 };
 
-/// 队列提交前等待的 semaphore。
+/// 队列提交前等待的 GPU 信号。
 struct RHIQueueWaitDesc {
-    RHISemaphore semaphore{}; ///< 需要等待的 semaphore。
-    u64 value = 0; ///< timeline semaphore 等待值；binary semaphore 忽略。
+    RHIGPUWaitGPUSignal signal{}; ///< 需要等待的 GPU-wait-GPU 信号。
+    u64 value = 0; ///< Timeline 等待值；Binary 信号忽略。
     RHIPipelineStage stages = RHIPipelineStage::AllCommands; ///< 等待影响的管线阶段。
 };
 
-/// 队列提交完成后 signal 的 semaphore。
+/// 队列提交完成后触发的 GPU 信号。
 struct RHIQueueSignalDesc {
-    RHISemaphore semaphore{}; ///< 需要 signal 的 semaphore。
-    u64 value = 0; ///< timeline semaphore signal 值；binary semaphore 忽略。
+    RHIGPUWaitGPUSignal signal{}; ///< 提交完成后触发的 GPU-wait-GPU 信号。
+    u64 value = 0; ///< Timeline 触发值；Binary 信号忽略。
 };
 
 /// 一次队列提交描述。后端可把 passNames 映射到实际 command buffer 列表。
@@ -1857,14 +1857,14 @@ struct RHIQueueSubmitDesc {
     std::vector<std::string> passNames; ///< 本次提交包含的 RenderGraph pass 名称。
     std::vector<RHIQueueWaitDesc> waits; ///< 提交前等待的同步对象。
     std::vector<RHIQueueSignalDesc> signals; ///< 提交完成后 signal 的同步对象。
-    RHIFence fence{}; ///< 可选 fence，用于 CPU 等待提交完成。
+    RHICPUWaitGPUSignal cpuWaitGPUSignal{}; ///< 可选 CPU-wait-GPU 信号，用于 CPU 等待提交完成。
 };
 
 /// 呈现请求。窗口系统原生 surface 仍由平台层和后端保存。
 struct RHIPresentDesc {
     RHISwapchain swapchain{}; ///< 目标 swapchain。
     u32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
-    std::vector<RHISemaphore> waitSemaphores; ///< present 前需要等待的 semaphore。
+    std::vector<RHIGPUWaitGPUSignal> waitSignals; ///< present 前需要等待的 GPU-wait-GPU 信号。
     RHIPresentMode presentMode = RHIPresentMode::FIFO; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
     bool allowTearing = false; ///< 本次呈现是否允许 tearing。
 };
@@ -2128,4 +2128,8 @@ struct RHICapabilities {
 };
 
 } // namespace rhi
+
+
+
+
 

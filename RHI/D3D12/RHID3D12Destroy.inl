@@ -88,16 +88,16 @@ void RHID3D12::destroy(RHIQueryPool handle) noexcept {
     }
 }
 
-void RHID3D12::destroy(RHISemaphore handle) noexcept {
-    if (Impl::SemaphoreResource* resource = getRenderResource(impl_->semaphores, handle)) {
+void RHID3D12::destroy(RHIGPUWaitGPUSignal handle) noexcept {
+    if (Impl::GPUWaitGPUSignalResource* resource = getRenderResource(impl_->gpuWaitGPUSignals, handle)) {
         resource->desc = {};
         resource->value = 0;
         resource->signaled = false;
     }
 }
 
-void RHID3D12::destroy(RHIFence handle) noexcept {
-    if (Impl::FenceResource* resource = getRenderResource(impl_->fences, handle)) {
+void RHID3D12::destroy(RHICPUWaitGPUSignal handle) noexcept {
+    if (Impl::CPUWaitGPUSignalResource* resource = getRenderResource(impl_->cpuWaitGPUSignals, handle)) {
         resource->fence.Reset();
         if (resource->eventHandle != nullptr) {
             CloseHandle(resource->eventHandle);
@@ -132,4 +132,6 @@ void RHID3D12::destroy(RHISwapchain handle) noexcept {
 // 后续如果做长期运行编辑器，需要再补 descriptor free-list 或按帧 ring allocator。
 
 } // namespace rhi
+
+
 

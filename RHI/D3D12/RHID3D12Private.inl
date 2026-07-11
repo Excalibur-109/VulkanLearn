@@ -813,14 +813,14 @@ struct RHID3D12::Impl {
         ComPtr<ID3D12QueryHeap> heap;
     };
 
-    struct SemaphoreResource {
-        RHISemaphoreDesc desc{};
+    struct GPUWaitGPUSignalResource {
+        RHIGPUWaitGPUSignalDesc desc{};
         u64 value = 0;
         bool signaled = false;
     };
 
-    struct FenceResource {
-        RHIFenceDesc desc{};
+    struct CPUWaitGPUSignalResource {
+        RHICPUWaitGPUSignalDesc desc{};
         ComPtr<ID3D12Fence> fence;
         HANDLE eventHandle = nullptr;
         u64 value = 0;
@@ -869,8 +869,8 @@ struct RHID3D12::Impl {
     std::vector<PipelineCacheResource> pipelineCaches;
     std::vector<PipelineResource> pipelines;
     std::vector<QueryPoolResource> queryPools;
-    std::vector<SemaphoreResource> semaphores;
-    std::vector<FenceResource> fences;
+    std::vector<GPUWaitGPUSignalResource> gpuWaitGPUSignals;
+    std::vector<CPUWaitGPUSignalResource> cpuWaitGPUSignals;
     std::vector<SwapchainResource> swapchains;
 
     void refreshNativeHandles() noexcept {
@@ -1113,4 +1113,6 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - DXGI adapter 选择、feature level 和 RHICapabilities 生成。
 
 } // namespace rhi
+
+
 

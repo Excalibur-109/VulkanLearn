@@ -210,8 +210,8 @@ RHI_FORWARD_RETURN(RHIPipelineCache, createPipelineCache, RHIPipelineCacheDesc)
 RHI_FORWARD_RETURN(RHIPipeline, createGraphicsPipeline, RHIGraphicsPipelineDesc)
 RHI_FORWARD_RETURN(RHIPipeline, createComputePipeline, RHIComputePipelineDesc)
 RHI_FORWARD_RETURN(RHIQueryPool, createQueryPool, RHIQueryPoolDesc)
-RHI_FORWARD_RETURN(RHISemaphore, createSemaphore, RHISemaphoreDesc)
-RHI_FORWARD_RETURN(RHIFence, createFence, RHIFenceDesc)
+RHI_FORWARD_RETURN(RHIGPUWaitGPUSignal, createGPUWaitGPUSignal, RHIGPUWaitGPUSignalDesc)
+RHI_FORWARD_RETURN(RHICPUWaitGPUSignal, createCPUWaitGPUSignal, RHICPUWaitGPUSignalDesc)
 RHI_FORWARD_RETURN(RHISwapchain, createSwapchain, RHISwapchainDesc)
 
 #undef RHI_FORWARD_RETURN
@@ -232,8 +232,8 @@ RHIExtent2D RHIDevice::getSwapchainExtent(RHISwapchain handle) const {
     return visitImplementation<RHIExtent2D>(impl_->implementation, [&](const auto& implementation) { return implementation.getSwapchainExtent(handle); });
 }
 
-bool RHIDevice::acquireNextImage(RHISwapchain swapchain, RHISemaphore signalSemaphore, RHIFence signalFence, u32* imageIndex, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.acquireNextImage(swapchain, signalSemaphore, signalFence, imageIndex, errorMessage); });
+bool RHIDevice::acquireNextImage(RHISwapchain swapchain, RHIGPUWaitGPUSignal gpuWaitGPUSignal, RHICPUWaitGPUSignal cpuWaitGPUSignal, u32* imageIndex, std::string* errorMessage) {
+    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.acquireNextImage(swapchain, gpuWaitGPUSignal, cpuWaitGPUSignal, imageIndex, errorMessage); });
 }
 
 bool RHIDevice::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
@@ -268,13 +268,15 @@ RHI_FORWARD_DESTROY(RHIPipelineLayout)
 RHI_FORWARD_DESTROY(RHIPipelineCache)
 RHI_FORWARD_DESTROY(RHIPipeline)
 RHI_FORWARD_DESTROY(RHIQueryPool)
-RHI_FORWARD_DESTROY(RHISemaphore)
-RHI_FORWARD_DESTROY(RHIFence)
+RHI_FORWARD_DESTROY(RHIGPUWaitGPUSignal)
+RHI_FORWARD_DESTROY(RHICPUWaitGPUSignal)
 RHI_FORWARD_DESTROY(RHISwapchain)
 
 #undef RHI_FORWARD_DESTROY
 
 } // namespace rhi
+
+
 
 
 

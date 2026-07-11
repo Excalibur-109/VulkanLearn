@@ -65,8 +65,8 @@ public:
     [[nodiscard]] RHIPipeline createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc);
     [[nodiscard]] RHIPipeline createComputePipeline(const RHIComputePipelineDesc& desc);
     [[nodiscard]] RHIQueryPool createQueryPool(const RHIQueryPoolDesc& desc);
-    [[nodiscard]] RHISemaphore createSemaphore(const RHISemaphoreDesc& desc);
-    [[nodiscard]] RHIFence createFence(const RHIFenceDesc& desc);
+    [[nodiscard]] RHIGPUWaitGPUSignal createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc);
+    [[nodiscard]] RHICPUWaitGPUSignal createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc);
     [[nodiscard]] RHISwapchain createSwapchain(const RHISwapchainDesc& desc);
 
     [[nodiscard]] std::vector<RHITexture> getSwapchainImages(RHISwapchain handle) const;
@@ -76,8 +76,8 @@ public:
 
     [[nodiscard]] bool acquireNextImage(
         RHISwapchain swapchain,
-        RHISemaphore signalSemaphore,
-        RHIFence signalFence,
+        RHIGPUWaitGPUSignal gpuWaitGPUSignal,
+        RHICPUWaitGPUSignal cpuWaitGPUSignal,
         u32* imageIndex,
         std::string* errorMessage = nullptr);
 
@@ -98,8 +98,8 @@ public:
     void destroy(RHIPipelineCache handle) noexcept;
     void destroy(RHIPipeline handle) noexcept;
     void destroy(RHIQueryPool handle) noexcept;
-    void destroy(RHISemaphore handle) noexcept;
-    void destroy(RHIFence handle) noexcept;
+    void destroy(RHIGPUWaitGPUSignal handle) noexcept;
+    void destroy(RHICPUWaitGPUSignal handle) noexcept;
     void destroy(RHISwapchain handle) noexcept;
 
 private:
@@ -110,5 +110,7 @@ private:
 };
 
 } // namespace rhi
+
+
 
 

@@ -753,13 +753,13 @@ struct RHIVulkan::Impl {
         VkQueryPool pool = VK_NULL_HANDLE;
     };
 
-    struct SemaphoreResource {
-        RHISemaphoreDesc desc{};
+    struct GPUWaitGPUSignalResource {
+        RHIGPUWaitGPUSignalDesc desc{};
         VkSemaphore semaphore = VK_NULL_HANDLE;
     };
 
-    struct FenceResource {
-        RHIFenceDesc desc{};
+    struct CPUWaitGPUSignalResource {
+        RHICPUWaitGPUSignalDesc desc{};
         VkFence fence = VK_NULL_HANDLE;
     };
 
@@ -795,8 +795,8 @@ struct RHIVulkan::Impl {
     std::vector<PipelineResource> pipelines;
     std::vector<PipelineCacheResource> pipelineCaches;
     std::vector<QueryPoolResource> queryPools;
-    std::vector<SemaphoreResource> semaphores;
-    std::vector<FenceResource> fences;
+    std::vector<GPUWaitGPUSignalResource> gpuWaitGPUSignals;
+    std::vector<CPUWaitGPUSignalResource> cpuWaitGPUSignals;
     std::vector<SwapchainResource> swapchains;
 
     void setObjectName(VkObjectType type, u64 object, const std::string& name) const {
@@ -1180,5 +1180,7 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
 }
 
 } // namespace rhi
+
+
 
 

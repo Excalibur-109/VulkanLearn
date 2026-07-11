@@ -770,14 +770,14 @@ struct RHID3D11::Impl {
         std::vector<ComPtr<ID3D11Query>> queries;
     };
 
-    struct SemaphoreResource {
-        RHISemaphoreDesc desc{};
+    struct GPUWaitGPUSignalResource {
+        RHIGPUWaitGPUSignalDesc desc{};
         u64 value = 0;
         bool signaled = false;
     };
 
-    struct FenceResource {
-        RHIFenceDesc desc{};
+    struct CPUWaitGPUSignalResource {
+        RHICPUWaitGPUSignalDesc desc{};
         ComPtr<ID3D11Query> eventQuery;
         bool signaled = false;
     };
@@ -812,8 +812,8 @@ struct RHID3D11::Impl {
     std::vector<PipelineCacheResource> pipelineCaches;
     std::vector<PipelineResource> pipelines;
     std::vector<QueryPoolResource> queryPools;
-    std::vector<SemaphoreResource> semaphores;
-    std::vector<FenceResource> fences;
+    std::vector<GPUWaitGPUSignalResource> gpuWaitGPUSignals;
+    std::vector<CPUWaitGPUSignalResource> cpuWaitGPUSignals;
     std::vector<SwapchainResource> swapchains;
 
     void refreshNativeHandles() noexcept {
@@ -982,4 +982,6 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
 
 } // namespace rhi
+
+
 

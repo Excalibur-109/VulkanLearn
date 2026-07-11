@@ -30,21 +30,21 @@ RHIQueryPool RHID3D11::createQueryPool(const RHIQueryPoolDesc& desc) {
 
 // D3D11 没有 Vulkan timeline/binary semaphore 的原生等价物。本后端用轻量 CPU 状态模拟
 // 统一接口里的 semaphore，适合示例和跨后端流程对齐，不适合作为跨 queue 精细同步。
-RHISemaphore RHID3D11::createSemaphore(const RHISemaphoreDesc& desc) {
-    Impl::SemaphoreResource resource{};
+RHIGPUWaitGPUSignal RHID3D11::createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
+    Impl::GPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
-    resource.signaled = desc.type == RHISemaphoreType::Timeline && desc.initialValue > 0;
-    return makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
+    resource.signaled = desc.type == RHIGPUWaitGPUSignalType::Timeline && desc.initialValue > 0;
+    return makeRenderHandle<RHIGPUWaitGPUSignal>(impl_->gpuWaitGPUSignals, std::move(resource));
 }
 
 // Fence 用 D3D11_QUERY_EVENT 实现：submit 时 End 一个 event query，waitIdle/GetData 可检查
 // GPU 是否执行到该点。
-RHIFence RHID3D11::createFence(const RHIFenceDesc& desc) {
-    Impl::FenceResource resource{};
+RHICPUWaitGPUSignal RHID3D11::createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc) {
+    Impl::CPUWaitGPUSignalResource resource{};
     resource.desc = desc;
     resource.signaled = desc.signaled;
-    return makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
+    return makeRenderHandle<RHICPUWaitGPUSignal>(impl_->cpuWaitGPUSignals, std::move(resource));
 }
 
 // D3D11 swapchain 通常只有一个当前 back buffer。为了和 Vulkan 多图像 swapchain 接口一致，
@@ -152,4 +152,6 @@ RHIExtent2D RHID3D11::getSwapchainExtent(RHISwapchain handle) const {
 // 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，present 则通过 IDXGISwapChain::Present 完成。
 
 } // namespace rhi
+
+
 

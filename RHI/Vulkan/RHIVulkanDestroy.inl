@@ -106,16 +106,16 @@ void RHIVulkan::destroy(RHIQueryPool handle) noexcept {
     }
 }
 
-void RHIVulkan::destroy(RHISemaphore handle) noexcept {
-    Impl::SemaphoreResource* resource = getRenderResource(impl_->semaphores, handle);
+void RHIVulkan::destroy(RHIGPUWaitGPUSignal handle) noexcept {
+    Impl::GPUWaitGPUSignalResource* resource = getRenderResource(impl_->gpuWaitGPUSignals, handle);
     if (resource != nullptr && resource->semaphore != VK_NULL_HANDLE) {
         vkDestroySemaphore(impl_->native.device, resource->semaphore, nullptr);
         resource->semaphore = VK_NULL_HANDLE;
     }
 }
 
-void RHIVulkan::destroy(RHIFence handle) noexcept {
-    Impl::FenceResource* resource = getRenderResource(impl_->fences, handle);
+void RHIVulkan::destroy(RHICPUWaitGPUSignal handle) noexcept {
+    Impl::CPUWaitGPUSignalResource* resource = getRenderResource(impl_->cpuWaitGPUSignals, handle);
     if (resource != nullptr && resource->fence != VK_NULL_HANDLE) {
         vkDestroyFence(impl_->native.device, resource->fence, nullptr);
         resource->fence = VK_NULL_HANDLE;
@@ -143,4 +143,6 @@ void RHIVulkan::destroy(RHISwapchain handle) noexcept {
 }
 
 } // namespace rhi
+
+
 

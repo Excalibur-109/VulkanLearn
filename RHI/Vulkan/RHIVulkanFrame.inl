@@ -394,7 +394,7 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             throw std::runtime_error("vkEndCommandBuffer failed");
         }
 
-        std::vector<VkSemaphore> waitSemaphores;
+        std::vector<VkSemaphore> waitSignals;
         std::vector<VkPipelineStageFlags> waitStages;
         std::vector<VkSemaphore> signalSemaphores;
         std::vector<u64> waitValues;
@@ -403,21 +403,21 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
         for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
             for (const RHIQueueWaitDesc& wait : submitDesc.waits) {
-                const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
+                const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
                 if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
                     throw std::runtime_error("RHIFramePacket submission contains an invalid wait semaphore");
                 }
-                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
-                waitSemaphores.push_back(semaphore->semaphore);
+                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline;
+                waitSignals.push_back(semaphore->semaphore);
                 waitStages.push_back(toVkPipelineStages(wait.stages));
                 waitValues.push_back(wait.value);
             }
             for (const RHIQueueSignalDesc& signal : submitDesc.signals) {
-                const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, signal.semaphore);
+                const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, signal.signal);
                 if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
                     throw std::runtime_error("RHIFramePacket submission contains an invalid signal semaphore");
                 }
-                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHISemaphoreType::Timeline;
+                usesTimelineSemaphore = usesTimelineSemaphore || semaphore->desc.type == RHIGPUWaitGPUSignalType::Timeline;
                 signalSemaphores.push_back(semaphore->semaphore);
                 signalValues.push_back(signal.value);
             }
@@ -433,8 +433,8 @@ bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
-        submitInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
-        submitInfo.pWaitSemaphores = waitSemaphores.data();
+        submitInfo.waitSemaphoreCount = static_cast<u32>(waitSignals.size());
+        submitInfo.pWaitSemaphores = waitSignals.data();
         submitInfo.pWaitDstStageMask = waitStages.data();
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
@@ -500,5 +500,8 @@ void RHIVulkan::waitIdle() const noexcept {
 // destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
 
 } // namespace rhi
+
+
+
 
 

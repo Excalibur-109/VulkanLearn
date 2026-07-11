@@ -115,10 +115,10 @@ public:
     [[nodiscard]] RHIQueryPool createQueryPool(const RHIQueryPoolDesc& desc);
 
     /// 创建 semaphore。
-    [[nodiscard]] RHISemaphore createSemaphore(const RHISemaphoreDesc& desc);
+    [[nodiscard]] RHIGPUWaitGPUSignal createGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc);
 
     /// 创建 fence。
-    [[nodiscard]] RHIFence createFence(const RHIFenceDesc& desc);
+    [[nodiscard]] RHICPUWaitGPUSignal createCPUWaitGPUSignal(const RHICPUWaitGPUSignalDesc& desc);
 
     /// 创建 swapchain；需要 initialize 时传入有效 surface。
     [[nodiscard]] RHISwapchain createSwapchain(const RHISwapchainDesc& desc);
@@ -138,8 +138,8 @@ public:
     /// 获取下一张 swapchain image。
     [[nodiscard]] bool acquireNextImage(
         RHISwapchain swapchain,
-        RHISemaphore signalSemaphore,
-        RHIFence signalFence,
+        RHIGPUWaitGPUSignal gpuWaitGPUSignal,
+        RHICPUWaitGPUSignal cpuWaitGPUSignal,
         u32* imageIndex,
         std::string* errorMessage = nullptr);
 
@@ -167,8 +167,8 @@ public:
     void destroy(RHIPipelineCache handle) noexcept;
     void destroy(RHIPipeline handle) noexcept;
     void destroy(RHIQueryPool handle) noexcept;
-    void destroy(RHISemaphore handle) noexcept;
-    void destroy(RHIFence handle) noexcept;
+    void destroy(RHIGPUWaitGPUSignal handle) noexcept;
+    void destroy(RHICPUWaitGPUSignal handle) noexcept;
     void destroy(RHISwapchain handle) noexcept;
 
 private:
@@ -180,5 +180,7 @@ private:
 };
 
 } // namespace rhi
+
+
 
 

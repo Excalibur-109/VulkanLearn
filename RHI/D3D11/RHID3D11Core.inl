@@ -137,8 +137,8 @@ void RHID3D11::shutdown() noexcept {
     for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
     for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
     for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
-    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           destroy(RHICPUWaitGPUSignal(i));
     for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
     for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
     for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
@@ -174,4 +174,6 @@ const RHID3D11NativeHandles& RHID3D11::nativeHandles() const noexcept {
 // 不需要显式创建 queue、command pool 或 descriptor pool。
 
 } // namespace rhi
+
+
 
