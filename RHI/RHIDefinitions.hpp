@@ -16,19 +16,19 @@
 /// 固定宽度无符号 8 位整数。
 namespace rhi {
 
-using RHIUInt8 = std::uint8_t;
+using u8 = std::uint8_t;
 
 /// 固定宽度无符号 16 位整数。
-using RHIUInt16 = std::uint16_t;
+using u16 = std::uint16_t;
 
 /// 固定宽度无符号 32 位整数。
-using RHIUInt32 = std::uint32_t;
+using u32 = std::uint32_t;
 
 /// 固定宽度无符号 64 位整数。
-using RHIUInt64 = std::uint64_t;
+using u64 = std::uint64_t;
 
 /// 固定宽度有符号 32 位整数。
-using RHIInt32 = std::int32_t;
+using i32 = std::int32_t;
 
 /**
  * @file RHIDefinitions.hpp
@@ -48,13 +48,13 @@ using RHIInt32 = std::int32_t;
  * - 后端可以根据 RHICapabilities 降级或选择不同实现路径。
  */
 /// 无效数组下标，常用于 optional index 或查找失败的返回值。
-inline constexpr RHIUInt32 RHI_INVALID_INDEX = std::numeric_limits<RHIUInt32>::max();
+inline constexpr u32 RHI_INVALID_INDEX = std::numeric_limits<u32>::max();
 
 /// 0 被保留为无效渲染资源句柄，真实后端资源句柄从非 0 值开始分配。
-inline constexpr RHIUInt64 RHI_INVALID_HANDLE_VALUE = 0;
+inline constexpr u64 RHI_INVALID_HANDLE_VALUE = 0;
 
 /// 表示 buffer binding 或 barrier 覆盖资源剩余全部范围。
-inline constexpr RHIUInt64 RHI_WHOLE_SIZE = std::numeric_limits<RHIUInt64>::max();
+inline constexpr u64 RHI_WHOLE_SIZE = std::numeric_limits<u64>::max();
 
 /**
  * @brief 类型安全的轻量资源句柄。
@@ -66,12 +66,12 @@ inline constexpr RHIUInt64 RHI_WHOLE_SIZE = std::numeric_limits<RHIUInt64>::max(
 template <typename Tag>
 struct RHIHandle {
     /// 资源管理器分配的逻辑 id；0 表示无效。
-    RHIUInt64 value = RHI_INVALID_HANDLE_VALUE;
+    u64 value = RHI_INVALID_HANDLE_VALUE;
 
     constexpr RHIHandle() noexcept = default;
 
     /// 显式从资源 id 构造句柄，避免整数被意外隐式转换成资源句柄。
-    explicit constexpr RHIHandle(RHIUInt64 handleValue) noexcept
+    explicit constexpr RHIHandle(u64 handleValue) noexcept
         : value(handleValue) {
     }
 
@@ -193,7 +193,7 @@ template <typename Enum>
 }
 
 /// 当前后端使用的图形 API，用于能力查询、日志和后端分支。
-enum class RHIGraphicsAPI : RHIUInt8 {
+enum class RHIGraphicsAPI : u8 {
     Unknown, ///< 未指定或无法识别的图形 API；用于默认值、错误回退和日志占位。
     Vulkan, ///< 使用 Vulkan 后端，适合显式资源状态、跨平台桌面/移动渲染路径。
     Direct3D11, ///< 使用 Direct3D 11 后端，面向 Windows 兼容路径和较传统的隐式状态模型。
@@ -204,7 +204,7 @@ enum class RHIGraphicsAPI : RHIUInt8 {
 };
 
 /// GPU 队列类型。不是所有 API 都公开独立队列，后端可以把多个类型映射到同一个实际队列。
-enum class RHIQueueType : RHIUInt8 {
+enum class RHIQueueType : u8 {
     Graphics, ///< 图形队列，可执行 draw、render pass，也通常兼容 copy/compute。
     Compute, ///< 计算队列，可执行 compute dispatch，支持异步计算时可与图形队列并行。
     Transfer, ///< 传输队列，专用于 buffer/texture copy、upload、blit 等数据搬运。
@@ -212,21 +212,21 @@ enum class RHIQueueType : RHIUInt8 {
 };
 
 /// GPU 选择偏好。移动端/笔记本上可用于选择省电或高性能适配器。
-enum class RHIPowerPreference : RHIUInt8 {
+enum class RHIPowerPreference : u8 {
     Default, ///< 不强制选择功耗档位，由后端或操作系统按默认策略选择适配器。
     LowPower, ///< 偏向低功耗适配器，常用于集显、移动端或省电模式。
     HighPerformance ///< 偏向高性能适配器，常用于独显和需要最大渲染吞吐的场景。
 };
 
 /// 后端验证层开关级别。
-enum class RHIValidationMode : RHIUInt8 {
+enum class RHIValidationMode : u8 {
     Disabled, ///< 关闭验证层/调试层，适合发布版本或性能测试。
     Enabled, ///< 启用常规 API 验证和调试消息，适合开发期捕获资源和同步错误。
     GpuAssisted ///< 启用 GPU 辅助验证，额外检查 shader 侧越界等问题，开销更高。
 };
 
 /// 引擎希望启用的渲染特性位。后端初始化时可根据设备能力做裁剪或报错。
-enum class RHIRenderFeature : RHIUInt64 {
+enum class RHIRenderFeature : u64 {
     None = 0, ///< 不请求任何额外功能。
     Compute = 1ull << 0, ///< 启用 compute shader 和 compute queue/pass。
     GeometryShader = 1ull << 1, ///< 启用 geometry shader 阶段。
@@ -272,7 +272,7 @@ struct RHIBackendDesc {
     RHIValidationMode validation = RHIValidationMode::Enabled; ///< 是否启用验证层/调试层。
     RHIRenderFeature requiredFeatures = RHIRenderFeature::None; ///< 必须支持的功能，不支持时初始化应失败。
     RHIRenderFeature optionalFeatures = RHIRenderFeature::DebugMarkers | RHIRenderFeature::TimestampQuery; ///< 可选功能，后端尽量开启。
-    RHIUInt32 framesInFlight = 2; ///< CPU/GPU 并行帧数。
+    u32 framesInFlight = 2; ///< CPU/GPU 并行帧数。
     bool enableGpuCrashDumps = false; ///< 是否启用 GPU 崩溃转储，具体支持由后端决定。
     bool enablePipelineCache = true; ///< 是否启用管线缓存。
 };
@@ -280,7 +280,7 @@ struct RHIBackendDesc {
 /// 队列族/队列能力描述，供后端选择 graphics/compute/transfer/present 队列。
 struct RHIQueueDesc {
     RHIQueueType type = RHIQueueType::Graphics; ///< 队列类型。
-    RHIUInt32 count = 1; ///< 希望创建的队列数量。
+    u32 count = 1; ///< 希望创建的队列数量。
     float priority = 1.0F; ///< 队列优先级，范围通常是 0 到 1。
 };
 
@@ -288,8 +288,8 @@ struct RHIQueueDesc {
 struct RHIAdapterDesc {
     std::string name; ///< GPU/适配器名称。
     RHIGraphicsAPI api = RHIGraphicsAPI::Unknown; ///< 该适配器所属后端 API。
-    RHIUInt64 dedicatedVideoMemory = 0; ///< 独立显存字节数。
-    RHIUInt64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
+    u64 dedicatedVideoMemory = 0; ///< 独立显存字节数。
+    u64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
     bool isIntegrated = false; ///< 是否集成显卡。
     bool isSoftware = false; ///< 是否软件适配器。
 };
@@ -302,7 +302,7 @@ struct RHIAdapterDesc {
  * - Depth/Stencil 格式不能当普通 color attachment。
  * - 压缩格式 BC* 不是所有平台都支持，需要根据 RHICapabilities 或后端能力降级。
  */
-enum class RHIFormat : RHIUInt16 {
+enum class RHIFormat : u16 {
     Undefined, ///< 未指定格式；用于默认值、自动推导或无附件。
 
     R8_UNorm, ///< 单通道 8 位无符号归一化，shader 读取为 0..1；常用于灰度/遮罩。
@@ -396,7 +396,7 @@ enum class RHIFormat : RHIUInt16 {
 }
 
 /// 多重采样数量，对应 Vulkan sample count / D3D sample count / Metal sampleCount。
-enum class RHISampleCount : RHIUInt8 {
+enum class RHISampleCount : u8 {
     Count1 = 1, ///< 单采样，无 MSAA；普通纹理、swapchain 和大多数后处理目标使用。
     Count2 = 2, ///< 2x MSAA，较低成本的边缘抗锯齿采样数。
     Count4 = 4, ///< 4x MSAA，质量和成本较常用的平衡点。
@@ -411,7 +411,7 @@ enum class RHISampleCount : RHIUInt8 {
  *
  * Fifo 是最通用的垂直同步模式；Immediate/Mailbox 可能不被所有平台支持。
  */
-enum class RHIPresentMode : RHIUInt8 {
+enum class RHIPresentMode : u8 {
     Immediate, ///< 立即呈现，不等待垂直同步；延迟低但可能产生 tearing。
     Mailbox, ///< 三缓冲低延迟垂直同步模式，新帧替换等待队列中的旧帧。
     FIFO, ///< 标准垂直同步队列模式，所有平台通常都支持，避免 tearing。
@@ -424,7 +424,7 @@ enum class RHIPresentMode : RHIUInt8 {
  * 显式 API（Vulkan/D3D12）需要把这些状态翻译成 image layout/resource state/barrier。
  * 隐式 API（OpenGL/D3D11）可以把它用于调试验证或减少不必要的绑定错误。
  */
-enum class RHIResourceState : RHIUInt16 {
+enum class RHIResourceState : u16 {
     Undefined, ///< 内容或状态未定义；资源首次使用、丢弃旧内容或无需保留数据时使用。
     Common, ///< 通用状态；适合作为跨队列/跨 API 的默认可转换状态。
     CopySource, ///< 作为拷贝源读取，用于 buffer/texture copy、readback 或 blit source。
@@ -447,7 +447,7 @@ enum class RHIResourceState : RHIUInt16 {
 };
 
 /// GPU 管线阶段位。需要精确同步时可配合 RHIAccessFlags 构造 barrier。
-enum class RHIPipelineStage : RHIUInt64 {
+enum class RHIPipelineStage : u64 {
     None = 0, ///< 不指定任何管线阶段；常用于空 barrier 或由状态自动推导。
     TopOfPipe = 1ull << 0, ///< 管线最开始的同步点，用于等待命令进入 GPU 执行流。
     DrawIndirect = 1ull << 1, ///< 读取 indirect draw/dispatch 参数的阶段。
@@ -486,7 +486,7 @@ constexpr RHIPipelineStage& operator|=(RHIPipelineStage& lhs, RHIPipelineStage r
 }
 
 /// GPU 资源访问类型位。比 RHIResourceState 更接近后端 barrier 所需的 access mask。
-enum class RHIAccessFlags : RHIUInt64 {
+enum class RHIAccessFlags : u64 {
     None = 0, ///< 不指定访问类型；常用于无内存依赖或由 RHIResourceState 自动推导。
     IndirectCommandRead = 1ull << 0, ///< GPU 读取 indirect draw/dispatch 参数。
     IndexRead = 1ull << 1, ///< 输入装配阶段读取 index buffer。
@@ -524,28 +524,28 @@ constexpr RHIAccessFlags& operator|=(RHIAccessFlags& lhs, RHIAccessFlags rhs) no
 
 /// 二维尺寸，常用于窗口、swapchain、viewport/scissor 和 2D 纹理。
 struct RHIExtent2D {
-    RHIUInt32 width = 1;
-    RHIUInt32 height = 1;
+    u32 width = 1;
+    u32 height = 1;
 };
 
 /// 三维尺寸，2D 纹理时 depth 通常为 1，数组层数单独由 arrayLayers 表示。
 struct RHIExtent3D {
-    RHIUInt32 width = 1;
-    RHIUInt32 height = 1;
-    RHIUInt32 depth = 1;
+    u32 width = 1;
+    u32 height = 1;
+    u32 depth = 1;
 };
 
 /// 二维整数偏移，主要用于 scissor、copy region 和贴图区域更新。
 struct RHIOffset2D {
-    RHIInt32 x = 0;
-    RHIInt32 y = 0;
+    i32 x = 0;
+    i32 y = 0;
 };
 
 /// 三维整数偏移，主要用于 buffer-to-texture 上传和 3D texture copy。
 struct RHIOffset3D {
-    RHIInt32 x = 0;
-    RHIInt32 y = 0;
-    RHIInt32 z = 0;
+    i32 x = 0;
+    i32 y = 0;
+    i32 z = 0;
 };
 
 /// 二维矩形区域。offset 是左上角，extent 是宽高。
@@ -575,7 +575,7 @@ struct RHIClearColor {
 /// depth-stencil attachment 的清屏值，默认 depth=1 表示远平面。
 struct RHIClearDepthStencil {
     float depth = 1.0F;
-    RHIUInt32 stencil = 0;
+    u32 stencil = 0;
 };
 
 /// 同时容纳颜色和深度模板清屏值，RenderGraph attachment 可按实际类型读取对应字段。
@@ -585,7 +585,7 @@ struct RHIClearValue {
 };
 
 /// texture 子资源 aspect 位，用于区分 color/depth/stencil/plane。
-enum class RHITextureAspect : RHIUInt32 {
+enum class RHITextureAspect : u32 {
     None = 0, ///< 不指定任何 aspect；用于空范围或由格式推导前的占位值。
     Color = 1u << 0, ///< color aspect，适用于普通颜色纹理和 color attachment。
     Depth = 1u << 1, ///< depth aspect，适用于深度纹理或 depth-stencil 格式中的深度平面。
@@ -610,7 +610,7 @@ constexpr RHITextureAspect& operator|=(RHITextureAspect& lhs, RHITextureAspect r
 }
 
 /// buffer 的用途位。创建 buffer 时必须声明后续会如何使用，显式 API 会用它设置 usage flags。
-enum class RHIBufferUsage : RHIUInt32 {
+enum class RHIBufferUsage : u32 {
     None = 0, ///< 未声明用途；只适合默认值，真实 buffer 创建通常应指定至少一个用途。
     TransferSource = 1u << 0, ///< 可作为 copy/blit/readback 的源 buffer。
     TransferDestination = 1u << 1, ///< 可作为 upload、copy 或清零操作的目标 buffer。
@@ -636,7 +636,7 @@ constexpr RHIBufferUsage& operator|=(RHIBufferUsage& lhs, RHIBufferUsage rhs) no
 }
 
 /// buffer 创建附加标志，用于表达生命周期和后端内存选择提示。
-enum class RHIBufferCreateFlags : RHIUInt32 {
+enum class RHIBufferCreateFlags : u32 {
     None = 0, ///< 无额外创建要求，使用后端默认分配策略。
     DedicatedMemory = 1u << 0, ///< 倾向单独分配内存，适合大 buffer 或需要避免与其他资源混用的场景。
     SparseBinding = 1u << 1, ///< 请求稀疏绑定/虚拟内存能力，允许按页提交 buffer 存储。
@@ -658,7 +658,7 @@ constexpr RHIBufferCreateFlags& operator|=(RHIBufferCreateFlags& lhs, RHIBufferC
 }
 
 /// texture/image 的用途位。一个 texture 可以同时是采样贴图、渲染目标或拷贝目标。
-enum class RHITextureUsage : RHIUInt32 {
+enum class RHITextureUsage : u32 {
     None = 0, ///< 未声明用途；只适合默认值，真实 texture 创建通常应指定至少一个用途。
     TransferSource = 1u << 0, ///< 可作为 copy、blit、resolve 或 readback 的源 texture。
     TransferDestination = 1u << 1, ///< 可作为 upload、copy、blit、resolve 或 clear 的目标 texture。
@@ -684,7 +684,7 @@ constexpr RHITextureUsage& operator|=(RHITextureUsage& lhs, RHITextureUsage rhs)
 }
 
 /// texture 创建附加标志，用于表达 cube、格式重解释、稀疏资源等需求。
-enum class RHITextureCreateFlags : RHIUInt32 {
+enum class RHITextureCreateFlags : u32 {
     None = 0, ///< 无额外创建要求，使用普通 texture 创建路径。
     CubeCompatible = 1u << 0, ///< 允许 2D array texture 创建 cube/cube array view，层数需满足 6 的倍数。
     MutableFormat = 1u << 1, ///< 允许 view 使用兼容格式重解释底层存储格式。
@@ -708,7 +708,7 @@ constexpr RHITextureCreateFlags& operator|=(RHITextureCreateFlags& lhs, RHITextu
 }
 
 /// 资源内存访问方向。后端可据此选择显存、本地可映射内存或读回内存。
-enum class RHIMemoryUsage : RHIUInt8 {
+enum class RHIMemoryUsage : u8 {
     GpuOnly, ///< GPU 本地内存，CPU 不直接访问；适合静态贴图、渲染目标和长期驻留资源。
     CpuToGpu, ///< CPU 写入、GPU 读取的上传内存，适合 staging、动态 uniform 和流式顶点数据。
     GpuToCpu, ///< GPU 写入、CPU 读取的读回内存，适合截图、查询结果和调试 readback。
@@ -719,21 +719,21 @@ enum class RHIMemoryUsage : RHIUInt8 {
 using RHIMemory = RHIMemoryUsage;
 
 /// 资源生命周期提示，帮助资源分配器决定是否池化、复用或立即释放。
-enum class RHIResourceLifetime : RHIUInt8 {
+enum class RHIResourceLifetime : u8 {
     Persistent, ///< 长期驻留资源，跨多帧保存内容和句柄，例如材质贴图、mesh buffer。
     PerFrame, ///< 每帧轮转资源，通常按 frames-in-flight 分配，适合动态常量和临时上传。
     Transient ///< 单个 pass 或 RenderGraph 生命周期内有效，可被分配器快速复用或别名。
 };
 
 /// 纹理资源本身的维度，不包含 view 维度重解释。
-enum class RHITextureDimension : RHIUInt8 {
+enum class RHITextureDimension : u8 {
     Texture1D, ///< 一维纹理资源，常用于 LUT、曲线表或少量线性采样数据。
     Texture2D, ///< 二维纹理资源，最常用的贴图、render target、depth target 和 cube array 基础维度。
     Texture3D ///< 三维体纹理资源，常用于体积数据、噪声场、体渲染或 3D LUT。
 };
 
 /// 纹理视图维度。一个 2D array texture 可以被创建为 View2DArray 或单层 View2D。
-enum class RHITextureViewDimension : RHIUInt8 {
+enum class RHITextureViewDimension : u8 {
     View1D, ///< 暴露单个一维纹理 view。
     View1DArray, ///< 暴露一维纹理数组 view，可访问多个 array layer。
     View2D, ///< 暴露单个二维纹理 view，常用于普通采样贴图和 render target。
@@ -744,19 +744,19 @@ enum class RHITextureViewDimension : RHIUInt8 {
 };
 
 /// 纹理采样过滤方式。
-enum class RHIFilterMode : RHIUInt8 {
+enum class RHIFilterMode : u8 {
     Nearest, ///< 最近点采样，保留硬边像素，适合像素风、整数数据或无需插值的查表。
     Linear ///< 线性插值采样，适合普通颜色/法线贴图和缩放时的平滑过滤。
 };
 
 /// mip 层级之间的过滤方式。
-enum class RHIMipmapMode : RHIUInt8 {
+enum class RHIMipmapMode : u8 {
     Nearest, ///< 选择最接近的单个 mip 层，不在两个 mip 之间插值。
     Linear ///< 在相邻 mip 层之间线性插值，减少层级切换带来的闪烁。
 };
 
 /// UVW 坐标越界时的寻址方式。
-enum class RHIAddressMode : RHIUInt8 {
+enum class RHIAddressMode : u8 {
     Repeat, ///< 坐标越界时按 1.0 周期重复纹理。
     MirroredRepeat, ///< 坐标越界时镜像重复纹理，减少平铺接缝方向突变。
     ClampToEdge, ///< 坐标越界时钳制到边缘 texel，常用于 UI、shadow map 和后处理纹理。
@@ -764,14 +764,14 @@ enum class RHIAddressMode : RHIUInt8 {
 };
 
 /// ClampToBorder 模式下采样器返回的边框颜色。
-enum class RHIBorderColor : RHIUInt8 {
+enum class RHIBorderColor : u8 {
     TransparentBlack, ///< 边框返回透明黑色 (0,0,0,0)，适合 alpha 参与裁剪的采样场景。
     OpaqueBlack, ///< 边框返回不透明黑色 (0,0,0,1)，适合默认无光照或深色边界。
     OpaqueWhite ///< 边框返回不透明白色 (1,1,1,1)，常用于 shadow compare 的安全边界。
 };
 
 /// 通用比较函数，深度测试、模板测试和 shadow sampler 都会使用。
-enum class RHICompareOp : RHIUInt8 {
+enum class RHICompareOp : u8 {
     Never, ///< 比较永远失败，用于禁用通过路径或特殊模板写入控制。
     Less, ///< 输入值小于参考值时通过，常用于标准深度测试。
     Equal, ///< 输入值等于参考值时通过，常用于模板标记或精确深度匹配。
@@ -785,7 +785,7 @@ enum class RHICompareOp : RHIUInt8 {
 /// GPU buffer 创建描述，不包含初始数据；初始数据通过 RHIUploadBatchDesc 提交。
 struct RHIBufferDesc {
     std::string debugName; ///< 调试名称，用于后端对象命名和 GPU 调试器显示。
-    RHIUInt64 size = 0; ///< buffer 字节数。创建真实 GPU buffer 时必须大于 0。
+    u64 size = 0; ///< buffer 字节数。创建真实 GPU buffer 时必须大于 0。
     RHIBufferUsage usage = RHIBufferUsage::None; ///< 声明 buffer 的用途位，后端据此设置 usage flags。
     RHIBufferCreateFlags flags = RHIBufferCreateFlags::None; ///< 创建附加标志，例如 transient、dedicated memory。
     RHIMemoryUsage memoryUsage = RHIMemoryUsage::GpuOnly; ///< 内存访问模式，决定资源放在显存、上传堆或读回堆。
@@ -798,8 +798,8 @@ struct RHITextureDesc {
     std::string debugName; ///< 调试名称，用于后端对象命名。
     RHITextureDimension dimension = RHITextureDimension::Texture2D; ///< 资源维度。cube texture 本质上仍是 2D array。
     RHIExtent3D extent{}; ///< texture 的像素尺寸。2D texture 的 depth 应为 1。
-    RHIUInt32 arrayLayers = 1; ///< 数组层数；cube 为 6，cube array 为 6 的倍数。
-    RHIUInt32 mipLevels = 1; ///< mip 层数；如果需要自动生成 mip，创建时仍要预留层数。
+    u32 arrayLayers = 1; ///< 数组层数；cube 为 6，cube array 为 6 的倍数。
+    u32 mipLevels = 1; ///< mip 层数；如果需要自动生成 mip，创建时仍要预留层数。
     RHIFormat format = RHIFormat::RGBA8_UNorm; ///< 资源存储格式。
     RHISampleCount samples = RHISampleCount::Count1; ///< MSAA 采样数；普通采样贴图一般为 Count1。
     RHITextureUsage usage = RHITextureUsage::Sampled; ///< texture 后续用途，影响后端 image usage/resource flags。
@@ -815,10 +815,10 @@ struct RHITextureViewDesc {
     RHITextureViewDimension dimension = RHITextureViewDimension::View2D; ///< view 暴露给 shader/attachment 的维度。
     RHIFormat format = RHIFormat::Undefined; ///< Undefined 表示沿用底层 texture 格式。
     RHITextureAspect aspect = RHITextureAspect::Color; ///< view 覆盖的 aspect，depth/stencil view 需要显式设置。
-    RHIUInt32 baseMipLevel = 0; ///< view 起始 mip。
-    RHIUInt32 mipLevelCount = 1; ///< view 覆盖 mip 数。
-    RHIUInt32 baseArrayLayer = 0; ///< view 起始数组层。
-    RHIUInt32 arrayLayerCount = 1; ///< view 覆盖数组层数。
+    u32 baseMipLevel = 0; ///< view 起始 mip。
+    u32 mipLevelCount = 1; ///< view 覆盖 mip 数。
+    u32 baseArrayLayer = 0; ///< view 起始数组层。
+    u32 arrayLayerCount = 1; ///< view 覆盖数组层数。
 };
 
 /// sampler 创建描述。sampler 只描述采样规则，不持有 texture。
@@ -841,7 +841,7 @@ struct RHISamplerDesc {
 };
 
 /// shader 阶段位掩码，用于描述 shader 自身阶段和资源可见性。
-enum class RHIShaderStage : RHIUInt32 {
+enum class RHIShaderStage : u32 {
     None = 0, ///< 不指定 shader 阶段；用于空可见性、默认值或反射失败占位。
     Vertex = 1u << 0, ///< vertex shader 阶段，处理顶点输入并输出裁剪空间位置。
     TessControl = 1u << 1, ///< tessellation control/hull shader 阶段，生成 patch 细分控制数据。
@@ -869,7 +869,7 @@ constexpr RHIShaderStage& operator|=(RHIShaderStage& lhs, RHIShaderStage rhs) no
 }
 
 /// shader 源码或字节码的语言/中间格式。
-enum class RHIShaderLanguage : RHIUInt8 {
+enum class RHIShaderLanguage : u8 {
     Unknown, ///< 未指定 shader 语言或字节码格式；后端需根据文件扩展名或配置推导。
     GLSL, ///< GLSL 源码，常用于 OpenGL/Vulkan 开发期编译路径。
     HLSL, ///< HLSL 源码，常用于 Direct3D 或跨编译到 SPIR-V 的路径。
@@ -915,12 +915,12 @@ struct RHIShaderDesc {
 
 /// shader specialization constant，用于在创建管线时固化常量并触发后端优化。
 struct RHIShaderSpecializationConstant {
-    RHIUInt32 constantId = 0; ///< shader 中声明的 specialization constant id。
+    u32 constantId = 0; ///< shader 中声明的 specialization constant id。
     std::vector<std::byte> data; ///< 常量原始字节数据，后端按 shader 反射信息解释类型。
 };
 
 /// 资源绑定槽类型，描述 shader 看到的资源类别。
-enum class RHIBindingType : RHIUInt8 {
+enum class RHIBindingType : u8 {
     UniformBuffer, ///< 只读常量/uniform buffer 绑定，适合小块频繁读取参数。
     StorageBuffer, ///< storage/UAV buffer 绑定，允许 shader 读取或写入结构化数据。
     SampledTexture, ///< 只读 sampled texture view，需配合 sampler 或独立采样器使用。
@@ -932,7 +932,7 @@ enum class RHIBindingType : RHIUInt8 {
 };
 
 /// sampled texture 在 shader 中的采样数据类型。
-enum class RHITextureSampleType : RHIUInt8 {
+enum class RHITextureSampleType : u8 {
     Float, ///< 可过滤浮点/归一化纹理采样类型，支持普通线性过滤。
     UnfilterableFloat, ///< 不可过滤浮点纹理采样类型，例如部分高精度 float 格式。
     SignedInteger, ///< 有符号整数纹理采样类型，shader 读取 int 值且不可线性过滤。
@@ -942,10 +942,10 @@ enum class RHITextureSampleType : RHIUInt8 {
 
 /// 单个绑定槽的布局信息，相当于 descriptor binding/root parameter/argument entry。
 struct RHIBindGroupLayoutEntry {
-    RHIUInt32 binding = 0; ///< 绑定槽编号，对应 shader 中的 binding/register/argument index。
+    u32 binding = 0; ///< 绑定槽编号，对应 shader 中的 binding/register/argument index。
     RHIBindingType type = RHIBindingType::UniformBuffer; ///< 该槽位资源类型。
     RHIShaderStage visibility = RHIShaderStage::AllGraphics; ///< 哪些 shader stage 可以访问该槽位。
-    RHIUInt32 arrayCount = 1; ///< 资源数组长度；bindless 或数组纹理绑定可大于 1。
+    u32 arrayCount = 1; ///< 资源数组长度；bindless 或数组纹理绑定可大于 1。
     bool writable = false; ///< storage buffer/texture 是否允许 shader 写入。
     RHITextureViewDimension textureViewDimension = RHITextureViewDimension::View2D; ///< texture 绑定期望的 view 维度。
     RHITextureSampleType textureSampleType = RHITextureSampleType::Float; ///< sampled texture 的采样类型。
@@ -955,15 +955,15 @@ struct RHIBindGroupLayoutEntry {
 /// 一组绑定槽布局。Vulkan 中通常对应一个 descriptor set layout。
 struct RHIBindGroupLayoutDesc {
     std::string debugName; ///< 调试名称。
-    RHIUInt32 set = 0; ///< 绑定组编号，对应 Vulkan set / D3D register space / Metal buffer index 分组。
+    u32 set = 0; ///< 绑定组编号，对应 Vulkan set / D3D register space / Metal buffer index 分组。
     std::vector<RHIBindGroupLayoutEntry> entries; ///< 该组内所有 binding 声明。
 };
 
 /// buffer 绑定到 shader 时的范围。
 struct RHIBufferBinding {
     RHIBuffer buffer{}; ///< 被绑定的 buffer。
-    RHIUInt64 offset = 0; ///< 起始字节偏移。
-    RHIUInt64 size = RHI_WHOLE_SIZE; ///< 绑定字节范围，RHI_WHOLE_SIZE 表示从 offset 到末尾。
+    u64 offset = 0; ///< 起始字节偏移。
+    u64 size = RHI_WHOLE_SIZE; ///< 绑定字节范围，RHI_WHOLE_SIZE 表示从 offset 到末尾。
 };
 
 /// texture 绑定到 shader 时的 view。texture 字段可用于后端验证 view 来源。
@@ -974,8 +974,8 @@ struct RHITextureBinding {
 
 /// 一个实际资源绑定写入项。
 struct RHIResourceBinding {
-    RHIUInt32 binding = 0; ///< 目标绑定槽编号，必须存在于 RHIBindGroupLayoutEntry 中。
-    RHIUInt32 arrayElement = 0; ///< 写入资源数组的第几个元素。
+    u32 binding = 0; ///< 目标绑定槽编号，必须存在于 RHIBindGroupLayoutEntry 中。
+    u32 arrayElement = 0; ///< 写入资源数组的第几个元素。
     RHIBindingType type = RHIBindingType::UniformBuffer; ///< 本次写入的资源类型。
     RHIBufferBinding buffer{}; ///< buffer 类型绑定时使用。
     RHITextureBinding texture{}; ///< texture 类型绑定时使用。
@@ -992,8 +992,8 @@ struct RHIBindGroupDesc {
 /// push constant/root constant 的可见范围。
 struct RHIPushConstantRange {
     RHIShaderStage stages = RHIShaderStage::AllGraphics; ///< 哪些 shader stage 可以访问该常量范围。
-    RHIUInt32 offset = 0; ///< 字节偏移。
-    RHIUInt32 size = 0; ///< 字节大小。
+    u32 offset = 0; ///< 字节偏移。
+    u32 size = 0; ///< 字节大小。
 };
 
 /// 管线资源布局。所有 graphics/compute pipeline 都应该引用一个布局。
@@ -1006,20 +1006,20 @@ struct RHIPipelineLayoutDesc {
 /// shader 反射得到的资源绑定信息，可用于自动生成 RHIBindGroupLayoutDesc。
 struct RHIShaderResourceReflection {
     std::string name; ///< shader 中的资源名称。
-    RHIUInt32 set = 0; ///< 资源所在 set/space。
-    RHIUInt32 binding = 0; ///< 资源 binding/register。
+    u32 set = 0; ///< 资源所在 set/space。
+    u32 binding = 0; ///< 资源 binding/register。
     RHIBindingType type = RHIBindingType::UniformBuffer; ///< 资源类型。
     RHIShaderStage stages = RHIShaderStage::None; ///< 使用该资源的 shader stage。
-    RHIUInt32 arrayCount = 1; ///< 数组长度。
-    RHIUInt32 size = 0; ///< buffer 或 push constant 字节大小，未知时为 0。
+    u32 arrayCount = 1; ///< 数组长度。
+    u32 size = 0; ///< buffer 或 push constant 字节大小，未知时为 0。
 };
 
 /// shader 输入/输出参数反射信息。
 struct RHIShaderParameterReflection {
     std::string name; ///< 参数名称。
     std::string semanticName; ///< HLSL 语义名，GLSL/Slang 可为空。
-    RHIUInt32 semanticIndex = 0; ///< 语义索引。
-    RHIUInt32 location = 0; ///< shader location。
+    u32 semanticIndex = 0; ///< 语义索引。
+    u32 location = 0; ///< shader location。
     RHIFormat format = RHIFormat::Undefined; ///< 参数格式，无法推导时为 Undefined。
 };
 
@@ -1032,7 +1032,7 @@ struct RHIShaderReflectionDesc {
 };
 
 /// 顶点属性格式，描述单个 attribute 在 vertex buffer 中的存储类型。
-enum class RHIVertexFormat : RHIUInt8 {
+enum class RHIVertexFormat : u8 {
     Float32, ///< 单个 32 位浮点属性，常用于标量权重或自定义数据。
     Float32x2, ///< 两个 32 位浮点属性，常用于 UV、屏幕坐标或二维向量。
     Float32x3, ///< 三个 32 位浮点属性，常用于 position、normal、tangent.xyz。
@@ -1058,7 +1058,7 @@ enum class RHIVertexFormat : RHIUInt8 {
 };
 
 /// 顶点 buffer 的步进频率，区分逐顶点数据和实例化数据。
-enum class RHIVertexInputRate : RHIUInt8 {
+enum class RHIVertexInputRate : u8 {
     PerVertex, ///< 每个顶点前进一次，适用于 position、normal、uv 等网格顶点数据。
     PerInstance ///< 每个实例前进一次，适用于 instance transform、颜色或自定义实例参数。
 };
@@ -1066,24 +1066,24 @@ enum class RHIVertexInputRate : RHIUInt8 {
 /// 单个顶点属性描述，例如 position/normal/uv/color。
 struct RHIVertexAttributeDesc {
     std::string semanticName; ///< 语义名，D3D/HLSL 常用；Vulkan/GL 可用于反射和调试。
-    RHIUInt32 semanticIndex = 0; ///< 同名语义的索引，例如 TEXCOORD0/TEXCOORD1。
-    RHIUInt32 location = 0; ///< shader 输入 location。
-    RHIUInt32 binding = 0; ///< 来自哪个 vertex buffer binding。
+    u32 semanticIndex = 0; ///< 同名语义的索引，例如 TEXCOORD0/TEXCOORD1。
+    u32 location = 0; ///< shader 输入 location。
+    u32 binding = 0; ///< 来自哪个 vertex buffer binding。
     RHIVertexFormat format = RHIVertexFormat::Float32x3; ///< 属性格式。
-    RHIUInt64 offset = 0; ///< 在单个顶点结构内的字节偏移。
+    u64 offset = 0; ///< 在单个顶点结构内的字节偏移。
 };
 
 /// 一个 vertex buffer binding 的布局，可包含多个属性。
 struct RHIVertexBufferLayoutDesc {
-    RHIUInt32 binding = 0; ///< vertex buffer binding 编号。
-    RHIUInt64 stride = 0; ///< 相邻顶点/实例数据之间的字节跨度。
+    u32 binding = 0; ///< vertex buffer binding 编号。
+    u64 stride = 0; ///< 相邻顶点/实例数据之间的字节跨度。
     RHIVertexInputRate inputRate = RHIVertexInputRate::PerVertex; ///< 按顶点还是按实例前进。
-    RHIUInt32 stepRate = 1; ///< 实例化步进倍率；大多数后端常用 1。
+    u32 stepRate = 1; ///< 实例化步进倍率；大多数后端常用 1。
     std::vector<RHIVertexAttributeDesc> attributes; ///< 该 binding 提供的属性列表。
 };
 
 /// 输入图元拓扑，描述顶点流如何被解释成点、线、三角形或 patch。
-enum class RHIPrimitiveTopology : RHIUInt8 {
+enum class RHIPrimitiveTopology : u8 {
     PointList, ///< 每个顶点生成一个点图元，常用于粒子、调试点或点云。
     LineList, ///< 每两个顶点生成一条独立线段，常用于调试线框和辅助线。
     LineStrip, ///< 顶点按顺序连接为连续折线，可用 primitive restart 分段。
@@ -1093,14 +1093,14 @@ enum class RHIPrimitiveTopology : RHIUInt8 {
 };
 
 /// 多边形栅格化模式。Line/Point 不是所有平台和设备都完全支持。
-enum class RHIPolygonMode : RHIUInt8 {
+enum class RHIPolygonMode : u8 {
     Fill, ///< 填充三角形内部，标准实体渲染模式。
     Line, ///< 只栅格化多边形边线，用于线框显示或调试。
     Point ///< 只栅格化多边形顶点，用于特殊调试或点模式渲染。
 };
 
 /// 面剔除模式。
-enum class RHICullMode : RHIUInt8 {
+enum class RHICullMode : u8 {
     None, ///< 不剔除任何面，双面材质或调试时使用。
     Front, ///< 剔除正面三角形，常用于特殊 shadow 或反面渲染技巧。
     Back, ///< 剔除背面三角形，实体网格最常用的模式。
@@ -1108,13 +1108,13 @@ enum class RHICullMode : RHIUInt8 {
 };
 
 /// 正面三角形绕序。注意不同 API 的 framebuffer 坐标系可能影响最终正反面判断。
-enum class RHIFrontFace : RHIUInt8 {
+enum class RHIFrontFace : u8 {
     CounterClockwise, ///< 顶点在屏幕空间逆时针排列时视为正面。
     Clockwise ///< 顶点在屏幕空间顺时针排列时视为正面。
 };
 
 /// 模板测试操作。
-enum class RHIStencilOp : RHIUInt8 {
+enum class RHIStencilOp : u8 {
     Keep, ///< 保留当前 stencil 值不变。
     Zero, ///< 将 stencil 值写为 0。
     Replace, ///< 将 stencil 值替换为 reference 值。
@@ -1126,7 +1126,7 @@ enum class RHIStencilOp : RHIUInt8 {
 };
 
 /// 混合因子，用于颜色和 alpha blend。
-enum class RHIBlendFactor : RHIUInt8 {
+enum class RHIBlendFactor : u8 {
     Zero, ///< 混合因子为 0，完全忽略对应输入。
     One, ///< 混合因子为 1，完整保留对应输入。
     SourceColor, ///< 使用源颜色 RGB 作为混合因子。
@@ -1144,7 +1144,7 @@ enum class RHIBlendFactor : RHIUInt8 {
 };
 
 /// 混合运算。
-enum class RHIBlendOp : RHIUInt8 {
+enum class RHIBlendOp : u8 {
     Add, ///< 源项加目标项，最常用的颜色/alpha 混合运算。
     Subtract, ///< 源项减目标项，用于特殊合成效果。
     ReverseSubtract, ///< 目标项减源项，用于反向差值合成。
@@ -1153,7 +1153,7 @@ enum class RHIBlendOp : RHIUInt8 {
 };
 
 /// 逻辑颜色运算。现代渲染中较少使用，部分后端可能不支持。
-enum class RHILogicOp : RHIUInt8 {
+enum class RHILogicOp : u8 {
     Clear, ///< 输出全 0，忽略源和目标颜色。
     And, ///< 输出 source AND destination。
     AndReverse, ///< 输出 source AND (NOT destination)。
@@ -1173,7 +1173,7 @@ enum class RHILogicOp : RHIUInt8 {
 };
 
 /// color attachment 写通道掩码。
-enum class RHIColorWriteMask : RHIUInt8 {
+enum class RHIColorWriteMask : u8 {
     None = 0, ///< 不写入任何颜色通道，适合只写深度/模板的 pass。
     R = 1u << 0, ///< 允许写入红色通道。
     G = 1u << 1, ///< 允许写入绿色通道。
@@ -1196,7 +1196,7 @@ constexpr RHIColorWriteMask& operator|=(RHIColorWriteMask& lhs, RHIColorWriteMas
 }
 
 /// 创建管线时不固定、录制命令时动态设置的状态。
-enum class RHIDynamicState : RHIUInt8 {
+enum class RHIDynamicState : u8 {
     RHIViewport, ///< viewport 在命令录制时设置，而不是固定在 pipeline 中。
     Scissor, ///< scissor 矩形在命令录制时设置，便于不同 pass 或窗口尺寸复用管线。
     LineWidth, ///< line width 在命令录制时设置，主要用于线框或调试绘制。
@@ -1209,7 +1209,7 @@ enum class RHIDynamicState : RHIUInt8 {
 struct RHIInputAssemblyState {
     RHIPrimitiveTopology topology = RHIPrimitiveTopology::TriangleList; ///< 图元拓扑，最常见是 TriangleList。
     bool primitiveRestart = false; ///< strip 拓扑中是否允许特殊索引重启图元。
-    RHIUInt32 patchControlPoints = 0; ///< PatchList 使用的控制点数量，非曲面细分时为 0。
+    u32 patchControlPoints = 0; ///< PatchList 使用的控制点数量，非曲面细分时为 0。
 };
 
 /// 光栅化阶段状态。
@@ -1231,9 +1231,9 @@ struct RHIStencilFaceState {
     RHIStencilOp passOp = RHIStencilOp::Keep; ///< 模板和深度测试都通过时的操作。
     RHIStencilOp depthFailOp = RHIStencilOp::Keep; ///< 模板通过但深度失败时的操作。
     RHICompareOp compareOp = RHICompareOp::Always; ///< 模板比较函数。
-    RHIUInt32 compareMask = 0xFFFFFFFFu; ///< 比较时使用的读掩码。
-    RHIUInt32 writeMask = 0xFFFFFFFFu; ///< 写入 stencil buffer 时的写掩码。
-    RHIUInt32 reference = 0; ///< 模板参考值；也可以通过 RHIDynamicState 动态设置。
+    u32 compareMask = 0xFFFFFFFFu; ///< 比较时使用的读掩码。
+    u32 writeMask = 0xFFFFFFFFu; ///< 写入 stencil buffer 时的写掩码。
+    u32 reference = 0; ///< 模板参考值；也可以通过 RHIDynamicState 动态设置。
 };
 
 /// 深度和模板测试状态。
@@ -1254,7 +1254,7 @@ struct RHIMultisampleState {
     RHISampleCount samples = RHISampleCount::Count1; ///< MSAA 采样数，必须与 render target 采样数兼容。
     bool sampleShadingEnable = false; ///< 是否启用 per-sample shading。
     float minSampleShading = 1.0F; ///< per-sample shading 的最小采样比例。
-    RHIUInt64 sampleMask = std::numeric_limits<RHIUInt64>::max(); ///< 采样位掩码。
+    u64 sampleMask = std::numeric_limits<u64>::max(); ///< 采样位掩码。
     bool alphaToCoverageEnable = false; ///< 是否把 alpha 转成 coverage，常用于植被边缘。
     bool alphaToOneEnable = false; ///< 是否把 alpha 强制为 1，支持度有限。
 };
@@ -1296,7 +1296,7 @@ struct RHIGraphicsPipelineDesc {
     std::vector<RHIFormat> colorFormats; ///< color attachment 格式列表；动态渲染后端可直接使用。
     RHIFormat depthStencilFormat = RHIFormat::Undefined; ///< depth-stencil attachment 格式，没有深度则为 Undefined。
     RHIRenderPass compatibleRenderPass{}; ///< 传统 render pass 后端的兼容 render pass。
-    RHIUInt32 subpass = 0; ///< 使用 compatibleRenderPass 时的 subpass index。
+    u32 subpass = 0; ///< 使用 compatibleRenderPass 时的 subpass index。
 };
 
 /// 计算管线描述。
@@ -1316,14 +1316,14 @@ struct RHIPipelineCacheDesc {
 };
 
 /// GPU 查询类型。
-enum class RHIQueryType : RHIUInt8 {
+enum class RHIQueryType : u8 {
     Timestamp, ///< GPU 时间戳查询，用于测量 pass 或命令区间的 GPU 执行时间。
     Occlusion, ///< 遮挡查询，用于统计通过深度/模板测试的样本数或可见性。
     PipelineStatistics ///< 管线统计查询，用于统计 shader 调用、图元数量等性能计数。
 };
 
 /// pipeline statistics 查询的统计项位。
-enum class RHIPipelineStatisticFlags : RHIUInt32 {
+enum class RHIPipelineStatisticFlags : u32 {
     None = 0, ///< 不启用任何管线统计项。
     InputAssemblyVertices = 1u << 0, ///< 统计输入装配阶段读取的顶点数量。
     InputAssemblyPrimitives = 1u << 1, ///< 统计输入装配阶段生成的图元数量。
@@ -1355,25 +1355,25 @@ constexpr RHIPipelineStatisticFlags& operator|=(RHIPipelineStatisticFlags& lhs, 
 struct RHIQueryPoolDesc {
     std::string debugName; ///< 调试名称。
     RHIQueryType type = RHIQueryType::Timestamp; ///< 查询类型。
-    RHIUInt32 queryCount = 1; ///< 查询槽数量。
+    u32 queryCount = 1; ///< 查询槽数量。
     RHIPipelineStatisticFlags statistics = RHIPipelineStatisticFlags::None; ///< PipelineStatistics 查询时需要的统计项。
 };
 
 /// 渲染开始时 attachment 内容如何处理。
-enum class RHILoadOp : RHIUInt8 {
+enum class RHILoadOp : u8 {
     Load, ///< pass 开始时保留并读取 attachment 原有内容。
     Clear, ///< pass 开始时使用 clear value 清除 attachment。
     DontCare ///< pass 开始时不关心 attachment 原有内容，后端可丢弃以节省带宽。
 };
 
 /// 渲染结束时 attachment 内容如何处理。
-enum class RHIStoreOp : RHIUInt8 {
+enum class RHIStoreOp : u8 {
     Store, ///< pass 结束时保留 attachment 内容，供后续 pass、采样或呈现使用。
     DontCare ///< pass 结束时不需要保留 attachment 内容，后端可丢弃或不写回内存。
 };
 
 /// MSAA resolve 行为。Average 是最常见的颜色 resolve；深度 resolve 后端支持差异较大。
-enum class RHIResolveMode : RHIUInt8 {
+enum class RHIResolveMode : u8 {
     None, ///< 不执行 resolve，MSAA attachment 内容保持多采样形式。
     Average, ///< 对多个 sample 求平均，最常见的颜色 MSAA resolve 模式。
     Min, ///< 取多个 sample 的最小值，常用于特定深度 resolve 策略。
@@ -1423,11 +1423,11 @@ struct RHIFramebufferDesc {
     RHIRenderPass renderPass{}; ///< 兼容的 render pass。
     std::vector<RHITextureView> attachments; ///< 实际绑定的附件 view。
     RHIExtent2D extent{}; ///< framebuffer 宽高。
-    RHIUInt32 layers = 1; ///< framebuffer 层数。
+    u32 layers = 1; ///< framebuffer 层数。
 };
 
 /// swapchain 色彩空间。后端需要根据平台支持选择最接近的实际色彩空间。
-enum class RHIColorSpace : RHIUInt8 {
+enum class RHIColorSpace : u8 {
     SRGBNonlinear, ///< 标准 sRGB 非线性色彩空间，普通 SDR swapchain 默认选择。
     DisplayP3Nonlinear, ///< Display P3 非线性色彩空间，适合广色域 SDR 输出。
     ExtendedSRGBLinear, ///< 扩展 sRGB 线性色彩空间，适合宽范围线性颜色输出。
@@ -1436,7 +1436,7 @@ enum class RHIColorSpace : RHIUInt8 {
 };
 
 /// swapchain 输出表面变换。移动端或可旋转窗口系统可能会用到。
-enum class RHISurfaceTransform : RHIUInt8 {
+enum class RHISurfaceTransform : u8 {
     Identity, ///< 不对 swapchain 输出做额外旋转或镜像。
     Rotate90, ///< 输出图像顺时针旋转 90 度后呈现。
     Rotate180, ///< 输出图像旋转 180 度后呈现。
@@ -1449,7 +1449,7 @@ enum class RHISurfaceTransform : RHIUInt8 {
 };
 
 /// swapchain alpha 合成模式，用于透明窗口或系统 compositor。
-enum class RHICompositeAlphaMode : RHIUInt8 {
+enum class RHICompositeAlphaMode : u8 {
     Opaque, ///< swapchain alpha 被视为不透明，窗口内容不参与透明合成。
     PreMultiplied, ///< 颜色已预乘 alpha，交给系统 compositor 做预乘透明合成。
     PostMultiplied, ///< 颜色未预乘 alpha，交给系统 compositor 做后乘透明合成。
@@ -1463,7 +1463,7 @@ struct RHISwapchainDesc {
     RHIFormat preferredFormat = RHIFormat::BGRA8_SRGB; ///< 期望后备缓冲格式，后端可根据平台支持选择最接近格式。
     RHIColorSpace colorSpace = RHIColorSpace::SRGBNonlinear; ///< 期望色彩空间。
     RHIPresentMode presentMode = RHIPresentMode::FIFO; ///< 呈现模式。
-    RHIUInt32 imageCount = 2; ///< swapchain image 数量，常见为 2 或 3。
+    u32 imageCount = 2; ///< swapchain image 数量，常见为 2 或 3。
     RHISurfaceTransform preTransform = RHISurfaceTransform::Identity; ///< 呈现前表面变换。
     RHICompositeAlphaMode compositeAlpha = RHICompositeAlphaMode::Opaque; ///< 与系统 compositor 的 alpha 合成方式。
     bool allowTearing = false; ///< 是否允许无垂直同步撕裂显示，平台不支持时应忽略。
@@ -1474,10 +1474,10 @@ struct RHISwapchainDesc {
 /// texture 子资源范围，用于 barrier、copy、view 等操作。
 struct RHITextureSubresourceRange {
     RHITextureAspect aspect = RHITextureAspect::All; ///< 覆盖的 aspect，All 表示由格式自动推导。
-    RHIUInt32 baseMipLevel = 0; ///< 起始 mip。
-    RHIUInt32 mipLevelCount = 1; ///< mip 数量。
-    RHIUInt32 baseArrayLayer = 0; ///< 起始数组层。
-    RHIUInt32 arrayLayerCount = 1; ///< 数组层数量。
+    u32 baseMipLevel = 0; ///< 起始 mip。
+    u32 mipLevelCount = 1; ///< mip 数量。
+    u32 baseArrayLayer = 0; ///< 起始数组层。
+    u32 arrayLayerCount = 1; ///< 数组层数量。
 };
 
 /// 全局内存 barrier，用于没有特定资源但需要约束前后访问顺序的情况。
@@ -1506,8 +1506,8 @@ struct RHITextureBarrier {
 /// buffer 状态转换请求。显式 API 会翻译成 buffer/resource barrier。
 struct RHIBufferBarrier {
     RHIBuffer buffer{}; ///< 目标 buffer。
-    RHIUInt64 offset = 0; ///< 起始字节偏移。
-    RHIUInt64 size = RHI_WHOLE_SIZE; ///< 覆盖字节范围。
+    u64 offset = 0; ///< 起始字节偏移。
+    u64 size = RHI_WHOLE_SIZE; ///< 覆盖字节范围。
     RHIResourceState before = RHIResourceState::Undefined; ///< 转换前状态。
     RHIResourceState after = RHIResourceState::Common; ///< 转换后状态。
     RHIPipelineStage sourceStages = RHIPipelineStage::AllCommands; ///< 转换前需要等待的管线阶段。
@@ -1528,19 +1528,19 @@ struct RHIResourceBarriers {
 /// CPU 到 GPU buffer 上传请求。后端负责 staging buffer 和 copy command。
 struct RHIBufferUploadDesc {
     RHIBuffer destination{}; ///< 目标 buffer。
-    RHIUInt64 destinationOffset = 0; ///< 写入目标 buffer 的字节偏移。
+    u64 destinationOffset = 0; ///< 写入目标 buffer 的字节偏移。
     std::vector<std::byte> data; ///< 待上传的原始字节。
 };
 
 /// CPU 到 GPU texture 上传请求。行对齐要求由后端处理。
 struct RHITextureUploadDesc {
     RHITexture destination{}; ///< 目标 texture。
-    RHIUInt32 mipLevel = 0; ///< 目标 mip。
-    RHIUInt32 arrayLayer = 0; ///< 目标数组层。
+    u32 mipLevel = 0; ///< 目标 mip。
+    u32 arrayLayer = 0; ///< 目标数组层。
     RHIOffset3D offset{}; ///< 写入区域偏移。
     RHIExtent3D extent{}; ///< 写入区域尺寸。
-    RHIUInt64 bytesPerRow = 0; ///< 源数据每行字节数；0 表示后端按格式和宽度推导。
-    RHIUInt64 rowsPerImage = 0; ///< 3D/array 数据每张 image 行数；0 表示后端推导。
+    u64 bytesPerRow = 0; ///< 源数据每行字节数；0 表示后端按格式和宽度推导。
+    u64 rowsPerImage = 0; ///< 3D/array 数据每张 image 行数；0 表示后端推导。
     std::vector<std::byte> data; ///< 待上传的原始像素字节。
 };
 
@@ -1554,17 +1554,17 @@ struct RHIUploadBatchDesc {
 struct RHIBufferCopyDesc {
     RHIBuffer source{}; ///< 源 buffer。
     RHIBuffer destination{}; ///< 目标 buffer。
-    RHIUInt64 sourceOffset = 0; ///< 源字节偏移。
-    RHIUInt64 destinationOffset = 0; ///< 目标字节偏移。
-    RHIUInt64 size = 0; ///< 拷贝字节数。
+    u64 sourceOffset = 0; ///< 源字节偏移。
+    u64 destinationOffset = 0; ///< 目标字节偏移。
+    u64 size = 0; ///< 拷贝字节数。
 };
 
 /// texture 拷贝位置，包含 texture 和具体子资源。
 struct RHITextureCopyLocation {
     RHITexture texture{}; ///< 目标或源 texture。
     RHITextureAspect aspect = RHITextureAspect::Color; ///< 拷贝的 aspect。
-    RHIUInt32 mipLevel = 0; ///< mip 层。
-    RHIUInt32 arrayLayer = 0; ///< 数组层。
+    u32 mipLevel = 0; ///< mip 层。
+    u32 arrayLayer = 0; ///< 数组层。
     RHIOffset3D offset{}; ///< 子资源内偏移。
 };
 
@@ -1579,9 +1579,9 @@ struct RHITextureCopyDesc {
 struct RHIBufferTextureCopyDesc {
     RHIBuffer buffer{}; ///< 参与拷贝的 buffer。
     RHITextureCopyLocation texture{}; ///< 参与拷贝的 texture 位置。
-    RHIUInt64 bufferOffset = 0; ///< buffer 起始字节偏移。
-    RHIUInt64 bytesPerRow = 0; ///< buffer 中每行字节数；0 表示后端按格式推导。
-    RHIUInt64 rowsPerImage = 0; ///< buffer 中每张 image 行数；0 表示后端推导。
+    u64 bufferOffset = 0; ///< buffer 起始字节偏移。
+    u64 bytesPerRow = 0; ///< buffer 中每行字节数；0 表示后端按格式推导。
+    u64 rowsPerImage = 0; ///< buffer 中每张 image 行数；0 表示后端推导。
     RHIExtent3D extent{}; ///< 拷贝尺寸。
 };
 
@@ -1598,13 +1598,13 @@ struct RHITextureBlitDesc {
 struct RHIMipmapGenerationDesc {
     RHITexture texture{}; ///< 目标 texture。
     RHITextureAspect aspect = RHITextureAspect::Color; ///< 生成哪个 aspect 的 mip。
-    RHIUInt32 baseArrayLayer = 0; ///< 起始数组层。
-    RHIUInt32 arrayLayerCount = 1; ///< 数组层数量。
+    u32 baseArrayLayer = 0; ///< 起始数组层。
+    u32 arrayLayerCount = 1; ///< 数组层数量。
     RHIFilterMode filter = RHIFilterMode::Linear; ///< 下采样过滤方式。
 };
 
 /// index buffer 中索引元素的整数类型。
-enum class RHIIndexType : RHIUInt8 {
+enum class RHIIndexType : u8 {
     UInt16, ///< 16 位无符号索引，节省显存和带宽，单个 draw 可引用最多 65536 个顶点。
     UInt32 ///< 32 位无符号索引，支持大型 mesh，显存和带宽成本高于 UInt16。
 };
@@ -1612,17 +1612,17 @@ enum class RHIIndexType : RHIUInt8 {
 /// draw call 绑定的单个 vertex stream。
 struct RHIVertexStream {
     RHIBuffer buffer{}; ///< 顶点 buffer。
-    RHIUInt32 binding = 0; ///< 对应 RHIVertexBufferLayoutDesc::binding。
-    RHIUInt64 offset = 0; ///< buffer 起始字节偏移。
-    RHIUInt64 stride = 0; ///< 运行期 stride；0 表示使用 pipeline layout 中的 stride。
+    u32 binding = 0; ///< 对应 RHIVertexBufferLayoutDesc::binding。
+    u64 offset = 0; ///< buffer 起始字节偏移。
+    u64 stride = 0; ///< 运行期 stride；0 表示使用 pipeline layout 中的 stride。
 };
 
 /// draw indexed 使用的 index stream。
 struct RHIIndexStream {
     RHIBuffer buffer{}; ///< 索引 buffer。
     RHIIndexType indexType = RHIIndexType::UInt32; ///< 索引元素类型。
-    RHIUInt64 offset = 0; ///< 起始字节偏移。
-    RHIUInt32 indexCount = 0; ///< 可读取索引数量，便于验证 draw 范围。
+    u64 offset = 0; ///< 起始字节偏移。
+    u32 indexCount = 0; ///< 可读取索引数量，便于验证 draw 范围。
 };
 
 /// 轴对齐包围盒，用于视锥裁剪、光源裁剪和加速结构构建。
@@ -1640,13 +1640,13 @@ struct RHIBoundingSphere {
 /// mesh 内的一个可独立绘制部分。
 struct RHISubmeshDesc {
     std::string name; ///< 子网格名称。
-    RHIUInt32 firstVertex = 0; ///< 非索引绘制的起始顶点。
-    RHIUInt32 vertexCount = 0; ///< 顶点数量。
-    RHIUInt32 firstIndex = 0; ///< 索引绘制的起始索引。
-    RHIUInt32 indexCount = 0; ///< 索引数量。
-    RHIUInt32 firstInstance = 0; ///< 默认起始实例。
-    RHIUInt32 instanceCount = 1; ///< 默认实例数量。
-    RHIInt32 materialIndex = -1; ///< 默认材质索引，-1 表示未指定。
+    u32 firstVertex = 0; ///< 非索引绘制的起始顶点。
+    u32 vertexCount = 0; ///< 顶点数量。
+    u32 firstIndex = 0; ///< 索引绘制的起始索引。
+    u32 indexCount = 0; ///< 索引数量。
+    u32 firstInstance = 0; ///< 默认起始实例。
+    u32 instanceCount = 1; ///< 默认实例数量。
+    i32 materialIndex = -1; ///< 默认材质索引，-1 表示未指定。
     glm::vec3 boundsMin{0.0F}; ///< 本地空间 AABB 最小点。
     glm::vec3 boundsMax{0.0F}; ///< 本地空间 AABB 最大点。
     RHIBoundingSphere boundsSphere{}; ///< 本地空间包围球。
@@ -1668,7 +1668,7 @@ struct RHITextureSlot {
 };
 
 /// 材质参数类型，用于编辑器和自动打包 uniform/push constant 数据。
-enum class RHIMaterialParameterType : RHIUInt8 {
+enum class RHIMaterialParameterType : u8 {
     Float, ///< 单个浮点参数，存放在 value.x，例如 roughness、metallic、exposure。
     Float2, ///< 二维浮点参数，存放在 value.xy，例如 tiling、offset 或屏幕尺寸。
     Float3, ///< 三维浮点参数，存放在 value.xyz，例如颜色、方向或位置。
@@ -1700,10 +1700,10 @@ struct RHIDrawCommand {
     RHIPipeline pipeline{}; ///< 使用的图形管线。
     std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流，可覆盖 mesh 默认流。
-    RHIUInt32 vertexCount = 0; ///< 绘制顶点数。
-    RHIUInt32 instanceCount = 1; ///< 实例数量。
-    RHIUInt32 firstVertex = 0; ///< 起始顶点。
-    RHIUInt32 firstInstance = 0; ///< 起始实例。
+    u32 vertexCount = 0; ///< 绘制顶点数。
+    u32 instanceCount = 1; ///< 实例数量。
+    u32 firstVertex = 0; ///< 起始顶点。
+    u32 firstInstance = 0; ///< 起始实例。
 };
 
 /// 索引绘制命令。
@@ -1712,20 +1712,20 @@ struct RHIDrawIndexedCommand {
     std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIIndexStream indexStream{}; ///< 索引流。
-    RHIUInt32 indexCount = 0; ///< 绘制索引数。
-    RHIUInt32 instanceCount = 1; ///< 实例数量。
-    RHIUInt32 firstIndex = 0; ///< 起始索引。
-    RHIInt32 vertexOffsetElements = 0; ///< 索引值加上的顶点偏移，单位是顶点不是字节。
-    RHIUInt32 firstInstance = 0; ///< 起始实例。
+    u32 indexCount = 0; ///< 绘制索引数。
+    u32 instanceCount = 1; ///< 实例数量。
+    u32 firstIndex = 0; ///< 起始索引。
+    i32 vertexOffsetElements = 0; ///< 索引值加上的顶点偏移，单位是顶点不是字节。
+    u32 firstInstance = 0; ///< 起始实例。
 };
 
 /// compute dispatch 命令。
 struct RHIDispatchCommand {
     RHIPipeline pipeline{}; ///< 使用的计算管线。
     std::vector<RHIBindGroup> bindGroups; ///< dispatch 前需要绑定的资源组。
-    RHIUInt32 groupCountX = 1; ///< X 方向 workgroup 数量。
-    RHIUInt32 groupCountY = 1; ///< Y 方向 workgroup 数量。
-    RHIUInt32 groupCountZ = 1; ///< Z 方向 workgroup 数量。
+    u32 groupCountX = 1; ///< X 方向 workgroup 数量。
+    u32 groupCountY = 1; ///< Y 方向 workgroup 数量。
+    u32 groupCountZ = 1; ///< Z 方向 workgroup 数量。
 };
 
 /// 间接非索引绘制命令，参数从 GPU buffer 读取。
@@ -1734,11 +1734,11 @@ struct RHIDrawIndirectCommand {
     std::vector<RHIBindGroup> bindGroups; ///< 绘制前需要绑定的资源组。
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
-    RHIUInt64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
-    RHIUInt32 drawCount = 1; ///< 执行的间接绘制数量。
-    RHIUInt32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
+    u64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
+    u32 drawCount = 1; ///< 执行的间接绘制数量。
+    u32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
     RHIBuffer countBuffer{}; ///< 可选 draw count buffer；无效句柄表示使用 drawCount。
-    RHIUInt64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
+    u64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
 };
 
 /// 间接索引绘制命令。
@@ -1748,11 +1748,11 @@ struct RHIDrawIndexedIndirectCommand {
     std::vector<RHIVertexStream> vertexStreams; ///< 本次绘制的顶点流。
     RHIIndexStream indexStream{}; ///< 索引流。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
-    RHIUInt64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
-    RHIUInt32 drawCount = 1; ///< 执行的间接绘制数量。
-    RHIUInt32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
+    u64 argumentOffset = 0; ///< 第一个间接参数的字节偏移。
+    u32 drawCount = 1; ///< 执行的间接绘制数量。
+    u32 stride = 0; ///< 每个间接参数结构的字节跨度；0 表示使用后端默认结构大小。
     RHIBuffer countBuffer{}; ///< 可选 draw count buffer；无效句柄表示使用 drawCount。
-    RHIUInt64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
+    u64 countBufferOffset = 0; ///< countBuffer 中 draw count 的字节偏移。
 };
 
 /// 间接 compute dispatch 命令，groupCount 从 GPU buffer 读取。
@@ -1760,7 +1760,7 @@ struct RHIDispatchIndirectCommand {
     RHIPipeline pipeline{}; ///< 使用的计算管线。
     std::vector<RHIBindGroup> bindGroups; ///< dispatch 前需要绑定的资源组。
     RHIBuffer argumentBuffer{}; ///< 间接参数 buffer。
-    RHIUInt64 argumentOffset = 0; ///< 参数字节偏移。
+    u64 argumentOffset = 0; ///< 参数字节偏移。
 };
 
 /// GPU 调试标记，用于 RenderDoc、PIX、Xcode GPU Frame Debugger 等工具分组显示。
@@ -1772,25 +1772,25 @@ struct RHIDebugMarkerDesc {
 /// 写入 timestamp 查询的命令。
 struct RHITimestampQueryCommand {
     RHIQueryPool queryPool{}; ///< timestamp 查询池。
-    RHIUInt32 queryIndex = 0; ///< 写入的查询槽。
+    u32 queryIndex = 0; ///< 写入的查询槽。
     RHIPipelineStage stage = RHIPipelineStage::BottomOfPipe; ///< 记录时间戳的管线阶段。
 };
 
 /// 重置查询范围的命令。
 struct RHIResetQueryCommand {
     RHIQueryPool queryPool{}; ///< 查询池。
-    RHIUInt32 firstQuery = 0; ///< 起始查询槽。
-    RHIUInt32 queryCount = 1; ///< 查询数量。
+    u32 firstQuery = 0; ///< 起始查询槽。
+    u32 queryCount = 1; ///< 查询数量。
 };
 
 /// 拷贝查询结果到 buffer 的命令，便于 CPU 或后续 GPU pass 读取。
 struct RHIResolveQueryCommand {
     RHIQueryPool queryPool{}; ///< 查询池。
-    RHIUInt32 firstQuery = 0; ///< 起始查询槽。
-    RHIUInt32 queryCount = 1; ///< 查询数量。
+    u32 firstQuery = 0; ///< 起始查询槽。
+    u32 queryCount = 1; ///< 查询数量。
     RHIBuffer destination{}; ///< 结果写入的 buffer。
-    RHIUInt64 destinationOffset = 0; ///< 目标字节偏移。
-    RHIUInt64 stride = sizeof(RHIUInt64); ///< 每个查询结果的字节跨度。
+    u64 destinationOffset = 0; ///< 目标字节偏移。
+    u64 stride = sizeof(u64); ///< 每个查询结果的字节跨度。
     bool waitForResults = true; ///< 是否等待查询结果可用。
 };
 
@@ -1819,16 +1819,16 @@ struct RHIRenderPassWorkload {
 };
 
 /// semaphore 类型。timeline semaphore 能表达递增计数，binary semaphore 只表达一次信号。
-enum class RHISemaphoreType : RHIUInt8 {
+enum class RHISemaphoreType : u8 {
     Binary, ///< 二值 semaphore，只表达一次 wait/signal，同步单个提交或 present 依赖。
-    Timeline ///< 时间线 semaphore，使用递增 RHIUInt64 值表达多个提交之间的有序同步。
+    Timeline ///< 时间线 semaphore，使用递增 u64 值表达多个提交之间的有序同步。
 };
 
 /// semaphore 创建描述。
 struct RHISemaphoreDesc {
     std::string debugName; ///< 调试名称。
     RHISemaphoreType type = RHISemaphoreType::Binary; ///< 同步对象类型。
-    RHIUInt64 initialValue = 0; ///< timeline semaphore 初始值，binary semaphore 忽略。
+    u64 initialValue = 0; ///< timeline semaphore 初始值，binary semaphore 忽略。
 };
 
 /// fence 创建描述。fence 通常用于 CPU 等待某帧 GPU 工作完成。
@@ -1840,14 +1840,14 @@ struct RHIFenceDesc {
 /// 队列提交前等待的 semaphore。
 struct RHIQueueWaitDesc {
     RHISemaphore semaphore{}; ///< 需要等待的 semaphore。
-    RHIUInt64 value = 0; ///< timeline semaphore 等待值；binary semaphore 忽略。
+    u64 value = 0; ///< timeline semaphore 等待值；binary semaphore 忽略。
     RHIPipelineStage stages = RHIPipelineStage::AllCommands; ///< 等待影响的管线阶段。
 };
 
 /// 队列提交完成后 signal 的 semaphore。
 struct RHIQueueSignalDesc {
     RHISemaphore semaphore{}; ///< 需要 signal 的 semaphore。
-    RHIUInt64 value = 0; ///< timeline semaphore signal 值；binary semaphore 忽略。
+    u64 value = 0; ///< timeline semaphore signal 值；binary semaphore 忽略。
 };
 
 /// 一次队列提交描述。后端可把 passNames 映射到实际 command buffer 列表。
@@ -1863,7 +1863,7 @@ struct RHIQueueSubmitDesc {
 /// 呈现请求。窗口系统原生 surface 仍由平台层和后端保存。
 struct RHIPresentDesc {
     RHISwapchain swapchain{}; ///< 目标 swapchain。
-    RHIUInt32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
+    u32 imageIndex = 0; ///< 要呈现的 swapchain image 下标。
     std::vector<RHISemaphore> waitSemaphores; ///< present 前需要等待的 semaphore。
     RHIPresentMode presentMode = RHIPresentMode::FIFO; ///< 本次呈现期望模式，后端可按 swapchain 实际模式处理。
     bool allowTearing = false; ///< 本次呈现是否允许 tearing。
@@ -1890,7 +1890,7 @@ struct RHICameraData {
 };
 
 /// 光源类型。
-enum class RHILightType : RHIUInt8 {
+enum class RHILightType : u8 {
     Directional, ///< 方向光，只有方向无位置，适合太阳光等无限远平行光源。
     Point, ///< 点光源，从世界位置向四周发光，受 range 控制影响半径。
     Spot ///< 聚光灯，从位置沿方向发光，并由内外锥角控制照射范围。
@@ -1909,7 +1909,7 @@ struct RHILightData {
 };
 
 /// 渲染队列，用于粗粒度排序和选择 pass。
-enum class RHIRenderQueue : RHIUInt8 {
+enum class RHIRenderQueue : u8 {
     Background, ///< 背景队列，通常最先绘制 sky、远景或清屏后背景内容。
     Opaque, ///< 不透明队列，通常按材质/管线优化排序并开启深度写入。
     AlphaTest, ///< Alpha 裁剪队列，用于植被、栅栏等需要 discard 但仍可深度写入的物体。
@@ -1923,10 +1923,10 @@ struct RHIRenderObjectDesc {
     RHIMesh mesh{}; ///< 使用的 mesh。
     RHIMaterial material{}; ///< 使用的材质。
     RHITransformData transform{}; ///< 物体变换。
-    RHIUInt32 submeshIndex = 0; ///< 绘制 mesh 中的哪个 submesh。
+    u32 submeshIndex = 0; ///< 绘制 mesh 中的哪个 submesh。
     RHIRenderQueue queue = RHIRenderQueue::Opaque; ///< 渲染队列。
-    RHIUInt64 sortingKey = 0; ///< 精细排序 key，可编码 pipeline/material/depth 等信息。
-    RHIUInt32 layerMask = 0xFFFFFFFFu; ///< 渲染层掩码，供相机/pass 过滤。
+    u64 sortingKey = 0; ///< 精细排序 key，可编码 pipeline/material/depth 等信息。
+    u32 layerMask = 0xFFFFFFFFu; ///< 渲染层掩码，供相机/pass 过滤。
     RHIBoundingBox worldBounds{}; ///< 世界空间包围盒，裁剪阶段可直接使用。
     RHIBoundingSphere worldBoundsSphere{}; ///< 世界空间包围球，粗裁剪和 LOD 可直接使用。
     bool visible = true; ///< 是否参与当前帧可见性处理。
@@ -1961,14 +1961,14 @@ struct RHIRenderObjectSetDesc {
 };
 
 /// RenderGraph 中声明的资源类型。
-enum class RHIRenderGraphResourceType : RHIUInt8 {
+enum class RHIRenderGraphResourceType : u8 {
     Buffer, ///< RenderGraph 管理或引用的 buffer 资源。
     Texture, ///< RenderGraph 管理或引用的普通 texture/image 资源。
     SwapchainImage ///< 外部导入的 swapchain image，通常作为最终 present 目标。
 };
 
 /// RenderGraph 资源标志，用于别名、导入导出和临时资源优化。
-enum class RHIRenderGraphResourceFlags : RHIUInt32 {
+enum class RHIRenderGraphResourceFlags : u32 {
     None = 0, ///< 无特殊 RenderGraph 行为，按普通内部资源处理。
     Imported = 1u << 0, ///< 资源由外部创建并传入 graph，graph 不负责创建和销毁。
     Exported = 1u << 1, ///< 资源结果需要在 graph 外继续使用，不能在最后一次内部读取后立即释放。
@@ -2021,15 +2021,15 @@ struct RHIRenderGraphTextureDesc {
 struct RHIRenderGraphAttachmentDesc {
     std::string resourceName; ///< attachment 对应的 graph texture 名称。
     RHITextureAspect aspect = RHITextureAspect::Color; ///< attachment 使用的 aspect。
-    RHIUInt32 mipLevel = 0; ///< attachment 使用的 mip。
-    RHIUInt32 arrayLayer = 0; ///< attachment 使用的数组层。
+    u32 mipLevel = 0; ///< attachment 使用的 mip。
+    u32 arrayLayer = 0; ///< attachment 使用的数组层。
     RHILoadOp loadOp = RHILoadOp::Clear; ///< pass 开始行为。
     RHIStoreOp storeOp = RHIStoreOp::Store; ///< pass 结束行为。
     RHIClearValue clearValue{}; ///< 清屏值。
 };
 
 /// RenderGraph pass 类型，调度器可据此选择命令队列和合法命令集合。
-enum class RHIRenderGraphPassType : RHIUInt8 {
+enum class RHIRenderGraphPassType : u8 {
     Raster, ///< 图形渲染 pass，可使用 color/depth attachments 并执行 draw 命令。
     Compute, ///< 计算 pass，执行 compute dispatch，可选择异步 compute 队列。
     Copy, ///< 传输 pass，执行 buffer/texture copy、blit、resolve 或 mipmap 生成。
@@ -2062,9 +2062,9 @@ struct RHIFrameRenderSettings {
     RHIExtent2D drawableSize{}; ///< 当前可绘制区域尺寸。
     RHIViewport viewport{}; ///< 默认 viewport。
     RHIRect2D scissor{}; ///< 默认 scissor。
-    RHIUInt64 frameIndex = 0; ///< 递增帧号，可用于环形 buffer 和 temporal 资源。
+    u64 frameIndex = 0; ///< 递增帧号，可用于环形 buffer 和 temporal 资源。
     float deltaTimeSeconds = 0.0F; ///< 与上一帧的时间差。
-    RHIUInt32 maxFramesInFlight = 2; ///< CPU/GPU 并行帧数。
+    u32 maxFramesInFlight = 2; ///< CPU/GPU 并行帧数。
     bool enableVsync = true; ///< 是否希望开启垂直同步。
     bool enableHdr = false; ///< 是否希望使用 HDR swapchain/中间颜色格式。
 };
@@ -2088,23 +2088,23 @@ struct RHIFramePacket {
 struct RHICapabilities {
     RHIGraphicsAPI api = RHIGraphicsAPI::Unknown; ///< 当前后端 API。
     std::string adapterName; ///< GPU/适配器名称。
-    RHIUInt64 dedicatedVideoMemory = 0; ///< 独立显存字节数；集成显卡可为 0 或估算值。
-    RHIUInt64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
+    u64 dedicatedVideoMemory = 0; ///< 独立显存字节数；集成显卡可为 0 或估算值。
+    u64 sharedSystemMemory = 0; ///< 可共享系统内存字节数。
     RHIRenderFeature features = RHIRenderFeature::None; ///< 实际启用的功能位。
-    RHIUInt32 maxTexture2DSize = 0; ///< 支持的最大 2D texture 边长。
-    RHIUInt32 maxTexture3DSize = 0; ///< 支持的最大 3D texture 边长。
-    RHIUInt32 maxTextureCubeSize = 0; ///< 支持的最大 cube texture 边长。
-    RHIUInt32 maxTextureArrayLayers = 0; ///< 最大 texture array 层数。
-    RHIUInt32 maxColorAttachments = 0; ///< 单个 pass 最大 color attachment 数。
-    RHIUInt32 maxBindGroups = 0; ///< 单个 pipeline 最大 bind group 数。
-    RHIUInt32 maxBindingsPerGroup = 0; ///< 单个 bind group 最大 binding 数。
-    RHIUInt32 maxVertexBuffers = 0; ///< 单次绘制最大 vertex buffer binding 数。
-    RHIUInt32 maxVertexAttributes = 0; ///< 单个 pipeline 最大顶点属性数。
-    RHIUInt32 maxPushConstantSize = 0; ///< push constant/root constant 最大字节数。
-    RHIUInt64 minUniformBufferOffsetAlignment = 0; ///< 动态 uniform buffer offset 对齐。
-    RHIUInt64 minStorageBufferOffsetAlignment = 0; ///< 动态 storage buffer offset 对齐。
-    RHIUInt64 optimalBufferCopyOffsetAlignment = 0; ///< buffer copy offset 推荐对齐。
-    RHIUInt64 optimalBufferCopyRowPitchAlignment = 0; ///< buffer-texture copy 每行 pitch 推荐对齐。
+    u32 maxTexture2DSize = 0; ///< 支持的最大 2D texture 边长。
+    u32 maxTexture3DSize = 0; ///< 支持的最大 3D texture 边长。
+    u32 maxTextureCubeSize = 0; ///< 支持的最大 cube texture 边长。
+    u32 maxTextureArrayLayers = 0; ///< 最大 texture array 层数。
+    u32 maxColorAttachments = 0; ///< 单个 pass 最大 color attachment 数。
+    u32 maxBindGroups = 0; ///< 单个 pipeline 最大 bind group 数。
+    u32 maxBindingsPerGroup = 0; ///< 单个 bind group 最大 binding 数。
+    u32 maxVertexBuffers = 0; ///< 单次绘制最大 vertex buffer binding 数。
+    u32 maxVertexAttributes = 0; ///< 单个 pipeline 最大顶点属性数。
+    u32 maxPushConstantSize = 0; ///< push constant/root constant 最大字节数。
+    u64 minUniformBufferOffsetAlignment = 0; ///< 动态 uniform buffer offset 对齐。
+    u64 minStorageBufferOffsetAlignment = 0; ///< 动态 storage buffer offset 对齐。
+    u64 optimalBufferCopyOffsetAlignment = 0; ///< buffer copy offset 推荐对齐。
+    u64 optimalBufferCopyRowPitchAlignment = 0; ///< buffer-texture copy 每行 pitch 推荐对齐。
     RHISampleCount maxSampleCount = RHISampleCount::Count1; ///< 支持的最大 MSAA 采样数。
     float maxSamplerAnisotropy = 1.0F; ///< 最大各向异性等级。
     bool supportsCompute = false; ///< 是否支持 compute shader。
@@ -2128,3 +2128,4 @@ struct RHICapabilities {
 };
 
 } // namespace rhi
+

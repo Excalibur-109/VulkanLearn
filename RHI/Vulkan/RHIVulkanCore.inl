@@ -1,14 +1,22 @@
-﻿RHIVulkanBackend::RHIVulkanBackend()
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+RHIVulkan::RHIVulkan()
     : impl_(std::make_unique<Impl>()) {
 }
 
-RHIVulkanBackend::~RHIVulkanBackend() {
+RHIVulkan::~RHIVulkan() {
     shutdown();
 }
 
-RHIVulkanBackend::RHIVulkanBackend(RHIVulkanBackend&&) noexcept = default;
+RHIVulkan::RHIVulkan(RHIVulkan&&) noexcept = default;
 
-RHIVulkanBackend& RHIVulkanBackend::operator=(RHIVulkanBackend&&) noexcept = default;
+RHIVulkan& RHIVulkan::operator=(RHIVulkan&&) noexcept = default;
 
 // 初始化 Vulkan 后端的主流程：
 // 1. 收集 layer/extension，创建 VkInstance 和可选 debug messenger；
@@ -16,7 +24,7 @@ RHIVulkanBackend& RHIVulkanBackend::operator=(RHIVulkanBackend&&) noexcept = def
 // 3. 枚举物理设备并打分，选出满足 requiredFeatures 的 GPU；
 // 4. 创建 logical device，启用需要的 feature/extension，并取出各类队列；
 // 5. 创建 command pool、descriptor pool，并把设备限制整理成 RHICapabilities。
-bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string* errorMessage) {
+bool RHIVulkan::initialize(const RHIVulkanDesc& desc, std::string* errorMessage) {
     try {
         if (isInitialized()) {
             shutdown();
@@ -69,9 +77,9 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
         VkInstanceCreateInfo instanceInfo{};
         instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instanceInfo.pApplicationInfo = &appInfo;
-        instanceInfo.enabledLayerCount = static_cast<RHIUInt32>(layers.size());
+        instanceInfo.enabledLayerCount = static_cast<u32>(layers.size());
         instanceInfo.ppEnabledLayerNames = layers.data();
-        instanceInfo.enabledExtensionCount = static_cast<RHIUInt32>(instanceExtensions.size());
+        instanceInfo.enabledExtensionCount = static_cast<u32>(instanceExtensions.size());
         instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
         if (wantsValidation) {
             instanceInfo.pNext = &debugCreateInfo;
@@ -95,7 +103,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
             }
         }
 
-        RHIUInt32 physicalDeviceCount = 0;
+        u32 physicalDeviceCount = 0;
         vkEnumeratePhysicalDevices(impl_->native.instance, &physicalDeviceCount, nullptr);
         if (physicalDeviceCount == 0) {
             throw std::runtime_error("找不到 Vulkan physical device");
@@ -118,7 +126,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
 
         impl_->queueFamilies = findQueueFamilies(impl_->native.physicalDevice, impl_->native.surface);
 
-        std::set<RHIUInt32> uniqueFamilies = {
+        std::set<u32> uniqueFamilies = {
             impl_->queueFamilies.graphics,
             impl_->queueFamilies.compute,
             impl_->queueFamilies.transfer,
@@ -128,7 +136,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
 
         const float queuePriority = 1.0F;
         std::vector<VkDeviceQueueCreateInfo> queueInfos;
-        for (RHIUInt32 family : uniqueFamilies) {
+        for (u32 family : uniqueFamilies) {
             VkDeviceQueueCreateInfo queueInfo{};
             queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueInfo.queueFamilyIndex = family;
@@ -175,9 +183,9 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
         VkDeviceCreateInfo deviceInfo{};
         deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         deviceInfo.pNext = &enabled12;
-        deviceInfo.queueCreateInfoCount = static_cast<RHIUInt32>(queueInfos.size());
+        deviceInfo.queueCreateInfoCount = static_cast<u32>(queueInfos.size());
         deviceInfo.pQueueCreateInfos = queueInfos.data();
-        deviceInfo.enabledExtensionCount = static_cast<RHIUInt32>(deviceExtensions.size());
+        deviceInfo.enabledExtensionCount = static_cast<u32>(deviceExtensions.size());
         deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
         deviceInfo.pEnabledFeatures = &enabledFeatures;
 
@@ -229,7 +237,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         poolInfo.maxSets = 4096;
-        poolInfo.poolSizeCount = static_cast<RHIUInt32>(poolSizes.size());
+        poolInfo.poolSizeCount = static_cast<u32>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         if (vkCreateDescriptorPool(impl_->native.device, &poolInfo, nullptr, &impl_->descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("vkCreateDescriptorPool 失败");
@@ -284,7 +292,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
         if (impl_->caps.supportsTextureCompressionETC2)  impl_->caps.features |= RHIRenderFeature::TextureCompressionETC2;
         if (impl_->caps.supportsTextureCompressionASTC)  impl_->caps.features |= RHIRenderFeature::TextureCompressionASTC;
 
-        for (RHIUInt32 i = 0; i < memoryProperties.memoryHeapCount; ++i) {
+        for (u32 i = 0; i < memoryProperties.memoryHeapCount; ++i) {
             if ((memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
                 impl_->caps.dedicatedVideoMemory += memoryProperties.memoryHeaps[i].size;
             } else {
@@ -302,7 +310,7 @@ bool RHIVulkanBackend::initialize(const RHIVulkanBackendDesc& desc, std::string*
     }
 }
 
-void RHIVulkanBackend::shutdown() noexcept {
+void RHIVulkan::shutdown() noexcept {
     if (!impl_) {
         return;
     }
@@ -334,20 +342,20 @@ void RHIVulkanBackend::shutdown() noexcept {
     // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind group 依赖 layout，
     // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
     // 不会自动追踪这些关系，所以后端需要保持明确顺序。
-    for (RHIUInt64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
-    for (RHIUInt64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
-    for (RHIUInt64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
-    for (RHIUInt64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (RHIUInt64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
-    for (RHIUInt64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
-    for (RHIUInt64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (RHIUInt64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
-    for (RHIUInt64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
-    for (RHIUInt64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
-    for (RHIUInt64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
-    for (RHIUInt64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
-    for (RHIUInt64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
-    for (RHIUInt64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
+    for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
+    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
+    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
 
     if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);
@@ -382,18 +390,23 @@ void RHIVulkanBackend::shutdown() noexcept {
     }
 }
 
-bool RHIVulkanBackend::isInitialized() const noexcept {
+bool RHIVulkan::isInitialized() const noexcept {
     return impl_ != nullptr && impl_->native.device != VK_NULL_HANDLE;
 }
 
-const RHICapabilities& RHIVulkanBackend::capabilities() const noexcept {
+const RHICapabilities& RHIVulkan::capabilities() const noexcept {
     return impl_->caps;
 }
 
-const RHIVulkanNativeHandles& RHIVulkanBackend::nativeHandles() const noexcept {
+const RHIVulkanNativeHandles& RHIVulkan::nativeHandles() const noexcept {
     return impl_->native;
 }
 
 // Buffer 在 Vulkan 中分成两步：先创建 VkBuffer 得到资源形状和 usage，再查询 memory
 // requirements，分配合适 memory type，最后 vkBindBufferMemory 绑定。persistentlyMapped
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

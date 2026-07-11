@@ -55,7 +55,7 @@ public:
         RHISwapchain swapchain,
         RHISemaphore signalSemaphore,
         RHIFence signalFence,
-        RHIUInt32* imageIndex,
+        u32* imageIndex,
         std::string* errorMessage = nullptr);
 
     [[nodiscard]] bool submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr);

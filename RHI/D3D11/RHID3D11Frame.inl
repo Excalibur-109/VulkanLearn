@@ -1,4 +1,12 @@
-﻿static bool stageVisible(RHIShaderStage visibility, RHIShaderStage stage) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D11.cpp"
+
+namespace rhi {
+#endif
+
+static bool stageVisible(RHIShaderStage visibility, RHIShaderStage stage) {
     if (visibility == RHIShaderStage::All) {
         return true;
     }
@@ -105,11 +113,11 @@ static void applyPipeline(ID3D11DeviceContext* context, const PipelineResourceT&
     context->OMSetBlendState(pipeline.blendState.Get(), pipeline.blendConstants.data(), pipeline.sampleMask);
 }
 
-bool RHID3D11Backend::acquireNextImage(
+bool RHID3D11::acquireNextImage(
     RHISwapchain swapchain,
     RHISemaphore signalSemaphore,
     RHIFence signalFence,
-    RHIUInt32* imageIndex,
+    u32* imageIndex,
     std::string* errorMessage) {
     try {
         // D3D11 swapchain 后端当前只包装一个 back buffer，所以 imageIndex 固定为 0。
@@ -140,7 +148,7 @@ bool RHID3D11Backend::acquireNextImage(
 
 // D3D11 immediate context 没有 Vulkan 那样显式提交 command buffer。
 // Flush 会把当前累积的状态/命令推给驱动；semaphore/fence 在本实现中作为统一接口的轻量模拟。
-bool RHID3D11Backend::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+bool RHID3D11::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const RHIQueueWaitDesc& wait : desc.waits) {
             const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
@@ -181,7 +189,7 @@ bool RHID3D11Backend::submit(const RHIQueueSubmitDesc& desc, std::string* errorM
 
 // Present 把当前 back buffer 交给 DXGI。Immediate 模式/allowTearing 走 syncInterval=0，
 // 其它模式用 syncInterval=1 等待垂直同步。
-bool RHID3D11Backend::present(const RHIPresentDesc& desc, std::string* errorMessage) {
+bool RHID3D11::present(const RHIPresentDesc& desc, std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
         if (swapchain == nullptr || !swapchain->swapchain) {
@@ -202,7 +210,7 @@ bool RHID3D11Backend::present(const RHIPresentDesc& desc, std::string* errorMess
 // D3D11 的 recordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
 // 先上传 buffer/texture，再按 RenderGraph pass 绑定 RTV/DSV、viewport/scissor，最后执行
 // draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种 barrier。
-bool RHID3D11Backend::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D11::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     try {
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
             if (upload.data.empty()) {
@@ -264,7 +272,7 @@ bool RHID3D11Backend::recordAndSubmitFrame(const RHIFramePacket& packet, std::st
         };
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
-            for (RHIUInt64 index = 0; index < impl_->textureViews.size(); ++index) {
+            for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
                 const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
                 if (view.desc.texture == texture &&
                     (aspect == RHITextureAspect::All || view.desc.aspect == aspect || view.desc.aspect == RHITextureAspect::All)) {
@@ -452,7 +460,7 @@ bool RHID3D11Backend::recordAndSubmitFrame(const RHIFramePacket& packet, std::st
     }
 }
 
-bool RHID3D11Backend::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D11::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     // 和 Vulkan 后端保持同一入口：有 workload 就由 renderer 执行帧包；没有 workload 时只处理
     // 外部传入的 submit/present 描述。
     if (!packet.workloads.empty()) {
@@ -469,7 +477,7 @@ bool RHID3D11Backend::submitFrame(const RHIFramePacket& packet, std::string* err
     return true;
 }
 
-void RHID3D11Backend::waitIdle() const noexcept {
+void RHID3D11::waitIdle() const noexcept {
     if (!isInitialized()) {
         return;
     }
@@ -497,3 +505,8 @@ void RHID3D11Backend::waitIdle() const noexcept {
 // - BindGroup -> VS/PS/CS 等 stage 的 CBV/SRV/Sampler/UAV slot；
 // - Pipeline -> IA/InputLayout/Shader/Rasterizer/DepthStencil/Blend 状态；
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

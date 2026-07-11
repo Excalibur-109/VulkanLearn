@@ -19,7 +19,7 @@ struct RHID3D12SurfaceDesc {
     HWND hwnd = nullptr;
 };
 
-struct RHID3D12BackendDesc {
+struct RHID3D12Desc {
     RHIBackendDesc backend{};
     RHID3D12SurfaceDesc surface{};
     D3D_FEATURE_LEVEL minimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
@@ -39,17 +39,17 @@ struct RHID3D12NativeHandles {
     HWND hwnd = nullptr;
 };
 
-class RHID3D12Backend {
+class RHID3D12 {
 public:
-    RHID3D12Backend();
-    ~RHID3D12Backend();
+    RHID3D12();
+    ~RHID3D12();
 
-    RHID3D12Backend(const RHID3D12Backend&) = delete;
-    RHID3D12Backend& operator=(const RHID3D12Backend&) = delete;
-    RHID3D12Backend(RHID3D12Backend&&) noexcept;
-    RHID3D12Backend& operator=(RHID3D12Backend&&) noexcept;
+    RHID3D12(const RHID3D12&) = delete;
+    RHID3D12& operator=(const RHID3D12&) = delete;
+    RHID3D12(RHID3D12&&) noexcept;
+    RHID3D12& operator=(RHID3D12&&) noexcept;
 
-    [[nodiscard]] bool initialize(const RHID3D12BackendDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool initialize(const RHID3D12Desc& desc, std::string* errorMessage = nullptr);
     void shutdown() noexcept;
 
     [[nodiscard]] bool isInitialized() const noexcept;
@@ -81,7 +81,7 @@ public:
         RHISwapchain swapchain,
         RHISemaphore signalSemaphore,
         RHIFence signalFence,
-        RHIUInt32* imageIndex,
+        u32* imageIndex,
         std::string* errorMessage = nullptr);
 
     [[nodiscard]] bool submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr);
@@ -113,3 +113,5 @@ private:
 };
 
 } // namespace rhi
+
+

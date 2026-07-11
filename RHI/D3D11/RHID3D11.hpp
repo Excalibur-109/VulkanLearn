@@ -19,7 +19,7 @@ struct RHID3D11SurfaceDesc {
     HWND hwnd = nullptr;
 };
 
-struct RHID3D11BackendDesc {
+struct RHID3D11Desc {
     RHIBackendDesc backend{};
     RHID3D11SurfaceDesc surface{};
     D3D_DRIVER_TYPE driverType = D3D_DRIVER_TYPE_UNKNOWN;
@@ -36,17 +36,17 @@ struct RHID3D11NativeHandles {
     HWND hwnd = nullptr;
 };
 
-class RHID3D11Backend {
+class RHID3D11 {
 public:
-    RHID3D11Backend();
-    ~RHID3D11Backend();
+    RHID3D11();
+    ~RHID3D11();
 
-    RHID3D11Backend(const RHID3D11Backend&) = delete;
-    RHID3D11Backend& operator=(const RHID3D11Backend&) = delete;
-    RHID3D11Backend(RHID3D11Backend&&) noexcept;
-    RHID3D11Backend& operator=(RHID3D11Backend&&) noexcept;
+    RHID3D11(const RHID3D11&) = delete;
+    RHID3D11& operator=(const RHID3D11&) = delete;
+    RHID3D11(RHID3D11&&) noexcept;
+    RHID3D11& operator=(RHID3D11&&) noexcept;
 
-    [[nodiscard]] bool initialize(const RHID3D11BackendDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool initialize(const RHID3D11Desc& desc, std::string* errorMessage = nullptr);
     void shutdown() noexcept;
 
     [[nodiscard]] bool isInitialized() const noexcept;
@@ -78,7 +78,7 @@ public:
         RHISwapchain swapchain,
         RHISemaphore signalSemaphore,
         RHIFence signalFence,
-        RHIUInt32* imageIndex,
+        u32* imageIndex,
         std::string* errorMessage = nullptr);
 
     [[nodiscard]] bool submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr);
@@ -110,3 +110,5 @@ private:
 };
 
 } // namespace rhi
+
+

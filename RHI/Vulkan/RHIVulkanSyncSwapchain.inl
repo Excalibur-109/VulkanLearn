@@ -1,4 +1,12 @@
-﻿RHIQueryPool RHIVulkanBackend::createQueryPool(const RHIQueryPoolDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+RHIQueryPool RHIVulkan::createQueryPool(const RHIQueryPoolDesc& desc) {
     Impl::QueryPoolResource resource{};
     resource.desc = desc;
 
@@ -34,13 +42,13 @@
     }
 
     const RHIQueryPool handle = makeRenderHandle<RHIQueryPool>(impl_->queryPools, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_QUERY_POOL, reinterpret_cast<RHIUInt64>(impl_->queryPools.back().pool), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_QUERY_POOL, reinterpret_cast<u64>(impl_->queryPools.back().pool), desc.debugName);
     return handle;
 }
 
 // Semaphore/Fence 都是同步对象：semaphore 主要在 queue 之间或 acquire/present 之间传递依赖，
 // fence 用于 CPU 等 GPU 完成。timeline semaphore 需要 Vulkan 1.2 feature 支持。
-RHISemaphore RHIVulkanBackend::createSemaphore(const RHISemaphoreDesc& desc) {
+RHISemaphore RHIVulkan::createSemaphore(const RHISemaphoreDesc& desc) {
     if (desc.type == RHISemaphoreType::Timeline && !impl_->supportsTimelineSemaphore) {
         throw std::runtime_error("当前 Vulkan 设备不支持 timeline semaphore");
     }
@@ -62,11 +70,11 @@ RHISemaphore RHIVulkanBackend::createSemaphore(const RHISemaphoreDesc& desc) {
     }
 
     const RHISemaphore handle = makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<RHIUInt64>(impl_->semaphores.back().semaphore), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<u64>(impl_->semaphores.back().semaphore), desc.debugName);
     return handle;
 }
 
-RHIFence RHIVulkanBackend::createFence(const RHIFenceDesc& desc) {
+RHIFence RHIVulkan::createFence(const RHIFenceDesc& desc) {
     Impl::FenceResource resource{};
     resource.desc = desc;
 
@@ -79,14 +87,14 @@ RHIFence RHIVulkanBackend::createFence(const RHIFenceDesc& desc) {
     }
 
     const RHIFence handle = makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_FENCE, reinterpret_cast<RHIUInt64>(impl_->fences.back().fence), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_FENCE, reinterpret_cast<u64>(impl_->fences.back().fence), desc.debugName);
     return handle;
 }
 
 // Swapchain 是窗口系统提供的可呈现图像队列。Vulkan swapchain image 由 VkSwapchainKHR 拥有，
 // 不能像普通 texture 那样释放内存，所以这里把它们包装成 TextureResource，并把 ownsImage
 // 设为 false；这样上层仍然能用 RHITexture/RHITextureView 统一描述后备缓冲。
-RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
+RHISwapchain RHIVulkan::createSwapchain(const RHISwapchainDesc& desc) {
     if (impl_->native.surface == VK_NULL_HANDLE) {
         throw std::runtime_error("createSwapchain 需要 initialize 时传入有效 VkSurfaceKHR");
     }
@@ -111,11 +119,11 @@ RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
     const RHIFormat                        swapchainFormat      = selectedEngineFormat == RHIFormat::Undefined ? desc.preferredFormat : selectedEngineFormat;
     const VkPresentModeKHR              selectedPresentMode  = chooseSwapchainPresentMode(support, desc.presentMode);
     const VkExtent2D                    extent               = chooseSwapchainExtent(support, desc.extent);
-    const RHIUInt32                           imageCount           = chooseSwapchainImageCount(support, desc.imageCount);
+    const u32                           imageCount           = chooseSwapchainImageCount(support, desc.imageCount);
     const VkSurfaceTransformFlagBitsKHR selectedTransform    = chooseSwapchainTransform(support, desc.preTransform);
     const VkCompositeAlphaFlagBitsKHR   selectedAlpha        = chooseSwapchainCompositeAlpha(support, desc.compositeAlpha);
 
-    std::array<RHIUInt32, 2> queueFamilies = {impl_->queueFamilies.graphics, impl_->queueFamilies.present};
+    std::array<u32, 2> queueFamilies = {impl_->queueFamilies.graphics, impl_->queueFamilies.present};
 
     VkSwapchainCreateInfoKHR swapchainInfo{};
     swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -128,7 +136,7 @@ RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
     swapchainInfo.imageUsage = swapchainImageUsage;
     if (impl_->queueFamilies.graphics != impl_->queueFamilies.present) {
         swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        swapchainInfo.queueFamilyIndexCount = static_cast<RHIUInt32>(queueFamilies.size());
+        swapchainInfo.queueFamilyIndexCount = static_cast<u32>(queueFamilies.size());
         swapchainInfo.pQueueFamilyIndices = queueFamilies.data();
     } else {
         swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -146,7 +154,7 @@ RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
         throw std::runtime_error("vkCreateSwapchainKHR 失败");
     }
 
-    RHIUInt32 swapchainImageCount = 0;
+    u32 swapchainImageCount = 0;
     if (vkGetSwapchainImagesKHR(impl_->native.device, resource.swapchain, &swapchainImageCount, nullptr) != VK_SUCCESS ||
         swapchainImageCount == 0) {
         vkDestroySwapchainKHR(impl_->native.device, resource.swapchain, nullptr);
@@ -158,7 +166,7 @@ RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
         throw std::runtime_error("vkGetSwapchainImagesKHR(images) 失败");
     }
 
-    for (RHIUInt32 index = 0; index < swapchainImageCount; ++index) {
+    for (u32 index = 0; index < swapchainImageCount; ++index) {
         Impl::TextureResource texture{};
         texture.ownsImage = false;
         texture.image = images[index];
@@ -186,43 +194,43 @@ RHISwapchain RHIVulkanBackend::createSwapchain(const RHISwapchainDesc& desc) {
     }
 
     const RHISwapchain handle = makeRenderHandle<RHISwapchain>(impl_->swapchains, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_SWAPCHAIN_KHR, reinterpret_cast<RHIUInt64>(impl_->swapchains.back().swapchain), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_SWAPCHAIN_KHR, reinterpret_cast<u64>(impl_->swapchains.back().swapchain), desc.debugName);
     return handle;
 }
 
-std::vector<RHITexture> RHIVulkanBackend::getSwapchainImages(RHISwapchain handle) const {
+std::vector<RHITexture> RHIVulkan::getSwapchainImages(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->images;
     }
     return {};
 }
 
-std::vector<RHITextureView> RHIVulkanBackend::getSwapchainImageViews(RHISwapchain handle) const {
+std::vector<RHITextureView> RHIVulkan::getSwapchainImageViews(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
     }
     return {};
 }
 
-RHIFormat RHIVulkanBackend::getSwapchainFormat(RHISwapchain handle) const {
+RHIFormat RHIVulkan::getSwapchainFormat(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return fromVkFormat(swapchain->format);
     }
     return RHIFormat::Undefined;
 }
 
-RHIExtent2D RHIVulkanBackend::getSwapchainExtent(RHISwapchain handle) const {
+RHIExtent2D RHIVulkan::getSwapchainExtent(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return {swapchain->extent.width, swapchain->extent.height};
     }
     return {};
 }
 
-bool RHIVulkanBackend::acquireNextImage(
+bool RHIVulkan::acquireNextImage(
     RHISwapchain swapchainHandle,
     RHISemaphore signalSemaphore,
     RHIFence signalFence,
-    RHIUInt32* imageIndex,
+    u32* imageIndex,
     std::string* errorMessage) {
     // acquire 只是向 swapchain 取下一张可写图像的索引，并可选 signal semaphore/fence。
     // 真正把图像从 Present 转到 ColorAttachment 的 layout transition 在 frame 录制阶段完成。
@@ -237,7 +245,7 @@ bool RHIVulkanBackend::acquireNextImage(
     const VkResult result = vkAcquireNextImageKHR(
         impl_->native.device,
         swapchain->swapchain,
-        std::numeric_limits<RHIUInt64>::max(),
+        std::numeric_limits<u64>::max(),
         semaphore != nullptr ? semaphore->semaphore : VK_NULL_HANDLE,
         fence != nullptr ? fence->fence : VK_NULL_HANDLE,
         imageIndex);
@@ -251,12 +259,12 @@ bool RHIVulkanBackend::acquireNextImage(
 
 // 低层 submit：把外部已经准备好的同步关系提交到指定 queue。
 // 这个函数不录制命令，只把 wait/signal semaphore、timeline value 和 fence 翻译成 VkSubmitInfo。
-bool RHIVulkanBackend::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+bool RHIVulkan::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     std::vector<VkSemaphore> waitSemaphores;
     std::vector<VkPipelineStageFlags> waitStages;
     std::vector<VkSemaphore> signalSemaphores;
-    std::vector<RHIUInt64> waitValues;
-    std::vector<RHIUInt64> signalValues;
+    std::vector<u64> waitValues;
+    std::vector<u64> signalValues;
     bool usesTimelineSemaphore = false;
 
     for (const RHIQueueWaitDesc& wait : desc.waits) {
@@ -284,18 +292,18 @@ bool RHIVulkanBackend::submit(const RHIQueueSubmitDesc& desc, std::string* error
 
     VkTimelineSemaphoreSubmitInfo timelineInfo{};
     timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-    timelineInfo.waitSemaphoreValueCount = static_cast<RHIUInt32>(waitValues.size());
+    timelineInfo.waitSemaphoreValueCount = static_cast<u32>(waitValues.size());
     timelineInfo.pWaitSemaphoreValues = waitValues.data();
-    timelineInfo.signalSemaphoreValueCount = static_cast<RHIUInt32>(signalValues.size());
+    timelineInfo.signalSemaphoreValueCount = static_cast<u32>(signalValues.size());
     timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
-    submitInfo.waitSemaphoreCount = static_cast<RHIUInt32>(waitSemaphores.size());
+    submitInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
     submitInfo.pWaitSemaphores = waitSemaphores.data();
     submitInfo.pWaitDstStageMask = waitStages.data();
-    submitInfo.signalSemaphoreCount = static_cast<RHIUInt32>(signalSemaphores.size());
+    submitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
     submitInfo.pSignalSemaphores = signalSemaphores.data();
 
     const Impl::FenceResource* fence = getRenderResource(impl_->fences, desc.fence);
@@ -320,7 +328,7 @@ bool RHIVulkanBackend::submit(const RHIQueueSubmitDesc& desc, std::string* error
 
 // present 把 acquire 得到并渲染完成的 swapchain image 交还给窗口系统。
 // Vulkan 要求 present 等待 render-finished semaphore，确保图像写入完成后才显示。
-bool RHIVulkanBackend::present(const RHIPresentDesc& desc, std::string* errorMessage) {
+bool RHIVulkan::present(const RHIPresentDesc& desc, std::string* errorMessage) {
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
     if (swapchain == nullptr || swapchain->swapchain == VK_NULL_HANDLE) {
         if (errorMessage != nullptr) *errorMessage = "RHIPresentDesc::swapchain 无效";
@@ -341,7 +349,7 @@ bool RHIVulkanBackend::present(const RHIPresentDesc& desc, std::string* errorMes
     VkSwapchainKHR vkSwapchain = swapchain->swapchain;
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = static_cast<RHIUInt32>(waitSemaphores.size());
+    presentInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
     presentInfo.pWaitSemaphores = waitSemaphores.data();
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &vkSwapchain;
@@ -358,3 +366,8 @@ bool RHIVulkanBackend::present(const RHIPresentDesc& desc, std::string* errorMes
 // recordAndSubmitFrame 是把 RHIFramePacket 真正落成 Vulkan 命令的地方。
 // 当前实现为学习和示例优先：每帧分配一个一次性 command buffer，处理上传、资源状态转换、
 // dynamic rendering begin/end、pipeline/descriptor/buffer 绑定和 draw，然后提交并等待 fence。
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

@@ -1,4 +1,12 @@
-﻿bool RHIVulkanBackend::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+bool RHIVulkan::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     struct StagingResource {
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -27,7 +35,7 @@
 
     try {
         if (!isInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
-            throw std::runtime_error("RHIVulkanBackend 尚未初始化或缺少 graphics command pool");
+            throw std::runtime_error("RHIVulkan 尚未初始化或缺少 graphics command pool");
         }
 
         VkCommandBufferAllocateInfo allocateInfo{};
@@ -130,7 +138,7 @@
                 0,
                 0,
                 nullptr,
-                static_cast<RHIUInt32>(uploadBarriers.size()),
+                static_cast<u32>(uploadBarriers.size()),
                 uploadBarriers.data(),
                 0,
                 nullptr);
@@ -150,7 +158,7 @@
         };
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
-            for (RHIUInt64 index = 0; index < impl_->textureViews.size(); ++index) {
+            for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
                 const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
                 if (view.view != VK_NULL_HANDLE && view.desc.texture == texture &&
                     (aspect == RHITextureAspect::All || view.desc.aspect == aspect || view.desc.aspect == RHITextureAspect::All)) {
@@ -292,7 +300,7 @@
             renderingInfo.renderArea.offset = {renderArea.offset.x, renderArea.offset.y};
             renderingInfo.renderArea.extent = {renderArea.extent.width, renderArea.extent.height};
             renderingInfo.layerCount = 1;
-            renderingInfo.colorAttachmentCount = static_cast<RHIUInt32>(colorAttachments.size());
+            renderingInfo.colorAttachmentCount = static_cast<u32>(colorAttachments.size());
             renderingInfo.pColorAttachments = colorAttachments.data();
             renderingInfo.pDepthAttachment = pass.depthStencilAttachment.has_value() ? &depthAttachment : nullptr;
 
@@ -339,7 +347,7 @@
                         pipeline->bindPoint,
                         pipeline->layout,
                         0,
-                        static_cast<RHIUInt32>(descriptorSets.size()),
+                        static_cast<u32>(descriptorSets.size()),
                         descriptorSets.data(),
                         0,
                         nullptr);
@@ -391,8 +399,8 @@
         std::vector<VkSemaphore> waitSemaphores;
         std::vector<VkPipelineStageFlags> waitStages;
         std::vector<VkSemaphore> signalSemaphores;
-        std::vector<RHIUInt64> waitValues;
-        std::vector<RHIUInt64> signalValues;
+        std::vector<u64> waitValues;
+        std::vector<u64> signalValues;
         bool usesTimelineSemaphore = false;
 
         for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
@@ -419,20 +427,20 @@
 
         VkTimelineSemaphoreSubmitInfo timelineInfo{};
         timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        timelineInfo.waitSemaphoreValueCount = static_cast<RHIUInt32>(waitValues.size());
+        timelineInfo.waitSemaphoreValueCount = static_cast<u32>(waitValues.size());
         timelineInfo.pWaitSemaphoreValues = waitValues.data();
-        timelineInfo.signalSemaphoreValueCount = static_cast<RHIUInt32>(signalValues.size());
+        timelineInfo.signalSemaphoreValueCount = static_cast<u32>(signalValues.size());
         timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
-        submitInfo.waitSemaphoreCount = static_cast<RHIUInt32>(waitSemaphores.size());
+        submitInfo.waitSemaphoreCount = static_cast<u32>(waitSemaphores.size());
         submitInfo.pWaitSemaphores = waitSemaphores.data();
         submitInfo.pWaitDstStageMask = waitStages.data();
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
-        submitInfo.signalSemaphoreCount = static_cast<RHIUInt32>(signalSemaphores.size());
+        submitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
         submitInfo.pSignalSemaphores = signalSemaphores.data();
 
         VkFenceCreateInfo fenceInfo{};
@@ -445,7 +453,7 @@
             throw std::runtime_error("vkQueueSubmit(recorded frame) 失败");
         }
         const VkResult waitResult = vkWaitForFences(
-            impl_->native.device, 1, &submitFence, VK_TRUE, std::numeric_limits<RHIUInt64>::max());
+            impl_->native.device, 1, &submitFence, VK_TRUE, std::numeric_limits<u64>::max());
         if (waitResult != VK_SUCCESS) {
             throw std::runtime_error("vkWaitForFences(recorded frame) 失败");
         }
@@ -467,7 +475,7 @@
     }
 }
 
-bool RHIVulkanBackend::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHIVulkan::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     // RHIFramePacket 有 workload 时走“录制并提交”的路径；没有 workload 时只执行用户提供的
     // RHIQueueSubmitDesc/RHIPresentDesc，方便外部系统自己管理 command buffer。
     if (!packet.workloads.empty()) {
@@ -485,10 +493,15 @@ bool RHIVulkanBackend::submitFrame(const RHIFramePacket& packet, std::string* er
     return true;
 }
 
-void RHIVulkanBackend::waitIdle() const noexcept {
+void RHIVulkan::waitIdle() const noexcept {
     if (isInitialized()) {
         vkDeviceWaitIdle(impl_->native.device);
     }
 }
 
 // destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

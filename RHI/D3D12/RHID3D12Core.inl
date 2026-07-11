@@ -1,14 +1,22 @@
-﻿RHID3D12Backend::RHID3D12Backend()
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.cpp"
+
+namespace rhi {
+#endif
+
+RHID3D12::RHID3D12()
     : impl_(std::make_unique<Impl>()) {
 }
 
-RHID3D12Backend::~RHID3D12Backend() {
+RHID3D12::~RHID3D12() {
     shutdown();
 }
 
-RHID3D12Backend::RHID3D12Backend(RHID3D12Backend&&) noexcept = default;
+RHID3D12::RHID3D12(RHID3D12&&) noexcept = default;
 
-RHID3D12Backend& RHID3D12Backend::operator=(RHID3D12Backend&&) noexcept = default;
+RHID3D12& RHID3D12::operator=(RHID3D12&&) noexcept = default;
 
 // 初始化 D3D12 后端的主流程：
 // 1. 可选启用 debug layer，让 D3D12 在资源状态、descriptor、PSO 等错误上给出详细消息；
@@ -16,7 +24,7 @@ RHID3D12Backend& RHID3D12Backend::operator=(RHID3D12Backend&&) noexcept = defaul
 // 3. 创建 ID3D12Device、graphics queue、command allocator/list 和内部 fence；
 // 4. 创建 CPU descriptor heaps。当前后端先保存 CPU descriptor，后续完整 RHIFramePacket 录制时再拷贝到 shader-visible heap；
 // 5. 生成 RHICapabilities，并校验 requiredFeatures。
-bool RHID3D12Backend::initialize(const RHID3D12BackendDesc& desc, std::string* errorMessage) {
+bool RHID3D12::initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
     try {
         if (isInitialized()) {
             shutdown();
@@ -107,27 +115,27 @@ bool RHID3D12Backend::initialize(const RHID3D12BackendDesc& desc, std::string* e
     }
 }
 
-void RHID3D12Backend::shutdown() noexcept {
+void RHID3D12::shutdown() noexcept {
     if (!impl_) {
         return;
     }
 
     waitIdle();
 
-    for (RHIUInt64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
-    for (RHIUInt64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
-    for (RHIUInt64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
-    for (RHIUInt64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
-    for (RHIUInt64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
-    for (RHIUInt64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
-    for (RHIUInt64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
-    for (RHIUInt64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
-    for (RHIUInt64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
-    for (RHIUInt64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
-    for (RHIUInt64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
-    for (RHIUInt64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
-    for (RHIUInt64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
-    for (RHIUInt64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)       destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)        destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindGroups.size(); i > 0; --i)       destroy(RHIBindGroup(i));
+    for (u64 i = impl_->bindGroupLayouts.size(); i > 0; --i) destroy(RHIBindGroupLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)       destroy(RHIQueryPool(i));
+    for (u64 i = impl_->semaphores.size(); i > 0; --i)       destroy(RHISemaphore(i));
+    for (u64 i = impl_->fences.size(); i > 0; --i)           destroy(RHIFence(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)          destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)         destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)     destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)         destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)          destroy(RHIBuffer(i));
 
     impl_->native = {};
     impl_->cbvSrvUavHeap = {};
@@ -149,18 +157,23 @@ void RHID3D12Backend::shutdown() noexcept {
     impl_->commandListOpen = false;
 }
 
-bool RHID3D12Backend::isInitialized() const noexcept {
+bool RHID3D12::isInitialized() const noexcept {
     return impl_ != nullptr && impl_->device != nullptr && impl_->graphicsQueue != nullptr;
 }
 
-const RHICapabilities& RHID3D12Backend::capabilities() const noexcept {
+const RHICapabilities& RHID3D12::capabilities() const noexcept {
     return impl_->caps;
 }
 
-const RHID3D12NativeHandles& RHID3D12Backend::nativeHandles() const noexcept {
+const RHID3D12NativeHandles& RHID3D12::nativeHandles() const noexcept {
     return impl_->native;
 }
 
 // D3D12 core 片段只负责“从无到可用”的后端生命周期。
 // 注意这里已经创建了 command list，但它只是基础命令录制容器；真正把 RenderGraph 变成 draw/dispatch，
 // 需要在 Frame 片段中补 command allocator reset、barrier、root signature/descriptor heap 绑定等步骤。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

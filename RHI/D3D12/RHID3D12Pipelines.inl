@@ -1,4 +1,12 @@
-﻿static D3D12_DEPTH_STENCILOP_DESC toD3D12StencilFace(const RHIStencilFaceState& state) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.cpp"
+
+namespace rhi {
+#endif
+
+static D3D12_DEPTH_STENCILOP_DESC toD3D12StencilFace(const RHIStencilFaceState& state) {
     D3D12_DEPTH_STENCILOP_DESC desc{};
     desc.StencilFailOp = toD3D12StencilOp(state.failOp);
     desc.StencilDepthFailOp = toD3D12StencilOp(state.depthFailOp);
@@ -31,9 +39,9 @@ static D3D12_LOGIC_OP toD3D12LogicOp(RHILogicOp op) {
 
 // D3D12 graphics pipeline 是一个真正的 PSO。它会固定 shader bytecode、input layout、
 // rasterizer/depth/blend、RTV/DSV 格式、MSAA 等状态。后续 command list 只需要 SetPipelineState。
-RHIPipeline RHID3D12Backend::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+RHIPipeline RHID3D12::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
@@ -207,9 +215,9 @@ RHIPipeline RHID3D12Backend::createGraphicsPipeline(const RHIGraphicsPipelineDes
     return makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
 }
 
-RHIPipeline RHID3D12Backend::createComputePipeline(const RHIComputePipelineDesc& desc) {
+RHIPipeline RHID3D12::createComputePipeline(const RHIComputePipelineDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
@@ -247,3 +255,8 @@ RHIPipeline RHID3D12Backend::createComputePipeline(const RHIComputePipelineDesc&
 // D3D12 pipelines 片段负责把 RHIGraphicsPipelineDesc/RHIComputePipelineDesc 翻译成 RootSignature + PSO。
 // 和 D3D11 的“多个状态对象逐项绑定”不同，D3D12 创建 PSO 后，绘制时只需要 SetPipelineState，
 // 但前提是 command list 还要正确绑定 root signature、descriptor heap 和具体 descriptor table。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

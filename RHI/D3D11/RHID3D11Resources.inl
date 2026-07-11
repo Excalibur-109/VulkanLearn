@@ -1,6 +1,14 @@
-﻿RHIBuffer RHID3D11Backend::createBuffer(const RHIBufferDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D11.cpp"
+
+namespace rhi {
+#endif
+
+RHIBuffer RHID3D11::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (desc.size == 0) {
         throw std::runtime_error("RHIBufferDesc::size must be greater than zero");
@@ -28,9 +36,9 @@
 
 // D3D11 texture 分成 Texture1D/2D/3D 三套接口；这里用 RHITextureDesc::dimension 选择创建函数。
 // 深度格式会先创建成 typeless，之后再由 SRV/DSV 决定“采样视图”还是“深度视图”。
-RHITexture RHID3D11Backend::createTexture(const RHITextureDesc& desc) {
+RHITexture RHID3D11::createTexture(const RHITextureDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     const DXGI_FORMAT format = isDepthFormat(desc.format) || hasStencilFormat(desc.format)
@@ -95,9 +103,9 @@ RHITexture RHID3D11Backend::createTexture(const RHITextureDesc& desc) {
 
 // D3D11 的 view 是资源用途的入口：SRV 给 shader 读，RTV 给 color attachment 写，DSV 给深度
 // 测试，UAV 给 compute/像素 shader 随机读写。一个 RHITextureViewDesc 可能按 usage 创建多个 view。
-RHITextureView RHID3D11Backend::createTextureView(const RHITextureViewDesc& desc) {
+RHITextureView RHID3D11::createTextureView(const RHITextureViewDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     const Impl::TextureResource* texture = getRenderResource(impl_->textures, desc.texture);
@@ -160,9 +168,9 @@ RHITextureView RHID3D11Backend::createTextureView(const RHITextureViewDesc& desc
 
 // SamplerState 描述采样过滤、寻址、比较采样等规则。和 Vulkan 一样，sampler 不拥有纹理；
 // 具体纹理通过 SRV 绑定，采样规则通过 sampler slot 绑定。
-RHISampler RHID3D11Backend::createSampler(const RHISamplerDesc& desc) {
+RHISampler RHID3D11::createSampler(const RHISamplerDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     D3D11_SAMPLER_DESC samplerDesc{};
@@ -279,9 +287,9 @@ static std::vector<std::byte> compileHlsl(const RHIShaderDesc& desc) {
 
 // ShaderResource 保存具体 stage 的 D3D11 shader 对象，同时保留 bytecode。
 // 顶点 shader 的 bytecode 后续还要用于 CreateInputLayout，因为 D3D11 需要用它校验顶点输入签名。
-RHIShader RHID3D11Backend::createShaderModule(const RHIShaderDesc& desc) {
+RHIShader RHID3D11::createShaderModule(const RHIShaderDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     Impl::ShaderResource resource{};
@@ -327,7 +335,7 @@ RHIShader RHID3D11Backend::createShaderModule(const RHIShaderDesc& desc) {
 
 // D3D11 没有原生 DescriptorSetLayout；这里保存 layout 描述，用来在 createBindGroup 时校验
 // binding 是否存在、可见 shader stage 是哪些、storage 是否可写。
-RHIBindGroupLayout RHID3D11Backend::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
+RHIBindGroupLayout RHID3D11::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
     Impl::BindGroupLayoutResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
@@ -335,9 +343,9 @@ RHIBindGroupLayout RHID3D11Backend::createBindGroupLayout(const RHIBindGroupLayo
 
 // D3D11 的 BindGroup 是“延迟绑定记录”：创建时把统一 RHIResourceBinding 解析成 COM view/state，
 // 绘制/dispatch 时 applyBindGroup 再把这些对象设置到 VS/PS/CS 等具体 shader stage。
-RHIBindGroup RHID3D11Backend::createBindGroup(const RHIBindGroupDesc& desc) {
+RHIBindGroup RHID3D11::createBindGroup(const RHIBindGroupDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
@@ -374,7 +382,7 @@ RHIBindGroup RHID3D11Backend::createBindGroup(const RHIBindGroupDesc& desc) {
             if (buffer == nullptr || !buffer->buffer) {
                 throw std::runtime_error("RHIResourceBinding storage buffer is invalid");
             }
-            const RHIUInt64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
+            const u64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
                 ? buffer->desc.size - binding.buffer.offset
                 : binding.buffer.size;
             if ((binding.buffer.offset % 4) != 0 || (rangeSize % 4) != 0) {
@@ -432,7 +440,7 @@ RHIBindGroup RHID3D11Backend::createBindGroup(const RHIBindGroupDesc& desc) {
 
 // PipelineLayout 在 D3D11 中主要用于统一抽象校验：确认它引用的 bind group layout 都存在。
 // 真正的资源槽位绑定在 applyBindGroup 时按每个 binding 的 slot 和 visibility 执行。
-RHIPipelineLayout RHID3D11Backend::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
+RHIPipelineLayout RHID3D11::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
     for (RHIBindGroupLayout handle : desc.bindGroupLayouts) {
         if (getRenderResource(impl_->bindGroupLayouts, handle) == nullptr) {
             throw std::runtime_error("RHIPipelineLayoutDesc contains an invalid bind group layout");
@@ -445,7 +453,7 @@ RHIPipelineLayout RHID3D11Backend::createPipelineLayout(const RHIPipelineLayoutD
 
 // D3D11 没有 Vulkan/D3D12 那种 pipeline cache；保留这个资源类型是为了让统一接口完整，
 // 以后接入 D3D12/Vulkan 离线缓存时，上层 API 不需要改变。
-RHIPipelineCache RHID3D11Backend::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHID3D11::createPipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
@@ -456,3 +464,8 @@ RHIPipelineCache RHID3D11Backend::createPipelineCache(const RHIPipelineCacheDesc
 // D3D11 没有 Vulkan 的 device memory 分配步骤，CreateBuffer/CreateTexture* 会同时创建资源和隐式分配内存；
 // 但 view 仍然很重要：同一 texture 可以通过 SRV/RTV/DSV/UAV 以不同用途暴露给 shader 或 render target。
 // 学习时可以按“resource 本体 -> view -> bind group 绑定表”的顺序看。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

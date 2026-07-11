@@ -1,6 +1,14 @@
-﻿RHIQueryPool RHID3D11Backend::createQueryPool(const RHIQueryPoolDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D11.cpp"
+
+namespace rhi {
+#endif
+
+RHIQueryPool RHID3D11::createQueryPool(const RHIQueryPoolDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
 
     Impl::QueryPoolResource resource{};
@@ -14,7 +22,7 @@
     case RHIQueryType::PipelineStatistics: queryDesc.Query = D3D11_QUERY_PIPELINE_STATISTICS; break;
     }
 
-    for (RHIUInt32 i = 0; i < desc.queryCount; ++i) {
+    for (u32 i = 0; i < desc.queryCount; ++i) {
         ComPtr<ID3D11Query> query;
         throwIfFailed(impl_->device->CreateQuery(&queryDesc, &query), "CreateQuery failed");
         resource.queries.push_back(query);
@@ -24,7 +32,7 @@
 
 // D3D11 没有 Vulkan timeline/binary semaphore 的原生等价物。本后端用轻量 CPU 状态模拟
 // 统一接口里的 semaphore，适合示例和跨后端流程对齐，不适合作为跨 queue 精细同步。
-RHISemaphore RHID3D11Backend::createSemaphore(const RHISemaphoreDesc& desc) {
+RHISemaphore RHID3D11::createSemaphore(const RHISemaphoreDesc& desc) {
     Impl::SemaphoreResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
@@ -34,7 +42,7 @@ RHISemaphore RHID3D11Backend::createSemaphore(const RHISemaphoreDesc& desc) {
 
 // Fence 用 D3D11_QUERY_EVENT 实现：submit 时 End 一个 event query，waitIdle/GetData 可检查
 // GPU 是否执行到该点。
-RHIFence RHID3D11Backend::createFence(const RHIFenceDesc& desc) {
+RHIFence RHID3D11::createFence(const RHIFenceDesc& desc) {
     Impl::FenceResource resource{};
     resource.desc = desc;
     resource.signaled = desc.signaled;
@@ -43,9 +51,9 @@ RHIFence RHID3D11Backend::createFence(const RHIFenceDesc& desc) {
 
 // D3D11 swapchain 通常只有一个当前 back buffer。为了和 Vulkan 多图像 swapchain 接口一致，
 // 这里也把 back buffer 包装成 RHITexture + RHITextureView，供 RenderGraph 统一引用。
-RHISwapchain RHID3D11Backend::createSwapchain(const RHISwapchainDesc& desc) {
+RHISwapchain RHID3D11::createSwapchain(const RHISwapchainDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (impl_->initDesc.surface.hwnd == nullptr) {
         throw std::runtime_error("D3D11 swapchain creation requires RHID3D11SurfaceDesc::hwnd");
@@ -112,28 +120,28 @@ RHISwapchain RHID3D11Backend::createSwapchain(const RHISwapchainDesc& desc) {
     return makeRenderHandle<RHISwapchain>(impl_->swapchains, std::move(resource));
 }
 
-std::vector<RHITexture> RHID3D11Backend::getSwapchainImages(RHISwapchain handle) const {
+std::vector<RHITexture> RHID3D11::getSwapchainImages(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->images;
     }
     return {};
 }
 
-std::vector<RHITextureView> RHID3D11Backend::getSwapchainImageViews(RHISwapchain handle) const {
+std::vector<RHITextureView> RHID3D11::getSwapchainImageViews(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
     }
     return {};
 }
 
-RHIFormat RHID3D11Backend::getSwapchainFormat(RHISwapchain handle) const {
+RHIFormat RHID3D11::getSwapchainFormat(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->format;
     }
     return RHIFormat::Undefined;
 }
 
-RHIExtent2D RHID3D11Backend::getSwapchainExtent(RHISwapchain handle) const {
+RHIExtent2D RHID3D11::getSwapchainExtent(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->extent;
     }
@@ -144,3 +152,8 @@ RHIExtent2D RHID3D11Backend::getSwapchainExtent(RHISwapchain handle) const {
 // query pool、模拟 semaphore/fence、DXGI swapchain、acquire/submit/present。
 // D3D11 immediate context 没有 Vulkan 那种显式 queue submit；submit 多数时候只是对模拟同步状态做标记，
 // 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，present 则通过 IDXGISwapChain::Present 完成。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

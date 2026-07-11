@@ -240,7 +240,7 @@ endif()
 if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     add_custom_command(TARGET RHIPbrShadowExample POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<CONFIG>/bin/glfw3.dll"
+            "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin/glfw3.dll>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/glfw3.dll>"
             $<TARGET_FILE_DIR:RHIPbrShadowExample>
     )
 
@@ -258,5 +258,6 @@ if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
         )
     endif()
 endif()
+
 
 

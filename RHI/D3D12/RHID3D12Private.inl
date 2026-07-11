@@ -1,23 +1,32 @@
-﻿using Microsoft::WRL::ComPtr;
+﻿#pragma once
 
-// 学习导读：
-// 这个文件是统一渲染抽象到 Direct3D 11 的落地层。和 Vulkan 不同，D3D11 是偏“状态机”的
-// immediate context API：创建资源和状态对象后，绘制时把 input layout、shader、RTV/DSV、
-// constant buffer、SRV、sampler 等绑定到 context，然后调用 Draw/Dispatch。
-//
-// 因为 D3D11 没有 Vulkan 那种 descriptor set、显式 image layout 和 queue submit 模型，
-// 本后端会把 RHIDefinitions.hpp 的 BindGroup/Pipeline/RHIFramePacket 翻译成 D3D11 的
-// COM 对象和 context 状态设置，尽量保持上层接口和 Vulkan 后端一致。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.hpp"
 
-// D3D11 资源句柄同样使用 1-based index；0 是无效句柄。真实 COM 对象保存在 Impl 的
-// vector 中，公共 API 只传递轻量 RHIHandle。
+#include <d3dcompiler.h>
+#include <wrl/client.h>
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
+#include <utility>
+
+namespace rhi {
+#endif
+
+using Microsoft::WRL::ComPtr;
+
+// D3D12 资源句柄沿用现有后端的 1-based index 规则：0 是无效句柄，真实资源从 1 开始。
+// 这样公共层 RHIHandle<T> 不需要知道 ID3D12Resource*，也不会把不同资源类型误传。
 template <typename HandleT, typename ResourceT>
 static HandleT makeRenderHandle(std::vector<ResourceT>& resources, ResourceT&& resource) {
     resources.push_back(std::move(resource));
-    return HandleT(static_cast<RHIUInt64>(resources.size()));
+    return HandleT(static_cast<u64>(resources.size()));
 }
 
-// 根据引擎句柄查找后端资源；越界或空句柄返回 nullptr，调用方再决定报错还是忽略。
 template <typename ResourceT, typename HandleT>
 static ResourceT* getRenderResource(std::vector<ResourceT>& resources, HandleT handle) {
     if (!handle || handle.value == 0 || handle.value > resources.size()) {
@@ -26,7 +35,6 @@ static ResourceT* getRenderResource(std::vector<ResourceT>& resources, HandleT h
     return &resources[static_cast<size_t>(handle.value - 1)];
 }
 
-// const 版本资源查找。
 template <typename ResourceT, typename HandleT>
 static const ResourceT* getRenderResource(const std::vector<ResourceT>& resources, HandleT handle) {
     if (!handle || handle.value == 0 || handle.value > resources.size()) {
@@ -35,15 +43,12 @@ static const ResourceT* getRenderResource(const std::vector<ResourceT>& resource
     return &resources[static_cast<size_t>(handle.value - 1)];
 }
 
-// DirectX API 通常用 HRESULT 表达错误；这里集中转换成异常，让 initialize/create* 函数
-// 可以统一用 try/catch 填 errorMessage。
 static void throwIfFailed(HRESULT hr, const char* message) {
     if (FAILED(hr)) {
         throw std::runtime_error(message);
     }
 }
 
-// Windows/D3D 文件 API 常用 UTF-16 路径；引擎层统一用 UTF-8 string，所以需要边界转换。
 static std::wstring toWideString(const std::string& text) {
     if (text.empty()) {
         return {};
@@ -57,7 +62,6 @@ static std::wstring toWideString(const std::string& text) {
     return result;
 }
 
-// DXGI adapter 名称是 wchar_t，这里转回 UTF-8 供 RHICapabilities 使用。
 static std::string toUtf8String(const wchar_t* text) {
     if (text == nullptr || text[0] == L'\0') {
         return {};
@@ -71,8 +75,13 @@ static std::string toUtf8String(const wchar_t* text) {
     return result;
 }
 
-// 统一 RHIFormat 到 DXGI_FORMAT 的映射层。上层资源描述不直接暴露 DXGI 枚举，便于同一份
-// RHIDefinitions.hpp 同时驱动 Vulkan 和 D3D11。
+template <typename T>
+static T alignUp(T value, T alignment) {
+    return alignment == 0 ? value : (value + alignment - 1) / alignment * alignment;
+}
+
+// 统一 RHIFormat 到 DXGI_FORMAT。D3D11/D3D12 同属 DXGI 格式体系，所以大部分映射一致。
+// 这里保留对齐后的 return，方便横向检查缺失格式。
 static DXGI_FORMAT toDxgiFormat(RHIFormat format) {
     switch (format) {
     case RHIFormat::Undefined:         return DXGI_FORMAT_UNKNOWN;
@@ -209,9 +218,6 @@ static RHIFormat fromDxgiFormat(DXGI_FORMAT format) {
     }
 }
 
-// D3D11 深度纹理常用 typeless 资源格式创建，再用 DSV/SRV 选择具体解释方式：
-// - DSV 解释成深度/模板格式用于深度测试；
-// - SRV 解释成 R 通道格式用于 shader 采样阴影图等数据。
 static DXGI_FORMAT toTypelessDepthFormat(RHIFormat format) {
     switch (format) {
     case RHIFormat::D16_UNorm:         return DXGI_FORMAT_R16_TYPELESS;
@@ -223,8 +229,6 @@ static DXGI_FORMAT toTypelessDepthFormat(RHIFormat format) {
     }
 }
 
-// 深度纹理作为 shader resource 读取时不能直接用 D24/D32 这类 DSV 格式，需要改成可采样的
-// color-like 格式；普通 color texture 则直接沿用 toDxgiFormat。
 static DXGI_FORMAT toSrvFormat(RHIFormat format) {
     switch (format) {
     case RHIFormat::D16_UNorm:         return DXGI_FORMAT_R16_UNORM;
@@ -236,7 +240,6 @@ static DXGI_FORMAT toSrvFormat(RHIFormat format) {
     }
 }
 
-// 深度模板视图需要 DSV 专用格式，和创建资源用的 typeless 格式不同。
 static DXGI_FORMAT toDsvFormat(RHIFormat format) {
     switch (format) {
     case RHIFormat::D16_UNorm:         return DXGI_FORMAT_D16_UNORM;
@@ -248,7 +251,6 @@ static DXGI_FORMAT toDsvFormat(RHIFormat format) {
     }
 }
 
-// Swapchain 只支持 DXGI 可呈现格式；这里把引擎偏好的格式收敛到 DXGI 能接受的后备缓冲格式。
 static DXGI_FORMAT toSwapchainFormat(RHIFormat format) {
     switch (format) {
     case RHIFormat::RGBA8_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -260,111 +262,132 @@ static DXGI_FORMAT toSwapchainFormat(RHIFormat format) {
     }
 }
 
-static UINT toSampleCount(RHISampleCount samples) {
-    return static_cast<UINT>(samples);
+// D3D12 的 resource state 是显式同步的核心。RHIDefinitions.hpp 的 RHIResourceState 是“意图”，
+// 后端在 barrier/创建资源时把它翻译成 D3D12_RESOURCE_STATES。
+static D3D12_RESOURCE_STATES toD3D12ResourceStates(RHIResourceState state) {
+    switch (state) {
+    case RHIResourceState::Undefined:                  return D3D12_RESOURCE_STATE_COMMON;
+    case RHIResourceState::Common:                     return D3D12_RESOURCE_STATE_COMMON;
+    case RHIResourceState::CopySource:                 return D3D12_RESOURCE_STATE_COPY_SOURCE;
+    case RHIResourceState::CopyDestination:            return D3D12_RESOURCE_STATE_COPY_DEST;
+    case RHIResourceState::VertexBuffer:               return D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    case RHIResourceState::IndexBuffer:                return D3D12_RESOURCE_STATE_INDEX_BUFFER;
+    case RHIResourceState::ConstantBuffer:             return D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    case RHIResourceState::ShaderRead:                 return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    case RHIResourceState::ShaderWrite:                return D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    case RHIResourceState::RenderTarget:               return D3D12_RESOURCE_STATE_RENDER_TARGET;
+    case RHIResourceState::DepthRead:                  return D3D12_RESOURCE_STATE_DEPTH_READ;
+    case RHIResourceState::DepthWrite:                 return D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    case RHIResourceState::ResolveSource:              return D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+    case RHIResourceState::ResolveDestination:         return D3D12_RESOURCE_STATE_RESOLVE_DEST;
+    case RHIResourceState::Present:                    return D3D12_RESOURCE_STATE_PRESENT;
+    case RHIResourceState::IndirectArgument:           return D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+    case RHIResourceState::AccelerationStructureRead:  return D3D12_RESOURCE_STATE_COMMON;
+    case RHIResourceState::AccelerationStructureWrite: return D3D12_RESOURCE_STATE_COMMON;
+    case RHIResourceState::ShadingRateTexture:         return D3D12_RESOURCE_STATE_COMMON;
+    }
+    return D3D12_RESOURCE_STATE_COMMON;
 }
 
-static D3D11_USAGE toD3DUsage(RHIMemoryUsage usage, bool persistentlyMapped) {
-    if (persistentlyMapped || usage == RHIMemoryUsage::CpuToGpu) {
-        return D3D11_USAGE_DYNAMIC;
+static D3D12_HEAP_TYPE toD3D12HeapType(RHIMemoryUsage usage) {
+    switch (usage) {
+    case RHIMemoryUsage::GpuOnly:  return D3D12_HEAP_TYPE_DEFAULT;
+    case RHIMemoryUsage::CpuToGpu: return D3D12_HEAP_TYPE_UPLOAD;
+    case RHIMemoryUsage::GpuToCpu: return D3D12_HEAP_TYPE_READBACK;
+    case RHIMemoryUsage::CpuOnly:  return D3D12_HEAP_TYPE_UPLOAD;
     }
-    if (usage == RHIMemoryUsage::GpuToCpu || usage == RHIMemoryUsage::CpuOnly) {
-        return D3D11_USAGE_STAGING;
-    }
-    return D3D11_USAGE_DEFAULT;
+    return D3D12_HEAP_TYPE_DEFAULT;
 }
 
-static UINT toCpuAccessFlags(RHIMemoryUsage usage, bool persistentlyMapped) {
-    UINT flags = 0;
-    if (persistentlyMapped || usage == RHIMemoryUsage::CpuToGpu || usage == RHIMemoryUsage::CpuOnly) {
-        flags |= D3D11_CPU_ACCESS_WRITE;
+static D3D12_RESOURCE_STATES initialBufferState(RHIMemoryUsage usage, RHIResourceState requested) {
+    switch (usage) {
+    case RHIMemoryUsage::CpuToGpu:
+    case RHIMemoryUsage::CpuOnly:
+        return D3D12_RESOURCE_STATE_GENERIC_READ;
+    case RHIMemoryUsage::GpuToCpu:
+        return D3D12_RESOURCE_STATE_COPY_DEST;
+    case RHIMemoryUsage::GpuOnly:
+        return requested == RHIResourceState::Undefined ? D3D12_RESOURCE_STATE_COMMON : toD3D12ResourceStates(requested);
     }
-    if (usage == RHIMemoryUsage::GpuToCpu || usage == RHIMemoryUsage::CpuOnly) {
-        flags |= D3D11_CPU_ACCESS_READ;
+    return D3D12_RESOURCE_STATE_COMMON;
+}
+
+static D3D12_RESOURCE_FLAGS toBufferResourceFlags(RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
+    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
+    if (memoryUsage == RHIMemoryUsage::GpuOnly && RHIHasAny(usage, RHIBufferUsage::Storage)) {
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     }
     return flags;
 }
 
-static UINT toBufferBindFlags(RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
-    if (memoryUsage == RHIMemoryUsage::GpuToCpu || memoryUsage == RHIMemoryUsage::CpuOnly) {
-        return 0;
+static D3D12_RESOURCE_FLAGS toTextureResourceFlags(RHITextureUsage usage) {
+    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
+    if (RHIHasAny(usage, RHITextureUsage::ColorAttachment) || RHIHasAny(usage, RHITextureUsage::Present)) {
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     }
-
-    UINT flags = 0;
-    if (RHIHasAny(usage, RHIBufferUsage::Vertex))  flags |= D3D11_BIND_VERTEX_BUFFER;
-    if (RHIHasAny(usage, RHIBufferUsage::Index))   flags |= D3D11_BIND_INDEX_BUFFER;
-    if (RHIHasAny(usage, RHIBufferUsage::Uniform)) flags |= D3D11_BIND_CONSTANT_BUFFER;
-    if (RHIHasAny(usage, RHIBufferUsage::Storage)) flags |= D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+    if (RHIHasAny(usage, RHITextureUsage::DepthStencilAttachment)) {
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    }
+    if (RHIHasAny(usage, RHITextureUsage::Storage)) {
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
     return flags;
 }
 
-static UINT toTextureBindFlags(RHITextureUsage usage, RHIMemoryUsage memoryUsage) {
-    if (memoryUsage == RHIMemoryUsage::GpuToCpu || memoryUsage == RHIMemoryUsage::CpuOnly) {
-        return 0;
-    }
-
-    UINT flags = 0;
-    if (RHIHasAny(usage, RHITextureUsage::Sampled))                                                  flags |= D3D11_BIND_SHADER_RESOURCE;
-    if (RHIHasAny(usage, RHITextureUsage::Storage))                                                  flags |= D3D11_BIND_UNORDERED_ACCESS;
-    if (RHIHasAny(usage, RHITextureUsage::ColorAttachment) || RHIHasAny(usage, RHITextureUsage::Present))  flags |= D3D11_BIND_RENDER_TARGET;
-    if (RHIHasAny(usage, RHITextureUsage::DepthStencilAttachment))                                   flags |= D3D11_BIND_DEPTH_STENCIL;
-    return flags == 0 ? D3D11_BIND_SHADER_RESOURCE : flags;
-}
-
-static D3D11_FILTER toD3DFilter(const RHISamplerDesc& desc) {
+static D3D12_FILTER toD3D12Filter(const RHISamplerDesc& desc) {
     if (desc.enableAnisotropy) {
-        return desc.enableCompare ? D3D11_FILTER_COMPARISON_ANISOTROPIC : D3D11_FILTER_ANISOTROPIC;
+        return desc.enableCompare ? D3D12_FILTER_COMPARISON_ANISOTROPIC : D3D12_FILTER_ANISOTROPIC;
     }
 
     const bool minLinear = desc.minFilter == RHIFilterMode::Linear;
     const bool magLinear = desc.magFilter == RHIFilterMode::Linear;
     const bool mipLinear = desc.mipmapMode == RHIMipmapMode::Linear;
     if (desc.enableCompare) {
-        if (minLinear && magLinear && mipLinear) return D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
-        if (minLinear && magLinear)              return D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-        if (minLinear && mipLinear)              return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
-        if (magLinear && mipLinear)              return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR;
-        if (minLinear)                           return D3D11_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT;
-        if (magLinear)                           return D3D11_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT;
-        if (mipLinear)                           return D3D11_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR;
-        return D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
+        if (minLinear && magLinear && mipLinear) return D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+        if (minLinear && magLinear)              return D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+        if (minLinear && mipLinear)              return D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+        if (magLinear && mipLinear)              return D3D12_FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR;
+        if (minLinear)                           return D3D12_FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT;
+        if (magLinear)                           return D3D12_FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT;
+        if (mipLinear)                           return D3D12_FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR;
+        return D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
     }
 
-    if (minLinear && magLinear && mipLinear) return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    if (minLinear && magLinear)              return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
-    if (minLinear && mipLinear)              return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
-    if (magLinear && mipLinear)              return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
-    if (minLinear)                           return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
-    if (magLinear)                           return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
-    if (mipLinear)                           return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
-    return D3D11_FILTER_MIN_MAG_MIP_POINT;
+    if (minLinear && magLinear && mipLinear) return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    if (minLinear && magLinear)              return D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+    if (minLinear && mipLinear)              return D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+    if (magLinear && mipLinear)              return D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR;
+    if (minLinear)                           return D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+    if (magLinear)                           return D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
+    if (mipLinear)                           return D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+    return D3D12_FILTER_MIN_MAG_MIP_POINT;
 }
 
-static D3D11_TEXTURE_ADDRESS_MODE toD3DAddressMode(RHIAddressMode mode) {
+static D3D12_TEXTURE_ADDRESS_MODE toD3D12AddressMode(RHIAddressMode mode) {
     switch (mode) {
-    case RHIAddressMode::Repeat:         return D3D11_TEXTURE_ADDRESS_WRAP;
-    case RHIAddressMode::MirroredRepeat: return D3D11_TEXTURE_ADDRESS_MIRROR;
-    case RHIAddressMode::ClampToEdge:    return D3D11_TEXTURE_ADDRESS_CLAMP;
-    case RHIAddressMode::ClampToBorder:  return D3D11_TEXTURE_ADDRESS_BORDER;
+    case RHIAddressMode::Repeat:         return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    case RHIAddressMode::MirroredRepeat: return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+    case RHIAddressMode::ClampToEdge:    return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    case RHIAddressMode::ClampToBorder:  return D3D12_TEXTURE_ADDRESS_MODE_BORDER;
     }
-    return D3D11_TEXTURE_ADDRESS_WRAP;
+    return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 }
 
-static D3D11_COMPARISON_FUNC toD3DCompare(RHICompareOp op) {
+static D3D12_COMPARISON_FUNC toD3D12Compare(RHICompareOp op) {
     switch (op) {
-    case RHICompareOp::Never:          return D3D11_COMPARISON_NEVER;
-    case RHICompareOp::Less:           return D3D11_COMPARISON_LESS;
-    case RHICompareOp::Equal:          return D3D11_COMPARISON_EQUAL;
-    case RHICompareOp::LessOrEqual:    return D3D11_COMPARISON_LESS_EQUAL;
-    case RHICompareOp::Greater:        return D3D11_COMPARISON_GREATER;
-    case RHICompareOp::NotEqual:       return D3D11_COMPARISON_NOT_EQUAL;
-    case RHICompareOp::GreaterOrEqual: return D3D11_COMPARISON_GREATER_EQUAL;
-    case RHICompareOp::Always:         return D3D11_COMPARISON_ALWAYS;
+    case RHICompareOp::Never:          return D3D12_COMPARISON_FUNC_NEVER;
+    case RHICompareOp::Less:           return D3D12_COMPARISON_FUNC_LESS;
+    case RHICompareOp::Equal:          return D3D12_COMPARISON_FUNC_EQUAL;
+    case RHICompareOp::LessOrEqual:    return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    case RHICompareOp::Greater:        return D3D12_COMPARISON_FUNC_GREATER;
+    case RHICompareOp::NotEqual:       return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+    case RHICompareOp::GreaterOrEqual: return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+    case RHICompareOp::Always:         return D3D12_COMPARISON_FUNC_ALWAYS;
     }
-    return D3D11_COMPARISON_ALWAYS;
+    return D3D12_COMPARISON_FUNC_ALWAYS;
 }
 
-static DXGI_FORMAT toD3DVertexFormat(RHIVertexFormat format) {
+static DXGI_FORMAT toD3D12VertexFormat(RHIVertexFormat format) {
     switch (format) {
     case RHIVertexFormat::Float32:   return DXGI_FORMAT_R32_FLOAT;
     case RHIVertexFormat::Float32x2: return DXGI_FORMAT_R32G32_FLOAT;
@@ -392,73 +415,94 @@ static DXGI_FORMAT toD3DVertexFormat(RHIVertexFormat format) {
     return DXGI_FORMAT_UNKNOWN;
 }
 
-static D3D11_PRIMITIVE_TOPOLOGY toD3DTopology(const RHIInputAssemblyState& state) {
+static D3D_PRIMITIVE_TOPOLOGY toD3D12Topology(const RHIInputAssemblyState& state) {
     switch (state.topology) {
-    case RHIPrimitiveTopology::PointList:     return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
-    case RHIPrimitiveTopology::LineList:      return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
-    case RHIPrimitiveTopology::LineStrip:     return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
-    case RHIPrimitiveTopology::TriangleList:  return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-    case RHIPrimitiveTopology::TriangleStrip: return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+    case RHIPrimitiveTopology::PointList:     return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+    case RHIPrimitiveTopology::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+    case RHIPrimitiveTopology::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+    case RHIPrimitiveTopology::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    case RHIPrimitiveTopology::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
     case RHIPrimitiveTopology::PatchList: {
-        const RHIUInt32 points = std::clamp(state.patchControlPoints == 0 ? 3u : state.patchControlPoints, 1u, 32u);
-        return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(D3D11_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST + points - 1);
+        const u32 points = std::clamp(state.patchControlPoints == 0 ? 3u : state.patchControlPoints, 1u, 32u);
+        return static_cast<D3D_PRIMITIVE_TOPOLOGY>(D3D_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST + points - 1);
     }
     }
-    return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 }
 
-static D3D11_STENCIL_OP toD3DStencilOp(RHIStencilOp op) {
+static D3D12_PRIMITIVE_TOPOLOGY_TYPE toD3D12TopologyType(const RHIInputAssemblyState& state) {
+    switch (state.topology) {
+    case RHIPrimitiveTopology::PointList:     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+    case RHIPrimitiveTopology::LineList:
+    case RHIPrimitiveTopology::LineStrip:     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+    case RHIPrimitiveTopology::TriangleList:
+    case RHIPrimitiveTopology::TriangleStrip: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    case RHIPrimitiveTopology::PatchList:     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+    }
+    return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+}
+
+static D3D12_STENCIL_OP toD3D12StencilOp(RHIStencilOp op) {
     switch (op) {
-    case RHIStencilOp::Keep:           return D3D11_STENCIL_OP_KEEP;
-    case RHIStencilOp::Zero:           return D3D11_STENCIL_OP_ZERO;
-    case RHIStencilOp::Replace:        return D3D11_STENCIL_OP_REPLACE;
-    case RHIStencilOp::IncrementClamp: return D3D11_STENCIL_OP_INCR_SAT;
-    case RHIStencilOp::DecrementClamp: return D3D11_STENCIL_OP_DECR_SAT;
-    case RHIStencilOp::Invert:         return D3D11_STENCIL_OP_INVERT;
-    case RHIStencilOp::IncrementWrap:  return D3D11_STENCIL_OP_INCR;
-    case RHIStencilOp::DecrementWrap:  return D3D11_STENCIL_OP_DECR;
+    case RHIStencilOp::Keep:           return D3D12_STENCIL_OP_KEEP;
+    case RHIStencilOp::Zero:           return D3D12_STENCIL_OP_ZERO;
+    case RHIStencilOp::Replace:        return D3D12_STENCIL_OP_REPLACE;
+    case RHIStencilOp::IncrementClamp: return D3D12_STENCIL_OP_INCR_SAT;
+    case RHIStencilOp::DecrementClamp: return D3D12_STENCIL_OP_DECR_SAT;
+    case RHIStencilOp::Invert:         return D3D12_STENCIL_OP_INVERT;
+    case RHIStencilOp::IncrementWrap:  return D3D12_STENCIL_OP_INCR;
+    case RHIStencilOp::DecrementWrap:  return D3D12_STENCIL_OP_DECR;
     }
-    return D3D11_STENCIL_OP_KEEP;
+    return D3D12_STENCIL_OP_KEEP;
 }
 
-static D3D11_BLEND toD3DBlend(RHIBlendFactor factor) {
+static D3D12_BLEND toD3D12Blend(RHIBlendFactor factor) {
     switch (factor) {
-    case RHIBlendFactor::Zero:                     return D3D11_BLEND_ZERO;
-    case RHIBlendFactor::One:                      return D3D11_BLEND_ONE;
-    case RHIBlendFactor::SourceColor:              return D3D11_BLEND_SRC_COLOR;
-    case RHIBlendFactor::OneMinusSourceColor:      return D3D11_BLEND_INV_SRC_COLOR;
-    case RHIBlendFactor::DestinationColor:         return D3D11_BLEND_DEST_COLOR;
-    case RHIBlendFactor::OneMinusDestinationColor: return D3D11_BLEND_INV_DEST_COLOR;
-    case RHIBlendFactor::SourceAlpha:              return D3D11_BLEND_SRC_ALPHA;
-    case RHIBlendFactor::OneMinusSourceAlpha:      return D3D11_BLEND_INV_SRC_ALPHA;
-    case RHIBlendFactor::DestinationAlpha:         return D3D11_BLEND_DEST_ALPHA;
-    case RHIBlendFactor::OneMinusDestinationAlpha: return D3D11_BLEND_INV_DEST_ALPHA;
+    case RHIBlendFactor::Zero:                     return D3D12_BLEND_ZERO;
+    case RHIBlendFactor::One:                      return D3D12_BLEND_ONE;
+    case RHIBlendFactor::SourceColor:              return D3D12_BLEND_SRC_COLOR;
+    case RHIBlendFactor::OneMinusSourceColor:      return D3D12_BLEND_INV_SRC_COLOR;
+    case RHIBlendFactor::DestinationColor:         return D3D12_BLEND_DEST_COLOR;
+    case RHIBlendFactor::OneMinusDestinationColor: return D3D12_BLEND_INV_DEST_COLOR;
+    case RHIBlendFactor::SourceAlpha:              return D3D12_BLEND_SRC_ALPHA;
+    case RHIBlendFactor::OneMinusSourceAlpha:      return D3D12_BLEND_INV_SRC_ALPHA;
+    case RHIBlendFactor::DestinationAlpha:         return D3D12_BLEND_DEST_ALPHA;
+    case RHIBlendFactor::OneMinusDestinationAlpha: return D3D12_BLEND_INV_DEST_ALPHA;
     case RHIBlendFactor::ConstantColor:
-    case RHIBlendFactor::ConstantAlpha:            return D3D11_BLEND_BLEND_FACTOR;
+    case RHIBlendFactor::ConstantAlpha:            return D3D12_BLEND_BLEND_FACTOR;
     case RHIBlendFactor::OneMinusConstantColor:
-    case RHIBlendFactor::OneMinusConstantAlpha:    return D3D11_BLEND_INV_BLEND_FACTOR;
+    case RHIBlendFactor::OneMinusConstantAlpha:    return D3D12_BLEND_INV_BLEND_FACTOR;
     }
-    return D3D11_BLEND_ONE;
+    return D3D12_BLEND_ONE;
 }
 
-static D3D11_BLEND_OP toD3DBlendOp(RHIBlendOp op) {
+static D3D12_BLEND_OP toD3D12BlendOp(RHIBlendOp op) {
     switch (op) {
-    case RHIBlendOp::Add:             return D3D11_BLEND_OP_ADD;
-    case RHIBlendOp::Subtract:        return D3D11_BLEND_OP_SUBTRACT;
-    case RHIBlendOp::ReverseSubtract: return D3D11_BLEND_OP_REV_SUBTRACT;
-    case RHIBlendOp::Min:             return D3D11_BLEND_OP_MIN;
-    case RHIBlendOp::Max:             return D3D11_BLEND_OP_MAX;
+    case RHIBlendOp::Add:             return D3D12_BLEND_OP_ADD;
+    case RHIBlendOp::Subtract:        return D3D12_BLEND_OP_SUBTRACT;
+    case RHIBlendOp::ReverseSubtract: return D3D12_BLEND_OP_REV_SUBTRACT;
+    case RHIBlendOp::Min:             return D3D12_BLEND_OP_MIN;
+    case RHIBlendOp::Max:             return D3D12_BLEND_OP_MAX;
     }
-    return D3D11_BLEND_OP_ADD;
+    return D3D12_BLEND_OP_ADD;
 }
 
-static UINT8 toD3DColorWriteMask(RHIColorWriteMask mask) {
+static UINT8 toD3D12ColorWriteMask(RHIColorWriteMask mask) {
     UINT8 flags = 0;
-    if (RHIHasAny(mask, RHIColorWriteMask::R)) flags |= D3D11_COLOR_WRITE_ENABLE_RED;
-    if (RHIHasAny(mask, RHIColorWriteMask::G)) flags |= D3D11_COLOR_WRITE_ENABLE_GREEN;
-    if (RHIHasAny(mask, RHIColorWriteMask::B)) flags |= D3D11_COLOR_WRITE_ENABLE_BLUE;
-    if (RHIHasAny(mask, RHIColorWriteMask::A)) flags |= D3D11_COLOR_WRITE_ENABLE_ALPHA;
+    if (RHIHasAny(mask, RHIColorWriteMask::R)) flags |= D3D12_COLOR_WRITE_ENABLE_RED;
+    if (RHIHasAny(mask, RHIColorWriteMask::G)) flags |= D3D12_COLOR_WRITE_ENABLE_GREEN;
+    if (RHIHasAny(mask, RHIColorWriteMask::B)) flags |= D3D12_COLOR_WRITE_ENABLE_BLUE;
+    if (RHIHasAny(mask, RHIColorWriteMask::A)) flags |= D3D12_COLOR_WRITE_ENABLE_ALPHA;
     return flags;
+}
+
+static D3D12_SHADER_VISIBILITY toD3D12ShaderVisibility(RHIShaderStage visibility) {
+    if (visibility == RHIShaderStage::Vertex)         return D3D12_SHADER_VISIBILITY_VERTEX;
+    if (visibility == RHIShaderStage::TessControl)    return D3D12_SHADER_VISIBILITY_HULL;
+    if (visibility == RHIShaderStage::TessEvaluation) return D3D12_SHADER_VISIBILITY_DOMAIN;
+    if (visibility == RHIShaderStage::Geometry)       return D3D12_SHADER_VISIBILITY_GEOMETRY;
+    if (visibility == RHIShaderStage::Fragment)       return D3D12_SHADER_VISIBILITY_PIXEL;
+    return D3D12_SHADER_VISIBILITY_ALL;
 }
 
 static UINT formatBytesPerBlock(RHIFormat format) {
@@ -531,8 +575,6 @@ static UINT formatBytesPerBlock(RHIFormat format) {
     }
 }
 
-// 压缩纹理按 4x4 block 存储，上传时 row pitch 不是 width * pixelBytes，而是 block 数乘
-// block 大小。这里封装 pitch 计算，避免调用 UpdateSubresource 时行跨度错误。
 static bool isBlockCompressed(RHIFormat format) {
     return format == RHIFormat::BC1RGBA_UNorm ||
            format == RHIFormat::BC1RGBA_SRGB ||
@@ -544,68 +586,81 @@ static bool isBlockCompressed(RHIFormat format) {
            format == RHIFormat::BC7RGBA_SRGB;
 }
 
-static UINT rowPitchForFormat(RHIFormat format, RHIUInt32 width) {
+static UINT rowPitchForFormat(RHIFormat format, u32 width) {
     if (isBlockCompressed(format)) {
         return std::max(1u, (width + 3u) / 4u) * formatBytesPerBlock(format);
     }
     return width * formatBytesPerBlock(format);
 }
 
-// RHIShaderDesc 可以不显式写 target profile；D3D11 需要按 stage 编译到 vs/ps/cs 等 profile。
 static std::string defaultProfileForStage(RHIShaderStage stage) {
     switch (stage) {
-    case RHIShaderStage::Vertex:         return "vs_5_0";
-    case RHIShaderStage::TessControl:    return "hs_5_0";
-    case RHIShaderStage::TessEvaluation: return "ds_5_0";
-    case RHIShaderStage::Geometry:       return "gs_5_0";
-    case RHIShaderStage::Fragment:       return "ps_5_0";
-    case RHIShaderStage::Compute:        return "cs_5_0";
+    case RHIShaderStage::Vertex:         return "vs_5_1";
+    case RHIShaderStage::TessControl:    return "hs_5_1";
+    case RHIShaderStage::TessEvaluation: return "ds_5_1";
+    case RHIShaderStage::Geometry:       return "gs_5_1";
+    case RHIShaderStage::Fragment:       return "ps_5_1";
+    case RHIShaderStage::Compute:        return "cs_5_1";
     default:                          return {};
     }
 }
 
-// RHITextureViewDesc 是引擎的统一“看这张纹理的哪一部分”的描述。D3D11 会根据资源维度、
-// array/mip 范围、MSAA 情况生成 SRV/RTV/DSV 描述，真正绑定到 shader 或 output merger。
-static D3D11_SHADER_RESOURCE_VIEW_DESC makeTextureSrvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
-    D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+struct CpuDescriptor {
+    D3D12_DESCRIPTOR_HEAP_TYPE type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    D3D12_CPU_DESCRIPTOR_HANDLE handle{};
+    UINT index = 0;
+    bool valid = false;
+};
+
+struct DescriptorHeapArena {
+    ComPtr<ID3D12DescriptorHeap> heap;
+    D3D12_DESCRIPTOR_HEAP_TYPE type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    UINT increment = 0;
+    UINT capacity = 0;
+    UINT used = 0;
+};
+
+static D3D12_SHADER_RESOURCE_VIEW_DESC makeTextureSrvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
+    D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
     desc.Format = toSrvFormat(viewFormat);
+    desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     switch (view.dimension) {
     case RHITextureViewDimension::View1D:
-        desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
         desc.Texture1D.MostDetailedMip = view.baseMipLevel;
         desc.Texture1D.MipLevels = view.mipLevelCount;
         break;
     case RHITextureViewDimension::View1DArray:
-        desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1DARRAY;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
         desc.Texture1DArray.MostDetailedMip = view.baseMipLevel;
         desc.Texture1DArray.MipLevels = view.mipLevelCount;
         desc.Texture1DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture1DArray.ArraySize = view.arrayLayerCount;
         break;
     case RHITextureViewDimension::View2D:
-        desc.ViewDimension = texture.samples == RHISampleCount::Count1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DMS;
+        desc.ViewDimension = texture.samples == RHISampleCount::Count1 ? D3D12_SRV_DIMENSION_TEXTURE2D : D3D12_SRV_DIMENSION_TEXTURE2DMS;
         desc.Texture2D.MostDetailedMip = view.baseMipLevel;
         desc.Texture2D.MipLevels = view.mipLevelCount;
         break;
     case RHITextureViewDimension::View2DArray:
-        desc.ViewDimension = texture.samples == RHISampleCount::Count1 ? D3D11_SRV_DIMENSION_TEXTURE2DARRAY : D3D11_SRV_DIMENSION_TEXTURE2DMSARRAY;
+        desc.ViewDimension = texture.samples == RHISampleCount::Count1 ? D3D12_SRV_DIMENSION_TEXTURE2DARRAY : D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
         desc.Texture2DArray.MostDetailedMip = view.baseMipLevel;
         desc.Texture2DArray.MipLevels = view.mipLevelCount;
         desc.Texture2DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture2DArray.ArraySize = view.arrayLayerCount;
         break;
     case RHITextureViewDimension::View3D:
-        desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
         desc.Texture3D.MostDetailedMip = view.baseMipLevel;
         desc.Texture3D.MipLevels = view.mipLevelCount;
         break;
     case RHITextureViewDimension::Cube:
-        desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
         desc.TextureCube.MostDetailedMip = view.baseMipLevel;
         desc.TextureCube.MipLevels = view.mipLevelCount;
         break;
     case RHITextureViewDimension::CubeArray:
-        desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBEARRAY;
+        desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
         desc.TextureCubeArray.MostDetailedMip = view.baseMipLevel;
         desc.TextureCubeArray.MipLevels = view.mipLevelCount;
         desc.TextureCubeArray.First2DArrayFace = view.baseArrayLayer;
@@ -615,25 +670,25 @@ static D3D11_SHADER_RESOURCE_VIEW_DESC makeTextureSrvDesc(const RHITextureDesc& 
     return desc;
 }
 
-static D3D11_RENDER_TARGET_VIEW_DESC makeRtvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
-    D3D11_RENDER_TARGET_VIEW_DESC desc{};
+static D3D12_RENDER_TARGET_VIEW_DESC makeRtvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
+    D3D12_RENDER_TARGET_VIEW_DESC desc{};
     desc.Format = toDxgiFormat(viewFormat);
     if (texture.dimension == RHITextureDimension::Texture3D) {
-        desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+        desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
         desc.Texture3D.MipSlice = view.baseMipLevel;
         desc.Texture3D.FirstWSlice = view.baseArrayLayer;
         desc.Texture3D.WSize = view.arrayLayerCount;
     } else if (texture.dimension == RHITextureDimension::Texture1D) {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_RTV_DIMENSION_TEXTURE1DARRAY : D3D11_RTV_DIMENSION_TEXTURE1D;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_RTV_DIMENSION_TEXTURE1DARRAY : D3D12_RTV_DIMENSION_TEXTURE1D;
         desc.Texture1DArray.MipSlice = view.baseMipLevel;
         desc.Texture1DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture1DArray.ArraySize = view.arrayLayerCount;
     } else if (texture.samples != RHISampleCount::Count1) {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY : D3D11_RTV_DIMENSION_TEXTURE2DMS;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY : D3D12_RTV_DIMENSION_TEXTURE2DMS;
         desc.Texture2DMSArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture2DMSArray.ArraySize = view.arrayLayerCount;
     } else {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DARRAY : D3D11_RTV_DIMENSION_TEXTURE2D;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_RTV_DIMENSION_TEXTURE2DARRAY : D3D12_RTV_DIMENSION_TEXTURE2D;
         desc.Texture2DArray.MipSlice = view.baseMipLevel;
         desc.Texture2DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture2DArray.ArraySize = view.arrayLayerCount;
@@ -641,20 +696,21 @@ static D3D11_RENDER_TARGET_VIEW_DESC makeRtvDesc(const RHITextureDesc& texture, 
     return desc;
 }
 
-static D3D11_DEPTH_STENCIL_VIEW_DESC makeDsvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
-    D3D11_DEPTH_STENCIL_VIEW_DESC desc{};
+static D3D12_DEPTH_STENCIL_VIEW_DESC makeDsvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
+    D3D12_DEPTH_STENCIL_VIEW_DESC desc{};
     desc.Format = toDsvFormat(viewFormat);
+    desc.Flags = D3D12_DSV_FLAG_NONE;
     if (texture.dimension == RHITextureDimension::Texture1D) {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_DSV_DIMENSION_TEXTURE1DARRAY : D3D11_DSV_DIMENSION_TEXTURE1D;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_DSV_DIMENSION_TEXTURE1DARRAY : D3D12_DSV_DIMENSION_TEXTURE1D;
         desc.Texture1DArray.MipSlice = view.baseMipLevel;
         desc.Texture1DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture1DArray.ArraySize = view.arrayLayerCount;
     } else if (texture.samples != RHISampleCount::Count1) {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY : D3D11_DSV_DIMENSION_TEXTURE2DMS;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY : D3D12_DSV_DIMENSION_TEXTURE2DMS;
         desc.Texture2DMSArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture2DMSArray.ArraySize = view.arrayLayerCount;
     } else {
-        desc.ViewDimension = texture.arrayLayers > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DARRAY : D3D11_DSV_DIMENSION_TEXTURE2D;
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DARRAY : D3D12_DSV_DIMENSION_TEXTURE2D;
         desc.Texture2DArray.MipSlice = view.baseMipLevel;
         desc.Texture2DArray.FirstArraySlice = view.baseArrayLayer;
         desc.Texture2DArray.ArraySize = view.arrayLayerCount;
@@ -662,45 +718,61 @@ static D3D11_DEPTH_STENCIL_VIEW_DESC makeDsvDesc(const RHITextureDesc& texture, 
     return desc;
 }
 
-// Impl 是 RHID3D11Backend 的后端状态仓库。
-// D3D11 对象都是 COM 对象，这里用 ComPtr 管生命周期；公共 RHIHandle 只保存 1-based index。
-// 注意 BindGroupLayout/PipelineLayout 在 D3D11 中没有原生等价物，它们主要作为统一抽象的
-// 描述和校验数据存在，真正的绑定发生在 applyBindGroup/applyPipeline 里。
-struct RHID3D11Backend::Impl {
+static D3D12_UNORDERED_ACCESS_VIEW_DESC makeTextureUavDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
+    D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};
+    desc.Format = toDxgiFormat(viewFormat);
+    if (texture.dimension == RHITextureDimension::Texture3D) {
+        desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+        desc.Texture3D.MipSlice = view.baseMipLevel;
+        desc.Texture3D.FirstWSlice = view.baseArrayLayer;
+        desc.Texture3D.WSize = view.arrayLayerCount;
+    } else if (texture.dimension == RHITextureDimension::Texture1D) {
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_UAV_DIMENSION_TEXTURE1DARRAY : D3D12_UAV_DIMENSION_TEXTURE1D;
+        desc.Texture1DArray.MipSlice = view.baseMipLevel;
+        desc.Texture1DArray.FirstArraySlice = view.baseArrayLayer;
+        desc.Texture1DArray.ArraySize = view.arrayLayerCount;
+    } else {
+        desc.ViewDimension = texture.arrayLayers > 1 ? D3D12_UAV_DIMENSION_TEXTURE2DARRAY : D3D12_UAV_DIMENSION_TEXTURE2D;
+        desc.Texture2DArray.MipSlice = view.baseMipLevel;
+        desc.Texture2DArray.FirstArraySlice = view.baseArrayLayer;
+        desc.Texture2DArray.ArraySize = view.arrayLayerCount;
+    }
+    return desc;
+}
+
+// Impl 是 RHID3D12 的状态仓库。D3D12 的核心对象都是 COM 对象，用 ComPtr 管理生命周期。
+// Descriptor 不是 COM 对象，只是 descriptor heap 中的一个槽位，所以用 CpuDescriptor 保存 CPU handle。
+struct RHID3D12::Impl {
     struct BufferResource {
         RHIBufferDesc desc{};
-        ComPtr<ID3D11Buffer> buffer;
+        ComPtr<ID3D12Resource> resource;
+        D3D12_RESOURCE_STATES currentState = D3D12_RESOURCE_STATE_COMMON;
+        void* mappedData = nullptr;
     };
 
     struct TextureResource {
         RHITextureDesc desc{};
-        ComPtr<ID3D11Resource> resource;
-        RHIResourceState currentState = RHIResourceState::Undefined;
+        ComPtr<ID3D12Resource> resource;
+        D3D12_RESOURCE_STATES currentState = D3D12_RESOURCE_STATE_COMMON;
         bool swapchainImage = false;
     };
 
     struct TextureViewResource {
         RHITextureViewDesc desc{};
-        ComPtr<ID3D11ShaderResourceView> srv;
-        ComPtr<ID3D11RenderTargetView> rtv;
-        ComPtr<ID3D11DepthStencilView> dsv;
-        ComPtr<ID3D11UnorderedAccessView> uav;
+        CpuDescriptor srv{};
+        CpuDescriptor rtv{};
+        CpuDescriptor dsv{};
+        CpuDescriptor uav{};
     };
 
     struct SamplerResource {
         RHISamplerDesc desc{};
-        ComPtr<ID3D11SamplerState> sampler;
+        CpuDescriptor sampler{};
     };
 
     struct ShaderResource {
         RHIShaderDesc desc{};
         std::vector<std::byte> bytecode;
-        ComPtr<ID3D11VertexShader> vertexShader;
-        ComPtr<ID3D11HullShader> hullShader;
-        ComPtr<ID3D11DomainShader> domainShader;
-        ComPtr<ID3D11GeometryShader> geometryShader;
-        ComPtr<ID3D11PixelShader> pixelShader;
-        ComPtr<ID3D11ComputeShader> computeShader;
     };
 
     struct BindGroupLayoutResource {
@@ -708,13 +780,11 @@ struct RHID3D11Backend::Impl {
     };
 
     struct ResolvedBinding {
-        RHIUInt32 slot = 0;
+        u32 slot = 0;
         RHIBindingType type = RHIBindingType::UniformBuffer;
         RHIShaderStage visibility = RHIShaderStage::AllGraphics;
-        ComPtr<ID3D11Buffer> buffer;
-        ComPtr<ID3D11ShaderResourceView> srv;
-        ComPtr<ID3D11UnorderedAccessView> uav;
-        ComPtr<ID3D11SamplerState> sampler;
+        CpuDescriptor resourceDescriptor{};
+        CpuDescriptor samplerDescriptor{};
     };
 
     struct BindGroupResource {
@@ -724,6 +794,7 @@ struct RHID3D11Backend::Impl {
 
     struct PipelineLayoutResource {
         RHIPipelineLayoutDesc desc{};
+        ComPtr<ID3D12RootSignature> rootSignature;
     };
 
     struct PipelineCacheResource {
@@ -732,57 +803,62 @@ struct RHID3D11Backend::Impl {
 
     struct PipelineResource {
         bool compute = false;
-        D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        D3D_PRIMITIVE_TOPOLOGY topology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         UINT stencilRef = 0;
         std::array<float, 4> blendConstants{0.0F, 0.0F, 0.0F, 0.0F};
-        UINT sampleMask = 0xFFFFFFFFu;
-        ComPtr<ID3D11InputLayout> inputLayout;
-        ComPtr<ID3D11VertexShader> vertexShader;
-        ComPtr<ID3D11HullShader> hullShader;
-        ComPtr<ID3D11DomainShader> domainShader;
-        ComPtr<ID3D11GeometryShader> geometryShader;
-        ComPtr<ID3D11PixelShader> pixelShader;
-        ComPtr<ID3D11ComputeShader> computeShader;
-        ComPtr<ID3D11RasterizerState> rasterizerState;
-        ComPtr<ID3D11DepthStencilState> depthStencilState;
-        ComPtr<ID3D11BlendState> blendState;
+        ComPtr<ID3D12RootSignature> rootSignature;
+        ComPtr<ID3D12PipelineState> pipelineState;
     };
 
     struct QueryPoolResource {
         RHIQueryPoolDesc desc{};
-        std::vector<ComPtr<ID3D11Query>> queries;
+        ComPtr<ID3D12QueryHeap> heap;
     };
 
     struct SemaphoreResource {
         RHISemaphoreDesc desc{};
-        RHIUInt64 value = 0;
+        u64 value = 0;
         bool signaled = false;
     };
 
     struct FenceResource {
         RHIFenceDesc desc{};
-        ComPtr<ID3D11Query> eventQuery;
+        ComPtr<ID3D12Fence> fence;
+        HANDLE eventHandle = nullptr;
+        u64 value = 0;
         bool signaled = false;
     };
 
     struct SwapchainResource {
         RHISwapchainDesc desc{};
-        ComPtr<IDXGISwapChain> swapchain;
+        ComPtr<IDXGISwapChain3> swapchain;
         RHIFormat format = RHIFormat::Undefined;
         RHIExtent2D extent{};
         std::vector<RHITexture> images;
         std::vector<RHITextureView> imageViews;
+        u32 currentImage = 0;
     };
 
-    RHID3D11NativeHandles native{};
-    RHID3D11BackendDesc initDesc{};
+    RHID3D12NativeHandles native{};
+    RHID3D12Desc initDesc{};
     RHICapabilities caps{};
 
-    ComPtr<IDXGIFactory1> factory;
+    ComPtr<IDXGIFactory6> factory;
     ComPtr<IDXGIAdapter1> adapter;
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<ID3D12Device> device;
+    ComPtr<ID3D12CommandQueue> graphicsQueue;
+    ComPtr<ID3D12CommandAllocator> commandAllocator;
+    ComPtr<ID3D12GraphicsCommandList> commandList;
+    ComPtr<ID3D12Fence> fence;
+    HANDLE fenceEvent = nullptr;
+    UINT64 fenceValue = 0;
     D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
+    bool commandListOpen = false;
+
+    DescriptorHeapArena cbvSrvUavHeap{};
+    DescriptorHeapArena rtvHeap{};
+    DescriptorHeapArena dsvHeap{};
+    DescriptorHeapArena samplerHeap{};
 
     std::vector<BufferResource> buffers;
     std::vector<TextureResource> textures;
@@ -803,19 +879,60 @@ struct RHID3D11Backend::Impl {
         native.factory = factory.Get();
         native.adapter = adapter.Get();
         native.device = device.Get();
-        native.immediateContext = context.Get();
+        native.graphicsQueue = graphicsQueue.Get();
+        native.commandAllocator = commandAllocator.Get();
+        native.commandList = commandList.Get();
+        native.fence = fence.Get();
+        native.fenceValue = fenceValue;
         native.featureLevel = featureLevel;
         native.hwnd = initDesc.surface.hwnd;
     }
 
-    void setDebugName(ID3D11DeviceChild* object, const std::string& name) const noexcept {
+    void setDebugName(ID3D12Object* object, const std::string& name) const noexcept {
         if (object == nullptr || name.empty()) {
             return;
         }
-        object->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(name.size()), name.data());
+        const std::wstring wideName = toWideString(name);
+        object->SetName(wideName.c_str());
     }
 
-    const RHIBindGroupLayoutEntry* findLayoutEntry(const BindGroupLayoutResource& layout, RHIUInt32 binding) const {
+    void createDescriptorHeap(DescriptorHeapArena& arena, D3D12_DESCRIPTOR_HEAP_TYPE type, UINT capacity) {
+        arena.type = type;
+        arena.capacity = capacity;
+        arena.used = 0;
+        D3D12_DESCRIPTOR_HEAP_DESC desc{};
+        desc.Type = type;
+        desc.NumDescriptors = capacity;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        throwIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&arena.heap)), "CreateDescriptorHeap failed");
+        arena.increment = device->GetDescriptorHandleIncrementSize(type);
+    }
+
+    CpuDescriptor allocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type) {
+        DescriptorHeapArena* arena = nullptr;
+        if (type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            arena = &cbvSrvUavHeap;
+        } else if (type == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
+            arena = &rtvHeap;
+        } else if (type == D3D12_DESCRIPTOR_HEAP_TYPE_DSV) {
+            arena = &dsvHeap;
+        } else if (type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
+            arena = &samplerHeap;
+        }
+        if (arena == nullptr || !arena->heap || arena->used >= arena->capacity) {
+            throw std::runtime_error("D3D12 descriptor heap is exhausted");
+        }
+
+        CpuDescriptor descriptor{};
+        descriptor.type = type;
+        descriptor.index = arena->used++;
+        descriptor.valid = true;
+        descriptor.handle = arena->heap->GetCPUDescriptorHandleForHeapStart();
+        descriptor.handle.ptr += static_cast<SIZE_T>(descriptor.index) * arena->increment;
+        return descriptor;
+    }
+
+    const RHIBindGroupLayoutEntry* findLayoutEntry(const BindGroupLayoutResource& layout, u32 binding) const {
         const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(), [&](const RHIBindGroupLayoutEntry& entry) {
             return entry.binding == binding;
         });
@@ -823,18 +940,45 @@ struct RHID3D11Backend::Impl {
     }
 };
 
-// WARP/software adapter 一般只作为 fallback，不参与默认硬件选择。
 static bool isSoftwareAdapter(const DXGI_ADAPTER_DESC1& desc) {
     return (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
 }
 
-// DXGI adapter 选择策略：
-// - Default 取第一个非软件 adapter；
-// - HighPerformance 倾向显存更大的 adapter；
-// - LowPower 倾向显存更小/通常更省电的 adapter。
-static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory1* factory, RHIPowerPreference preference) {
+static DXGI_GPU_PREFERENCE toDxgiGpuPreference(RHIPowerPreference preference) {
+    switch (preference) {
+    case RHIPowerPreference::Default:         return DXGI_GPU_PREFERENCE_UNSPECIFIED;
+    case RHIPowerPreference::LowPower:        return DXGI_GPU_PREFERENCE_MINIMUM_POWER;
+    case RHIPowerPreference::HighPerformance: return DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+    }
+    return DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+}
+
+static bool canCreateD3D12Device(IDXGIAdapter1* adapter, D3D_FEATURE_LEVEL minimumFeatureLevel) {
+    return SUCCEEDED(D3D12CreateDevice(adapter, minimumFeatureLevel, __uuidof(ID3D12Device), nullptr));
+}
+
+static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory6* factory, RHIPowerPreference preference, D3D_FEATURE_LEVEL minimumFeatureLevel) {
     ComPtr<IDXGIAdapter1> selected;
-    SIZE_T selectedMemory = preference == RHIPowerPreference::LowPower ? std::numeric_limits<SIZE_T>::max() : 0;
+    const DXGI_GPU_PREFERENCE gpuPreference = toDxgiGpuPreference(preference);
+
+    for (UINT index = 0;; ++index) {
+        ComPtr<IDXGIAdapter1> adapter;
+        if (factory->EnumAdapterByGpuPreference(index, gpuPreference, IID_PPV_ARGS(&adapter)) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+
+        DXGI_ADAPTER_DESC1 desc{};
+        adapter->GetDesc1(&desc);
+        if (isSoftwareAdapter(desc) || !canCreateD3D12Device(adapter.Get(), minimumFeatureLevel)) {
+            continue;
+        }
+        selected = adapter;
+        break;
+    }
+
+    if (selected) {
+        return selected;
+    }
 
     for (UINT index = 0;; ++index) {
         ComPtr<IDXGIAdapter1> adapter;
@@ -844,33 +988,42 @@ static ComPtr<IDXGIAdapter1> chooseAdapter(IDXGIFactory1* factory, RHIPowerPrefe
 
         DXGI_ADAPTER_DESC1 desc{};
         adapter->GetDesc1(&desc);
-        if (isSoftwareAdapter(desc)) {
+        if (isSoftwareAdapter(desc) || !canCreateD3D12Device(adapter.Get(), minimumFeatureLevel)) {
             continue;
         }
-
-        if (!selected) {
-            selected = adapter;
-            selectedMemory = desc.DedicatedVideoMemory;
-            if (preference == RHIPowerPreference::Default) {
-                break;
-            }
-            continue;
-        }
-
-        if (preference == RHIPowerPreference::HighPerformance && desc.DedicatedVideoMemory > selectedMemory) {
-            selected = adapter;
-            selectedMemory = desc.DedicatedVideoMemory;
-        } else if (preference == RHIPowerPreference::LowPower && desc.DedicatedVideoMemory < selectedMemory) {
-            selected = adapter;
-            selectedMemory = desc.DedicatedVideoMemory;
-        }
+        return adapter;
     }
 
-    return selected;
+    return {};
 }
 
-// D3D11 的 feature set 相对固定，但统一 RHIRenderFeature 里包含 Vulkan/D3D12 风格能力。
-// 这里既检查 caps 是否支持，也明确排除本后端没有实现或 API 本身不适合表达的能力。
+static D3D_FEATURE_LEVEL queryDeviceFeatureLevel(ID3D12Device* device) {
+    const std::array<D3D_FEATURE_LEVEL, 5> levels = {
+        D3D_FEATURE_LEVEL_12_2,
+        D3D_FEATURE_LEVEL_12_1,
+        D3D_FEATURE_LEVEL_12_0,
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0
+    };
+
+    D3D12_FEATURE_DATA_FEATURE_LEVELS featureLevels{};
+    featureLevels.NumFeatureLevels = static_cast<UINT>(levels.size());
+    featureLevels.pFeatureLevelsRequested = levels.data();
+    featureLevels.MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0;
+    if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &featureLevels, sizeof(featureLevels)))) {
+        return featureLevels.MaxSupportedFeatureLevel;
+    }
+    return D3D_FEATURE_LEVEL_11_0;
+}
+
+static bool supportsTearing(IDXGIFactory6* factory) {
+    BOOL allowTearing = FALSE;
+    if (factory == nullptr) {
+        return false;
+    }
+    return SUCCEEDED(factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing))) && allowTearing == TRUE;
+}
+
 static bool supportsRequiredFeatures(const RHICapabilities& caps, RHIRenderFeature required) {
     if (RHIHasAny(required, RHIRenderFeature::Compute)                 && !caps.supportsCompute)                 return false;
     if (RHIHasAny(required, RHIRenderFeature::GeometryShader)          && !caps.supportsGeometryShader)          return false;
@@ -896,37 +1049,35 @@ static bool supportsRequiredFeatures(const RHICapabilities& caps, RHIRenderFeatu
     return !RHIHasAny(required, unsupported);
 }
 
-// 把 adapter/feature level 整理成引擎统一的 RHICapabilities。
-// 这些能力会被上层用于选择渲染路径，也会被 requiredFeatures 校验。
 static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVEL featureLevel) {
     RHICapabilities caps{};
-    caps.api = RHIGraphicsAPI::Direct3D11;
+    caps.api = RHIGraphicsAPI::Direct3D12;
 
     DXGI_ADAPTER_DESC1 desc{};
     if (adapter != nullptr) {
         adapter->GetDesc1(&desc);
         caps.adapterName = toUtf8String(desc.Description);
-        caps.dedicatedVideoMemory = static_cast<RHIUInt64>(desc.DedicatedVideoMemory);
-        caps.sharedSystemMemory = static_cast<RHIUInt64>(desc.SharedSystemMemory);
+        caps.dedicatedVideoMemory = static_cast<u64>(desc.DedicatedVideoMemory);
+        caps.sharedSystemMemory = static_cast<u64>(desc.SharedSystemMemory);
     }
 
-    caps.maxTexture2DSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
-    caps.maxTexture3DSize = D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
-    caps.maxTextureCubeSize = D3D11_REQ_TEXTURECUBE_DIMENSION;
-    caps.maxTextureArrayLayers = D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
-    caps.maxColorAttachments = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
-    caps.maxBindGroups = 1;
-    caps.maxBindingsPerGroup = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
-    caps.maxVertexBuffers = D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
-    caps.maxVertexAttributes = D3D11_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT;
-    caps.maxPushConstantSize = 0;
-    caps.minUniformBufferOffsetAlignment = 16;
-    caps.minStorageBufferOffsetAlignment = 4;
-    caps.optimalBufferCopyOffsetAlignment = 16;
-    caps.optimalBufferCopyRowPitchAlignment = 1;
-    caps.maxSamplerAnisotropy = D3D11_REQ_MAXANISOTROPY;
+    caps.maxTexture2DSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    caps.maxTexture3DSize = D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION;
+    caps.maxTextureCubeSize = D3D12_REQ_TEXTURECUBE_DIMENSION;
+    caps.maxTextureArrayLayers = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
+    caps.maxColorAttachments = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
+    caps.maxBindGroups = 8;
+    caps.maxBindingsPerGroup = D3D12_COMMONSHADER_INPUT_RESOURCE_REGISTER_COUNT;
+    caps.maxVertexBuffers = D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
+    caps.maxVertexAttributes = D3D12_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT;
+    caps.maxPushConstantSize = D3D12_MAX_ROOT_COST * sizeof(u32);
+    caps.minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+    caps.minStorageBufferOffsetAlignment = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT;
+    caps.optimalBufferCopyOffsetAlignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+    caps.optimalBufferCopyRowPitchAlignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    caps.maxSamplerAnisotropy = D3D12_REQ_MAXANISOTROPY;
 
-    caps.supportsCompute = featureLevel >= D3D_FEATURE_LEVEL_11_0;
+    caps.supportsCompute = true;
     caps.supportsGeometryShader = true;
     caps.supportsTessellation = featureLevel >= D3D_FEATURE_LEVEL_11_0;
     caps.supportsSamplerAnisotropy = true;
@@ -957,9 +1108,13 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
     return caps;
 }
 
-// D3D11 private 片段放所有“后端内部语言”：
-// - 引擎句柄到 vector 槽位的 1-based handle 管理；
-// - RHIFormat/RHIVertexFormat/Sampler/Blend/Stencil 等跨 API enum 到 DXGI/D3D11 enum 的转换；
-// - Impl 中保存的 COM 资源结构；
-// - DXGI adapter 选择和 RHICapabilities 生成。
-// 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
+// D3D12 private 片段是“公共渲染抽象 -> D3D12 原生语言”的词典：
+// - RHIFormat/RHIResourceState/Sampler/PipelineState 的枚举转换；
+// - Descriptor heap CPU 槽位分配；
+// - Impl 中保存的 ID3D12Resource/RootSignature/PSO/Swapchain/Fence；
+// - DXGI adapter 选择、feature level 和 RHICapabilities 生成。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

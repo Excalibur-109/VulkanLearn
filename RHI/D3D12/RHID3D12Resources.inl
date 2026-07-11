@@ -1,6 +1,14 @@
-﻿RHIBuffer RHID3D12Backend::createBuffer(const RHIBufferDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.cpp"
+
+namespace rhi {
+#endif
+
+RHIBuffer RHID3D12::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
     if (desc.size == 0) {
         throw std::runtime_error("RHIBufferDesc::size must be greater than zero");
@@ -57,9 +65,9 @@
 
 // D3D12 texture 创建时要同时决定 resource flags、初始 state 和可选 clear value。
 // 深度格式仍然使用 typeless 存储格式创建，再由 SRV/DSV 选择读取或深度测试解释方式。
-RHITexture RHID3D12Backend::createTexture(const RHITextureDesc& desc) {
+RHITexture RHID3D12::createTexture(const RHITextureDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     const DXGI_FORMAT storageFormat = isDepthFormat(desc.format) || hasStencilFormat(desc.format)
@@ -124,9 +132,9 @@ RHITexture RHID3D12Backend::createTexture(const RHITextureDesc& desc) {
     return makeRenderHandle<RHITexture>(impl_->textures, std::move(resource));
 }
 
-RHITextureView RHID3D12Backend::createTextureView(const RHITextureViewDesc& desc) {
+RHITextureView RHID3D12::createTextureView(const RHITextureViewDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     const Impl::TextureResource* texture = getRenderResource(impl_->textures, desc.texture);
@@ -176,9 +184,9 @@ RHITextureView RHID3D12Backend::createTextureView(const RHITextureViewDesc& desc
     return makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(resource));
 }
 
-RHISampler RHID3D12Backend::createSampler(const RHISamplerDesc& desc) {
+RHISampler RHID3D12::createSampler(const RHISamplerDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     D3D12_SAMPLER_DESC samplerDesc{};
@@ -291,9 +299,9 @@ static std::vector<std::byte> compileHlsl(const RHIShaderDesc& desc) {
     return result;
 }
 
-RHIShader RHID3D12Backend::createShaderModule(const RHIShaderDesc& desc) {
+RHIShader RHID3D12::createShaderModule(const RHIShaderDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     Impl::ShaderResource resource{};
@@ -305,15 +313,15 @@ RHIShader RHID3D12Backend::createShaderModule(const RHIShaderDesc& desc) {
     return makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
 }
 
-RHIBindGroupLayout RHID3D12Backend::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
+RHIBindGroupLayout RHID3D12::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
     Impl::BindGroupLayoutResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
 }
 
-RHIBindGroup RHID3D12Backend::createBindGroup(const RHIBindGroupDesc& desc) {
+RHIBindGroup RHID3D12::createBindGroup(const RHIBindGroupDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
@@ -341,7 +349,7 @@ RHIBindGroup RHID3D12Backend::createBindGroup(const RHIBindGroupDesc& desc) {
             if (buffer == nullptr || !buffer->resource) {
                 throw std::runtime_error("RHIResourceBinding uniform buffer is invalid");
             }
-            const RHIUInt64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
+            const u64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
                 ? buffer->desc.size - binding.buffer.offset
                 : binding.buffer.size;
 
@@ -355,7 +363,7 @@ RHIBindGroup RHID3D12Backend::createBindGroup(const RHIBindGroupDesc& desc) {
             if (buffer == nullptr || !buffer->resource) {
                 throw std::runtime_error("RHIResourceBinding storage buffer is invalid");
             }
-            const RHIUInt64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
+            const u64 rangeSize = binding.buffer.size == RHI_WHOLE_SIZE
                 ? buffer->desc.size - binding.buffer.offset
                 : binding.buffer.size;
             if ((binding.buffer.offset % 4) != 0 || (rangeSize % 4) != 0) {
@@ -513,9 +521,9 @@ static ComPtr<ID3D12RootSignature> createRootSignatureForLayout(
     return rootSignature;
 }
 
-RHIPipelineLayout RHID3D12Backend::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
+RHIPipelineLayout RHID3D12::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     std::vector<Impl::BindGroupLayoutResource*> layouts;
@@ -535,7 +543,7 @@ RHIPipelineLayout RHID3D12Backend::createPipelineLayout(const RHIPipelineLayoutD
     return makeRenderHandle<RHIPipelineLayout>(impl_->pipelineLayouts, std::move(resource));
 }
 
-RHIPipelineCache RHID3D12Backend::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHID3D12::createPipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
     return makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
@@ -546,3 +554,8 @@ RHIPipelineCache RHID3D12Backend::createPipelineCache(const RHIPipelineCacheDesc
 // - texture view、sampler、CBV/SRV/UAV 是 descriptor heap 中的槽位；
 // - BindGroup 先解析成 CPU descriptor，后续完整命令录制时再拷贝到 shader-visible heap；
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

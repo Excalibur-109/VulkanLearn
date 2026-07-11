@@ -1,4 +1,12 @@
-﻿static VkStencilOpState toVkStencilState(const RHIStencilFaceState& state) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+static VkStencilOpState toVkStencilState(const RHIStencilFaceState& state) {
     VkStencilOpState vkState{};
     vkState.failOp = toVkStencilOp(state.failOp);
     vkState.passOp = toVkStencilOp(state.passOp);
@@ -13,7 +21,7 @@
 // GraphicsPipeline 在 Vulkan 中是“大状态对象”：shader stages、vertex layout、primitive、
 // raster/depth/blend/multisample 等固定状态会一起烘进 VkPipeline。本实现使用 dynamic
 // rendering，所以 pipeline 只记录附件 format，不需要提前创建 VkRenderPass。
-RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+RHIPipeline RHIVulkan::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
     if (!impl_->caps.supportsDynamicRendering) {
         throw std::runtime_error("当前 Vulkan 图形管线实现需要 dynamic rendering");
     }
@@ -62,7 +70,7 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     for (const RHIVertexBufferLayoutDesc& binding : desc.vertexBuffers) {
         VkVertexInputBindingDescription vkBinding{};
         vkBinding.binding = binding.binding;
-        vkBinding.stride = static_cast<RHIUInt32>(binding.stride);
+        vkBinding.stride = static_cast<u32>(binding.stride);
         vkBinding.inputRate = binding.inputRate == RHIVertexInputRate::PerInstance ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
         bindingDescriptions.push_back(vkBinding);
 
@@ -71,16 +79,16 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
             vkAttribute.location = attribute.location;
             vkAttribute.binding = attribute.binding;
             vkAttribute.format = toVkVertexFormat(attribute.format);
-            vkAttribute.offset = static_cast<RHIUInt32>(attribute.offset);
+            vkAttribute.offset = static_cast<u32>(attribute.offset);
             attributeDescriptions.push_back(vkAttribute);
         }
     }
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = static_cast<RHIUInt32>(bindingDescriptions.size());
+    vertexInput.vertexBindingDescriptionCount = static_cast<u32>(bindingDescriptions.size());
     vertexInput.pVertexBindingDescriptions = bindingDescriptions.data();
-    vertexInput.vertexAttributeDescriptionCount = static_cast<RHIUInt32>(attributeDescriptions.size());
+    vertexInput.vertexAttributeDescriptionCount = static_cast<u32>(attributeDescriptions.size());
     vertexInput.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -152,7 +160,7 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     blend.logicOpEnable = desc.blend.logicOpEnable ? VK_TRUE : VK_FALSE;
-    blend.attachmentCount = static_cast<RHIUInt32>(blendAttachments.size());
+    blend.attachmentCount = static_cast<u32>(blendAttachments.size());
     blend.pAttachments = blendAttachments.data();
     std::copy(desc.blend.blendConstants.begin(), desc.blend.blendConstants.end(), blend.blendConstants);
 
@@ -163,7 +171,7 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     }
     VkPipelineDynamicStateCreateInfo dynamic{};
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic.dynamicStateCount = static_cast<RHIUInt32>(dynamicStates.size());
+    dynamic.dynamicStateCount = static_cast<u32>(dynamicStates.size());
     dynamic.pDynamicStates = dynamicStates.data();
 
     std::vector<VkFormat> colorFormats;
@@ -173,7 +181,7 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     }
     VkPipelineRenderingCreateInfo rendering{};
     rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rendering.colorAttachmentCount = static_cast<RHIUInt32>(colorFormats.size());
+    rendering.colorAttachmentCount = static_cast<u32>(colorFormats.size());
     rendering.pColorAttachmentFormats = colorFormats.data();
     rendering.depthAttachmentFormat = isDepthFormat(desc.depthStencilFormat) ? toVkFormat(desc.depthStencilFormat) : VK_FORMAT_UNDEFINED;
     rendering.stencilAttachmentFormat = hasStencilFormat(desc.depthStencilFormat) ? toVkFormat(desc.depthStencilFormat) : VK_FORMAT_UNDEFINED;
@@ -186,7 +194,7 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.pNext = &rendering;
-    pipelineInfo.stageCount = static_cast<RHIUInt32>(shaderStages.size());
+    pipelineInfo.stageCount = static_cast<u32>(shaderStages.size());
     pipelineInfo.pStages = shaderStages.data();
     pipelineInfo.pVertexInputState = &vertexInput;
     pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -212,13 +220,13 @@ RHIPipeline RHIVulkanBackend::createGraphicsPipeline(const RHIGraphicsPipelineDe
     destroyTemporaryShaderModules();
 
     const RHIPipeline handle = makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<RHIUInt64>(impl_->pipelines.back().pipeline), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<u64>(impl_->pipelines.back().pipeline), desc.debugName);
     return handle;
 }
 
 // Compute pipeline 比图形管线简单：只有一个 compute shader stage 和一个 pipeline layout。
 // 创建完成后临时 shader module 可以销毁，因为 VkPipeline 已经内部引用/编译了需要的信息。
-RHIPipeline RHIVulkanBackend::createComputePipeline(const RHIComputePipelineDesc& desc) {
+RHIPipeline RHIVulkan::createComputePipeline(const RHIComputePipelineDesc& desc) {
     const Impl::PipelineLayoutResource* layout = getRenderResource(impl_->pipelineLayouts, desc.layout);
     if (layout == nullptr || layout->layout == VK_NULL_HANDLE) {
         throw std::runtime_error("RHIComputePipelineDesc::layout 无效");
@@ -256,9 +264,14 @@ RHIPipeline RHIVulkanBackend::createComputePipeline(const RHIComputePipelineDesc
     shader->module = VK_NULL_HANDLE;
 
     const RHIPipeline handle = makeRenderHandle<RHIPipeline>(impl_->pipelines, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<RHIUInt64>(impl_->pipelines.back().pipeline), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<u64>(impl_->pipelines.back().pipeline), desc.debugName);
     return handle;
 }
 
 // QueryPool 用于 GPU 侧统计：timestamp 量时间，occlusion 量通过深度/模板测试的样本，
 // pipeline statistics 量各阶段调用次数。不是所有统计项都默认可用，所以初始化时会检查 feature。
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

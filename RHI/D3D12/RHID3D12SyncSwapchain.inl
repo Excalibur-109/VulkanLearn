@@ -1,6 +1,14 @@
-﻿RHIQueryPool RHID3D12Backend::createQueryPool(const RHIQueryPoolDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.cpp"
+
+namespace rhi {
+#endif
+
+RHIQueryPool RHID3D12::createQueryPool(const RHIQueryPoolDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     Impl::QueryPoolResource resource{};
@@ -25,7 +33,7 @@
     return makeRenderHandle<RHIQueryPool>(impl_->queryPools, std::move(resource));
 }
 
-RHISemaphore RHID3D12Backend::createSemaphore(const RHISemaphoreDesc& desc) {
+RHISemaphore RHID3D12::createSemaphore(const RHISemaphoreDesc& desc) {
     Impl::SemaphoreResource resource{};
     resource.desc = desc;
     resource.value = desc.initialValue;
@@ -33,9 +41,9 @@ RHISemaphore RHID3D12Backend::createSemaphore(const RHISemaphoreDesc& desc) {
     return makeRenderHandle<RHISemaphore>(impl_->semaphores, std::move(resource));
 }
 
-RHIFence RHID3D12Backend::createFence(const RHIFenceDesc& desc) {
+RHIFence RHID3D12::createFence(const RHIFenceDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
 
     Impl::FenceResource resource{};
@@ -51,9 +59,9 @@ RHIFence RHID3D12Backend::createFence(const RHIFenceDesc& desc) {
     return makeRenderHandle<RHIFence>(impl_->fences, std::move(resource));
 }
 
-RHISwapchain RHID3D12Backend::createSwapchain(const RHISwapchainDesc& desc) {
+RHISwapchain RHID3D12::createSwapchain(const RHISwapchainDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D12Backend is not initialized");
+        throw std::runtime_error("RHID3D12 is not initialized");
     }
     if (impl_->initDesc.surface.hwnd == nullptr) {
         throw std::runtime_error("D3D12 swapchain creation requires RHID3D12SurfaceDesc::hwnd");
@@ -138,39 +146,39 @@ RHISwapchain RHID3D12Backend::createSwapchain(const RHISwapchainDesc& desc) {
     return makeRenderHandle<RHISwapchain>(impl_->swapchains, std::move(resource));
 }
 
-std::vector<RHITexture> RHID3D12Backend::getSwapchainImages(RHISwapchain handle) const {
+std::vector<RHITexture> RHID3D12::getSwapchainImages(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->images;
     }
     return {};
 }
 
-std::vector<RHITextureView> RHID3D12Backend::getSwapchainImageViews(RHISwapchain handle) const {
+std::vector<RHITextureView> RHID3D12::getSwapchainImageViews(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->imageViews;
     }
     return {};
 }
 
-RHIFormat RHID3D12Backend::getSwapchainFormat(RHISwapchain handle) const {
+RHIFormat RHID3D12::getSwapchainFormat(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->format;
     }
     return RHIFormat::Undefined;
 }
 
-RHIExtent2D RHID3D12Backend::getSwapchainExtent(RHISwapchain handle) const {
+RHIExtent2D RHID3D12::getSwapchainExtent(RHISwapchain handle) const {
     if (const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, handle)) {
         return swapchain->extent;
     }
     return {};
 }
 
-bool RHID3D12Backend::acquireNextImage(
+bool RHID3D12::acquireNextImage(
     RHISwapchain swapchain,
     RHISemaphore signalSemaphore,
     RHIFence signalFence,
-    RHIUInt32* imageIndex,
+    u32* imageIndex,
     std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchainResource = getRenderResource(impl_->swapchains, swapchain);
@@ -203,7 +211,7 @@ bool RHID3D12Backend::acquireNextImage(
     }
 }
 
-bool RHID3D12Backend::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
+bool RHID3D12::submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage) {
     try {
         for (const RHIQueueWaitDesc& wait : desc.waits) {
             const Impl::SemaphoreResource* semaphore = getRenderResource(impl_->semaphores, wait.semaphore);
@@ -254,7 +262,7 @@ bool RHID3D12Backend::submit(const RHIQueueSubmitDesc& desc, std::string* errorM
     }
 }
 
-bool RHID3D12Backend::present(const RHIPresentDesc& desc, std::string* errorMessage) {
+bool RHID3D12::present(const RHIPresentDesc& desc, std::string* errorMessage) {
     try {
         Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
         if (swapchain == nullptr || !swapchain->swapchain) {
@@ -290,3 +298,8 @@ bool RHID3D12Backend::present(const RHIPresentDesc& desc, std::string* errorMess
 // - Fence 使用真实 ID3D12Fence + Win32 event；
 // - Swapchain 使用 IDXGISwapChain3 并把每个 back buffer 包装成统一 RHITexture；
 // - Semaphore 暂时是 CPU 模拟，后续若需要跨进程/跨队列同步可扩展到 shared fence。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

@@ -1,4 +1,12 @@
-﻿static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const RHIStencilFaceState& state) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D11.cpp"
+
+namespace rhi {
+#endif
+
+static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const RHIStencilFaceState& state) {
     D3D11_DEPTH_STENCILOP_DESC desc{};
     desc.StencilFailOp = toD3DStencilOp(state.failOp);
     desc.StencilDepthFailOp = toD3DStencilOp(state.depthFailOp);
@@ -10,9 +18,9 @@
 // 图形 pipeline 在 D3D11 里不是一个原生大对象，而是一组状态对象和 shader 组合：
 // input layout、shader stages、rasterizer state、depth-stencil state、blend state。
 // applyPipeline 会在绘制时把这些对象依次设置到 immediate context。
-RHIPipeline RHID3D11Backend::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+RHIPipeline RHID3D11::createGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (getRenderResource(impl_->pipelineLayouts, desc.layout) == nullptr) {
         throw std::runtime_error("RHIGraphicsPipelineDesc::layout is invalid");
@@ -166,9 +174,9 @@ RHIPipeline RHID3D11Backend::createGraphicsPipeline(const RHIGraphicsPipelineDes
 
 // Compute pipeline 只需要 compute shader。为了和统一 RHIPipeline 对齐，仍然存到
 // PipelineResource，并用 compute=true 区分 applyPipeline 的绑定路径。
-RHIPipeline RHID3D11Backend::createComputePipeline(const RHIComputePipelineDesc& desc) {
+RHIPipeline RHID3D11::createComputePipeline(const RHIComputePipelineDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHID3D11Backend is not initialized");
+        throw std::runtime_error("RHID3D11 is not initialized");
     }
     if (getRenderResource(impl_->pipelineLayouts, desc.layout) == nullptr) {
         throw std::runtime_error("RHIComputePipelineDesc::layout is invalid");
@@ -192,4 +200,9 @@ RHIPipeline RHID3D11Backend::createComputePipeline(const RHIComputePipelineDesc&
 // D3D11 pipelines 片段负责把 RHIGraphicsPipelineDesc/RHIComputePipelineDesc 翻译成 D3D11 状态组合。
 // 和 Vulkan 的 VkPipeline 不同，D3D11 没有一个完整的 graphics pipeline 对象；
 // 本实现把 input layout、shader stages、rasterizer、depth-stencil、blend、topology 等保存在 PipelineResource，
-// 真正绘制时由 RHID3D11BackendFrame.inl 的 applyPipeline 逐项绑定到 immediate context。
+// 真正绘制时由 RHID3D11Frame.inl 的 applyPipeline 逐项绑定到 immediate context。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D11_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

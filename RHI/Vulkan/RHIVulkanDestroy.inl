@@ -1,4 +1,12 @@
-﻿void RHIVulkanBackend::destroy(RHIBuffer handle) noexcept {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+void RHIVulkan::destroy(RHIBuffer handle) noexcept {
     Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle);
     if (resource == nullptr) return;
     if (resource->mapped != nullptr) {
@@ -15,7 +23,7 @@
     }
 }
 
-void RHIVulkanBackend::destroy(RHITexture handle) noexcept {
+void RHIVulkan::destroy(RHITexture handle) noexcept {
     Impl::TextureResource* resource = getRenderResource(impl_->textures, handle);
     if (resource == nullptr) return;
     if (resource->image != VK_NULL_HANDLE && resource->ownsImage) {
@@ -28,7 +36,7 @@ void RHIVulkanBackend::destroy(RHITexture handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHITextureView handle) noexcept {
+void RHIVulkan::destroy(RHITextureView handle) noexcept {
     Impl::TextureViewResource* resource = getRenderResource(impl_->textureViews, handle);
     if (resource != nullptr && resource->view != VK_NULL_HANDLE) {
         vkDestroyImageView(impl_->native.device, resource->view, nullptr);
@@ -36,7 +44,7 @@ void RHIVulkanBackend::destroy(RHITextureView handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHISampler handle) noexcept {
+void RHIVulkan::destroy(RHISampler handle) noexcept {
     Impl::SamplerResource* resource = getRenderResource(impl_->samplers, handle);
     if (resource != nullptr && resource->sampler != VK_NULL_HANDLE) {
         vkDestroySampler(impl_->native.device, resource->sampler, nullptr);
@@ -44,7 +52,7 @@ void RHIVulkanBackend::destroy(RHISampler handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIShader handle) noexcept {
+void RHIVulkan::destroy(RHIShader handle) noexcept {
     Impl::ShaderResource* resource = getRenderResource(impl_->shaders, handle);
     if (resource != nullptr && resource->module != VK_NULL_HANDLE) {
         vkDestroyShaderModule(impl_->native.device, resource->module, nullptr);
@@ -52,7 +60,7 @@ void RHIVulkanBackend::destroy(RHIShader handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIBindGroupLayout handle) noexcept {
+void RHIVulkan::destroy(RHIBindGroupLayout handle) noexcept {
     Impl::BindGroupLayoutResource* resource = getRenderResource(impl_->bindGroupLayouts, handle);
     if (resource != nullptr && resource->layout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(impl_->native.device, resource->layout, nullptr);
@@ -60,7 +68,7 @@ void RHIVulkanBackend::destroy(RHIBindGroupLayout handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIBindGroup handle) noexcept {
+void RHIVulkan::destroy(RHIBindGroup handle) noexcept {
     Impl::BindGroupResource* resource = getRenderResource(impl_->bindGroups, handle);
     if (resource != nullptr && resource->set != VK_NULL_HANDLE) {
         vkFreeDescriptorSets(impl_->native.device, impl_->descriptorPool, 1, &resource->set);
@@ -68,7 +76,7 @@ void RHIVulkanBackend::destroy(RHIBindGroup handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIPipelineLayout handle) noexcept {
+void RHIVulkan::destroy(RHIPipelineLayout handle) noexcept {
     Impl::PipelineLayoutResource* resource = getRenderResource(impl_->pipelineLayouts, handle);
     if (resource != nullptr && resource->layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(impl_->native.device, resource->layout, nullptr);
@@ -76,7 +84,7 @@ void RHIVulkanBackend::destroy(RHIPipelineLayout handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIPipelineCache handle) noexcept {
+void RHIVulkan::destroy(RHIPipelineCache handle) noexcept {
     Impl::PipelineCacheResource* resource = getRenderResource(impl_->pipelineCaches, handle);
     if (resource != nullptr && resource->cache != VK_NULL_HANDLE) {
         vkDestroyPipelineCache(impl_->native.device, resource->cache, nullptr);
@@ -84,7 +92,7 @@ void RHIVulkanBackend::destroy(RHIPipelineCache handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIPipeline handle) noexcept {
+void RHIVulkan::destroy(RHIPipeline handle) noexcept {
     Impl::PipelineResource* resource = getRenderResource(impl_->pipelines, handle);
     if (resource != nullptr && resource->pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(impl_->native.device, resource->pipeline, nullptr);
@@ -92,7 +100,7 @@ void RHIVulkanBackend::destroy(RHIPipeline handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIQueryPool handle) noexcept {
+void RHIVulkan::destroy(RHIQueryPool handle) noexcept {
     Impl::QueryPoolResource* resource = getRenderResource(impl_->queryPools, handle);
     if (resource != nullptr && resource->pool != VK_NULL_HANDLE) {
         vkDestroyQueryPool(impl_->native.device, resource->pool, nullptr);
@@ -100,7 +108,7 @@ void RHIVulkanBackend::destroy(RHIQueryPool handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHISemaphore handle) noexcept {
+void RHIVulkan::destroy(RHISemaphore handle) noexcept {
     Impl::SemaphoreResource* resource = getRenderResource(impl_->semaphores, handle);
     if (resource != nullptr && resource->semaphore != VK_NULL_HANDLE) {
         vkDestroySemaphore(impl_->native.device, resource->semaphore, nullptr);
@@ -108,7 +116,7 @@ void RHIVulkanBackend::destroy(RHISemaphore handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHIFence handle) noexcept {
+void RHIVulkan::destroy(RHIFence handle) noexcept {
     Impl::FenceResource* resource = getRenderResource(impl_->fences, handle);
     if (resource != nullptr && resource->fence != VK_NULL_HANDLE) {
         vkDestroyFence(impl_->native.device, resource->fence, nullptr);
@@ -116,7 +124,7 @@ void RHIVulkanBackend::destroy(RHIFence handle) noexcept {
     }
 }
 
-void RHIVulkanBackend::destroy(RHISwapchain handle) noexcept {
+void RHIVulkan::destroy(RHISwapchain handle) noexcept {
     Impl::SwapchainResource* resource = getRenderResource(impl_->swapchains, handle);
     if (resource == nullptr) return;
 
@@ -135,3 +143,8 @@ void RHIVulkanBackend::destroy(RHISwapchain handle) noexcept {
         resource->swapchain = VK_NULL_HANDLE;
     }
 }
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

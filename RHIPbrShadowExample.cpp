@@ -26,7 +26,7 @@ using namespace rhi;
 
 namespace {
 
-constexpr RHIUInt32 SHADOW_MAP_SIZE = 2048;
+constexpr u32 SHADOW_MAP_SIZE = 2048;
 constexpr float PI = 3.14159265358979323846F;
 
 /// PBR 顶点格式，对应 Shader 中的位置、法线和 UV 输入。
@@ -68,7 +68,7 @@ struct MaterialGpuData {
 /// CPU 生成的平面和球体共享一套顶点/索引缓冲，通过 submesh 区分。
 struct GeneratedMesh {
     std::vector<PbrVertex> vertices;
-    std::vector<RHIUInt32> indices;
+    std::vector<u32> indices;
     RHISubmeshDesc planeSubmesh;
     RHISubmeshDesc sphereSubmesh;
 };
@@ -141,7 +141,7 @@ RHIExtent2D waitForDrawableSize(GLFWwindow* window) {
     while (!glfwWindowShouldClose(window)) {
         glfwGetFramebufferSize(window, &width, &height);
         if (width > 0 && height > 0) {
-            return {static_cast<RHIUInt32>(width), static_cast<RHIUInt32>(height)};
+            return {static_cast<u32>(width), static_cast<u32>(height)};
         }
         glfwWaitEvents();
     }
@@ -174,17 +174,17 @@ GeneratedMesh generatePlaneAndSphere() {
     mesh.vertices.push_back({{-halfSize, 0.0F, halfSize}, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F}});
     mesh.indices.insert(mesh.indices.end(), {0, 2, 1, 0, 3, 2});
 
-    const RHIUInt32 sphereFirstVertex = static_cast<RHIUInt32>(mesh.vertices.size());
-    const RHIUInt32 sphereFirstIndex = static_cast<RHIUInt32>(mesh.indices.size());
-    const RHIUInt32 slices = 64;
-    const RHIUInt32 stacks = 32;
+    const u32 sphereFirstVertex = static_cast<u32>(mesh.vertices.size());
+    const u32 sphereFirstIndex = static_cast<u32>(mesh.indices.size());
+    const u32 slices = 64;
+    const u32 stacks = 32;
     const float radius = 1.0F;
     const glm::vec3 center{0.0F, radius, 0.0F};
 
-    for (RHIUInt32 stack = 0; stack <= stacks; ++stack) {
+    for (u32 stack = 0; stack <= stacks; ++stack) {
         const float v = static_cast<float>(stack) / static_cast<float>(stacks);
         const float phi = v * PI;
-        for (RHIUInt32 slice = 0; slice <= slices; ++slice) {
+        for (u32 slice = 0; slice <= slices; ++slice) {
             const float u = static_cast<float>(slice) / static_cast<float>(slices);
             const float theta = u * PI * 2.0F;
             glm::vec3 normal{
@@ -196,23 +196,23 @@ GeneratedMesh generatePlaneAndSphere() {
         }
     }
 
-    for (RHIUInt32 stack = 0; stack < stacks; ++stack) {
-        for (RHIUInt32 slice = 0; slice < slices; ++slice) {
-            const RHIUInt32 row0 = sphereFirstVertex + stack * (slices + 1);
-            const RHIUInt32 row1 = sphereFirstVertex + (stack + 1) * (slices + 1);
-            const RHIUInt32 a = row0 + slice;
-            const RHIUInt32 b = row1 + slice;
-            const RHIUInt32 c = row1 + slice + 1;
-            const RHIUInt32 d = row0 + slice + 1;
+    for (u32 stack = 0; stack < stacks; ++stack) {
+        for (u32 slice = 0; slice < slices; ++slice) {
+            const u32 row0 = sphereFirstVertex + stack * (slices + 1);
+            const u32 row1 = sphereFirstVertex + (stack + 1) * (slices + 1);
+            const u32 a = row0 + slice;
+            const u32 b = row1 + slice;
+            const u32 c = row1 + slice + 1;
+            const u32 d = row0 + slice + 1;
             mesh.indices.insert(mesh.indices.end(), {a, c, b, a, d, c});
         }
     }
 
     mesh.sphereSubmesh.name = "Sphere";
     mesh.sphereSubmesh.firstVertex = sphereFirstVertex;
-    mesh.sphereSubmesh.vertexCount = static_cast<RHIUInt32>(mesh.vertices.size()) - sphereFirstVertex;
+    mesh.sphereSubmesh.vertexCount = static_cast<u32>(mesh.vertices.size()) - sphereFirstVertex;
     mesh.sphereSubmesh.firstIndex = sphereFirstIndex;
-    mesh.sphereSubmesh.indexCount = static_cast<RHIUInt32>(mesh.indices.size()) - sphereFirstIndex;
+    mesh.sphereSubmesh.indexCount = static_cast<u32>(mesh.indices.size()) - sphereFirstIndex;
     mesh.sphereSubmesh.materialIndex = 1;
     mesh.sphereSubmesh.boundsMin = center - glm::vec3(radius);
     mesh.sphereSubmesh.boundsMax = center + glm::vec3(radius);
@@ -221,7 +221,7 @@ GeneratedMesh generatePlaneAndSphere() {
     return mesh;
 }
 
-RHIBuffer createBuffer(RHIDevice& renderer, const char* name, RHIUInt64 size, RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
+RHIBuffer createBuffer(RHIDevice& renderer, const char* name, u64 size, RHIBufferUsage usage, RHIMemoryUsage memoryUsage) {
     RHIBufferDesc desc{};
     desc.debugName = name;
     desc.size = size;
@@ -350,7 +350,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
     resources.indexBuffer = createBuffer(
         renderer,
         "Example.GeometryIndices",
-        sizeof(RHIUInt32) * resources.cpuMesh.indices.size(),
+        sizeof(u32) * resources.cpuMesh.indices.size(),
         RHIBufferUsage::Index | RHIBufferUsage::TransferDestination,
         RHIMemoryUsage::GpuOnly);
     resources.sceneUniformBuffer = createBuffer(
@@ -472,7 +472,7 @@ ExampleResources createExampleResources(RHIDevice& renderer, RHIFormat colorForm
 
     resources.meshDesc.debugName = "Example.GeneratedPlaneAndSphere";
     resources.meshDesc.vertexStreams = {{resources.vertexBuffer, 0, 0, sizeof(PbrVertex)}};
-    resources.meshDesc.indexStream = RHIIndexStream{resources.indexBuffer, RHIIndexType::UInt32, 0, static_cast<RHIUInt32>(resources.cpuMesh.indices.size())};
+    resources.meshDesc.indexStream = RHIIndexStream{resources.indexBuffer, RHIIndexType::UInt32, 0, static_cast<u32>(resources.cpuMesh.indices.size())};
     resources.meshDesc.submeshes = {resources.cpuMesh.planeSubmesh, resources.cpuMesh.sphereSubmesh};
 
     RHIMaterialDesc planeMaterial{};
@@ -537,7 +537,7 @@ RHIUploadBatchDesc makeUploadBatch(const ExampleResources& resources) {
     return uploads;
 }
 
-RHIDrawIndexedCommand makeDraw(const ExampleResources& resources, const RHISubmeshDesc& submesh, RHIPipeline pipeline, RHIUInt32 objectIndex) {
+RHIDrawIndexedCommand makeDraw(const ExampleResources& resources, const RHISubmeshDesc& submesh, RHIPipeline pipeline, u32 objectIndex) {
     RHIDrawIndexedCommand draw{};
     draw.pipeline = pipeline;
     draw.bindGroups = {resources.sceneBindGroup, resources.objectBindGroup};
@@ -607,10 +607,10 @@ RHIRenderObjectSetDesc makeObjectSetDesc(const ExampleResources& resources) {
 RHIFramePacket buildFramePacket(
     const ExampleResources& resources,
     const FrameTargets& targets,
-    RHIUInt32 imageIndex,
+    u32 imageIndex,
     RHISemaphore imageAvailable,
     RHISemaphore renderFinished,
-    RHIUInt64 frameIndex) {
+    u64 frameIndex) {
     RHIFramePacket packet{};
     packet.settings.drawableSize = targets.extent;
     packet.settings.viewport = {0.0F, 0.0F, static_cast<float>(targets.extent.width), static_cast<float>(targets.extent.height), 0.0F, 1.0F};
@@ -736,13 +736,13 @@ public:
 
 int main(int argc, char** argv) {
     try {
-        RHIUInt64 maxFrames = 0;
+        u64 maxFrames = 0;
         for (int index = 1; index < argc; ++index) {
             const std::string argument = argv[index];
             if (argument == "--smoke-test") {
                 maxFrames = 1;
             } else if (argument.rfind("--frames=", 0) == 0) {
-                maxFrames = static_cast<RHIUInt64>(std::stoull(argument.substr(9)));
+                maxFrames = static_cast<u64>(std::stoull(argument.substr(9)));
             }
         }
 
@@ -757,7 +757,7 @@ int main(int argc, char** argv) {
             throw std::runtime_error("glfwCreateWindow 失败");
         }
 
-        RHIUInt32 extensionCount = 0;
+        u32 extensionCount = 0;
         const char** extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
         if (extensions == nullptr || extensionCount == 0) {
             throw std::runtime_error("GLFW 未返回 Vulkan 实例扩展");
@@ -792,7 +792,7 @@ int main(int argc, char** argv) {
         RHISemaphore imageAvailable = renderer.createSemaphore({"Example.ImageAvailable", RHISemaphoreType::Binary});
         RHISemaphore renderFinished = renderer.createSemaphore({"Example.RenderFinished", RHISemaphoreType::Binary});
 
-        RHIUInt64 frameIndex = 0;
+        u64 frameIndex = 0;
         while (!glfwWindowShouldClose(window) && (maxFrames == 0 || frameIndex < maxFrames)) {
             glfwPollEvents();
 
@@ -805,7 +805,7 @@ int main(int argc, char** argv) {
 
             updateSceneUniforms(resources, targets.extent);
 
-            RHIUInt32 imageIndex = 0;
+            u32 imageIndex = 0;
             if (!renderer.acquireNextImage(targets.swapchain, imageAvailable, RHIFence{}, &imageIndex, &errorMessage)) {
                 std::cerr << "acquireNextImage 失败: " << errorMessage << '\n';
                 break;
@@ -832,6 +832,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
 
 
 

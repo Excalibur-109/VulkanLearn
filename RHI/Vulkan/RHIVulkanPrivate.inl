@@ -1,4 +1,24 @@
-﻿// 学习导读：
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <optional>
+#include <set>
+#include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
+namespace rhi {
+#endif
+
+// 学习导读：
 // 这个文件是统一渲染抽象到 Vulkan 的落地层。RHIDefinitions.hpp 里的 RHIBufferDesc、
 // RHITextureDesc、PipelineDesc、RHIFramePacket 等结构只描述“引擎想要什么”；这里负责把它们
 // 翻译成 VkBuffer/VkImage/VkDescriptorSet/VkPipeline/VkCommandBuffer 等 Vulkan 对象。
@@ -11,7 +31,7 @@
 template <typename HandleT, typename ResourceT>
 static HandleT makeRenderHandle(std::vector<ResourceT>& resources, ResourceT&& resource) {
     resources.push_back(std::move(resource));
-    return HandleT(static_cast<RHIUInt64>(resources.size()));
+    return HandleT(static_cast<u64>(resources.size()));
 }
 
 /// 根据引擎句柄查找资源；无效句柄或越界时返回 nullptr。
@@ -657,23 +677,23 @@ static VkPipelineStageFlags toVkPipelineStages(RHIPipelineStage stages) {
     }
 }
 
-static VkDeviceSize toVkWholeSize(RHIUInt64 size) {
+static VkDeviceSize toVkWholeSize(u64 size) {
     return size == RHI_WHOLE_SIZE ? VK_WHOLE_SIZE : static_cast<VkDeviceSize>(size);
 }
 
 /// 记录每类 Vulkan 队列对应的 queue family index。
 struct VulkanQueueFamilies {
-    RHIUInt32 graphics = RHI_INVALID_INDEX; ///< 图形队列族，必须支持 VK_QUEUE_GRAPHICS_BIT。
-    RHIUInt32 compute = RHI_INVALID_INDEX; ///< 计算队列族，优先选择独立 compute 队列。
-    RHIUInt32 transfer = RHI_INVALID_INDEX; ///< 传输队列族，优先选择独立 transfer 队列。
-    RHIUInt32 present = RHI_INVALID_INDEX; ///< 呈现队列族，需要 surface 支持。
+    u32 graphics = RHI_INVALID_INDEX; ///< 图形队列族，必须支持 VK_QUEUE_GRAPHICS_BIT。
+    u32 compute = RHI_INVALID_INDEX; ///< 计算队列族，优先选择独立 compute 队列。
+    u32 transfer = RHI_INVALID_INDEX; ///< 传输队列族，优先选择独立 transfer 队列。
+    u32 present = RHI_INVALID_INDEX; ///< 呈现队列族，需要 surface 支持。
 };
 
-// Impl 是 RHIVulkanBackend 的后端状态仓库。
+// Impl 是 RHIVulkan 的后端状态仓库。
 // 公共 API 对外只暴露轻量 RHIHandle，RHIHandle 实际上是这些 vector 的 1-based 索引；真实的
 // Vulkan 对象、创建时的描述信息、是否拥有对象生命周期等都集中保存在这里。这样上层可以
 // 用统一句柄表达依赖关系，后端仍能拿到 native 对象执行命令。
-struct RHIVulkanBackend::Impl {
+struct RHIVulkan::Impl {
     struct BufferResource {
         RHIBufferDesc desc{};
         VkBuffer buffer = VK_NULL_HANDLE;
@@ -756,7 +776,7 @@ struct RHIVulkanBackend::Impl {
 
     RHIVulkanNativeHandles native{};
     RHICapabilities caps{};
-    RHIVulkanBackendDesc initDesc{};
+    RHIVulkanDesc initDesc{};
     VulkanQueueFamilies queueFamilies{};
 
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -781,7 +801,7 @@ struct RHIVulkanBackend::Impl {
     std::vector<FenceResource> fences;
     std::vector<SwapchainResource> swapchains;
 
-    void setObjectName(VkObjectType type, RHIUInt64 object, const std::string& name) const {
+    void setObjectName(VkObjectType type, u64 object, const std::string& name) const {
         if (setDebugUtilsObjectName == nullptr || object == 0 || name.empty()) {
             return;
         }
@@ -793,10 +813,10 @@ struct RHIVulkanBackend::Impl {
         setDebugUtilsObjectName(native.device, &info);
     }
 
-    RHIUInt32 findMemoryType(RHIUInt32 typeBits, VkMemoryPropertyFlags properties) const {
+    u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const {
         VkPhysicalDeviceMemoryProperties memoryProperties{};
         vkGetPhysicalDeviceMemoryProperties(native.physicalDevice, &memoryProperties);
-        for (RHIUInt32 index = 0; index < memoryProperties.memoryTypeCount; ++index) {
+        for (u32 index = 0; index < memoryProperties.memoryTypeCount; ++index) {
             const bool typeMatches = (typeBits & (1u << index)) != 0;
             const bool flagsMatch = (memoryProperties.memoryTypes[index].propertyFlags & properties) == properties;
             if (typeMatches && flagsMatch) {
@@ -840,7 +860,7 @@ static void appendUniqueExtension(std::vector<const char*>& extensions, const ch
 }
 
 static std::vector<VkLayerProperties> enumerateInstanceLayers() {
-    RHIUInt32 count = 0;
+    u32 count = 0;
     vkEnumerateInstanceLayerProperties(&count, nullptr);
     std::vector<VkLayerProperties> layers(count);
     if (count != 0) {
@@ -850,7 +870,7 @@ static std::vector<VkLayerProperties> enumerateInstanceLayers() {
 }
 
 static std::vector<VkExtensionProperties> enumerateInstanceExtensions() {
-    RHIUInt32 count = 0;
+    u32 count = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> extensions(count);
     if (count != 0) {
@@ -860,7 +880,7 @@ static std::vector<VkExtensionProperties> enumerateInstanceExtensions() {
 }
 
 static std::vector<VkExtensionProperties> enumerateDeviceExtensions(VkPhysicalDevice device) {
-    RHIUInt32 count = 0;
+    u32 count = 0;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> extensions(count);
     if (count != 0) {
@@ -898,7 +918,7 @@ static VulkanSwapchainSupport querySwapchainSupport(VkPhysicalDevice device, VkS
         return support;
     }
 
-    RHIUInt32 formatCount = 0;
+    u32 formatCount = 0;
     support.formatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
     if (support.formatsResult != VK_SUCCESS) {
         return support;
@@ -912,7 +932,7 @@ static VulkanSwapchainSupport querySwapchainSupport(VkPhysicalDevice device, VkS
         }
     }
 
-    RHIUInt32 presentModeCount = 0;
+    u32 presentModeCount = 0;
     support.presentModesResult = vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
     if (support.presentModesResult != VK_SUCCESS) {
         return support;
@@ -959,7 +979,7 @@ static VkPresentModeKHR chooseSwapchainPresentMode(const VulkanSwapchainSupport&
 }
 
 static VkExtent2D chooseSwapchainExtent(const VulkanSwapchainSupport& support, RHIExtent2D requestedExtent) {
-    if (support.capabilities.currentExtent.width != std::numeric_limits<RHIUInt32>::max()) {
+    if (support.capabilities.currentExtent.width != std::numeric_limits<u32>::max()) {
         return support.capabilities.currentExtent;
     }
 
@@ -969,8 +989,8 @@ static VkExtent2D chooseSwapchainExtent(const VulkanSwapchainSupport& support, R
     };
 }
 
-static RHIUInt32 chooseSwapchainImageCount(const VulkanSwapchainSupport& support, RHIUInt32 requestedImageCount) {
-    RHIUInt32 imageCount = std::max(requestedImageCount, support.capabilities.minImageCount);
+static u32 chooseSwapchainImageCount(const VulkanSwapchainSupport& support, u32 requestedImageCount) {
+    u32 imageCount = std::max(requestedImageCount, support.capabilities.minImageCount);
     if (support.capabilities.maxImageCount > 0) {
         imageCount = std::min(imageCount, support.capabilities.maxImageCount);
     }
@@ -1005,12 +1025,12 @@ static VkCompositeAlphaFlagBitsKHR chooseSwapchainCompositeAlpha(const VulkanSwa
 static VulkanQueueFamilies findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     VulkanQueueFamilies result{};
 
-    RHIUInt32 count = 0;
+    u32 count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, families.data());
 
-    for (RHIUInt32 index = 0; index < count; ++index) {
+    for (u32 index = 0; index < count; ++index) {
         const VkQueueFlags flags = families[index].queueFlags;
         if (result.graphics == RHI_INVALID_INDEX && (flags & VK_QUEUE_GRAPHICS_BIT) != 0) {
             result.graphics = index;
@@ -1113,7 +1133,7 @@ static bool supportsRequiredRenderFeatures(const VulkanDeviceSupport& support, c
 // - 不满足队列、surface、扩展、required feature 的设备直接淘汰；
 // - 离散 GPU 默认更高分；
 // - LowPower 模式下集成 GPU 会被偏好。
-static int scorePhysicalDevice(VkPhysicalDevice device, VkSurfaceKHR surface, const RHIVulkanBackendDesc& desc) {
+static int scorePhysicalDevice(VkPhysicalDevice device, VkSurfaceKHR surface, const RHIVulkanDesc& desc) {
     const VulkanDeviceSupport support = queryVulkanDeviceSupport(device);
 
     const auto queues = findQueueFamilies(device, surface);
@@ -1160,3 +1180,8 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
     info.pfnUserCallback = vulkanDebugCallback;
     return info;
 }
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+

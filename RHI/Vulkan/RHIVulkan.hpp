@@ -16,11 +16,11 @@ namespace rhi {
 struct RHIVulkanSurfaceDesc {
     VkSurfaceKHR surface = VK_NULL_HANDLE; ///< 外部传入的 Vulkan surface。
     std::function<VkSurfaceKHR(VkInstance)> createSurface; ///< 可选 surface 工厂；用于 GLFW 这类必须拿到 VkInstance 后才能创建 surface 的窗口库。
-    bool ownsSurface = false; ///< true 表示 RHIVulkanBackend::shutdown 时会销毁 surface。
+    bool ownsSurface = false; ///< true 表示 RHIVulkan::shutdown 时会销毁 surface。
 };
 
 /// Vulkan 后端初始化描述，组合通用 RHIBackendDesc 和 Vulkan 专用扩展需求。
-struct RHIVulkanBackendDesc {
+struct RHIVulkanDesc {
     RHIBackendDesc backend{}; ///< 通用后端初始化参数。
     RHIVulkanSurfaceDesc surface{}; ///< 可选 surface；没有 surface 时仍可做离屏渲染和计算。
     std::vector<const char*> requiredInstanceExtensions; ///< 平台必须启用的 instance extensions。
@@ -40,10 +40,10 @@ struct RHIVulkanNativeHandles {
     VkQueue computeQueue = VK_NULL_HANDLE; ///< compute queue。
     VkQueue transferQueue = VK_NULL_HANDLE; ///< transfer queue。
     VkQueue presentQueue = VK_NULL_HANDLE; ///< present queue。
-    RHIUInt32 graphicsQueueFamily = RHI_INVALID_INDEX; ///< graphics queue family index。
-    RHIUInt32 computeQueueFamily = RHI_INVALID_INDEX; ///< compute queue family index。
-    RHIUInt32 transferQueueFamily = RHI_INVALID_INDEX; ///< transfer queue family index。
-    RHIUInt32 presentQueueFamily = RHI_INVALID_INDEX; ///< present queue family index。
+    u32 graphicsQueueFamily = RHI_INVALID_INDEX; ///< graphics queue family index。
+    u32 computeQueueFamily = RHI_INVALID_INDEX; ///< compute queue family index。
+    u32 transferQueueFamily = RHI_INVALID_INDEX; ///< transfer queue family index。
+    u32 presentQueueFamily = RHI_INVALID_INDEX; ///< present queue family index。
 };
 
 /// 基于 RHIDefinitions.hpp 的 Vulkan 后端。
@@ -53,18 +53,18 @@ struct RHIVulkanNativeHandles {
 /// - RHIBindGroupLayoutDesc / RHIBindGroupDesc -> VkDescriptorSetLayout / VkDescriptorSet
 /// - RHIGraphicsPipelineDesc / RHIComputePipelineDesc -> VkPipeline
 /// - RHISwapchainDesc / RHIPresentDesc -> VkSwapchainKHR / vkQueuePresentKHR
-class RHIVulkanBackend {
+class RHIVulkan {
 public:
-    RHIVulkanBackend();
-    ~RHIVulkanBackend();
+    RHIVulkan();
+    ~RHIVulkan();
 
-    RHIVulkanBackend(const RHIVulkanBackend&) = delete;
-    RHIVulkanBackend& operator=(const RHIVulkanBackend&) = delete;
-    RHIVulkanBackend(RHIVulkanBackend&&) noexcept;
-    RHIVulkanBackend& operator=(RHIVulkanBackend&&) noexcept;
+    RHIVulkan(const RHIVulkan&) = delete;
+    RHIVulkan& operator=(const RHIVulkan&) = delete;
+    RHIVulkan(RHIVulkan&&) noexcept;
+    RHIVulkan& operator=(RHIVulkan&&) noexcept;
 
     /// 初始化 Vulkan instance、physical device、logical device 和基础资源池。
-    [[nodiscard]] bool initialize(const RHIVulkanBackendDesc& desc, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool initialize(const RHIVulkanDesc& desc, std::string* errorMessage = nullptr);
 
     /// 销毁所有 Vulkan 对象；调用后所有渲染句柄都失效。
     void shutdown() noexcept;
@@ -140,7 +140,7 @@ public:
         RHISwapchain swapchain,
         RHISemaphore signalSemaphore,
         RHIFence signalFence,
-        RHIUInt32* imageIndex,
+        u32* imageIndex,
         std::string* errorMessage = nullptr);
 
     /// 按 RHIQueueSubmitDesc 提交队列；当前提交已录好的内部/外部命令缓冲为空时可用于同步测试。
@@ -180,3 +180,5 @@ private:
 };
 
 } // namespace rhi
+
+

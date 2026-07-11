@@ -1,6 +1,14 @@
-﻿RHIBuffer RHIVulkanBackend::createBuffer(const RHIBufferDesc& desc) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+#include "RHIVulkan.cpp"
+
+namespace rhi {
+#endif
+
+RHIBuffer RHIVulkan::createBuffer(const RHIBufferDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
     if (desc.size == 0) {
         throw std::runtime_error("RHIBufferDesc::size 必须大于 0");
@@ -50,16 +58,16 @@
     }
 
     const RHIBuffer handle = makeRenderHandle<RHIBuffer>(impl_->buffers, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<RHIUInt64>(impl_->buffers.back().buffer), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<u64>(impl_->buffers.back().buffer), desc.debugName);
     return handle;
 }
 
 // Texture 对应 VkImage。注意 VkImage 只是“存储和布局状态”，真正给 shader 或 render pass
 // 使用时还需要 VkImageView；因此 createTexture 只负责 image + memory，createTextureView
 // 才负责 format/aspect/mip/layer 这些访问窗口。
-RHITexture RHIVulkanBackend::createTexture(const RHITextureDesc& desc) {
+RHITexture RHIVulkan::createTexture(const RHITextureDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     Impl::TextureResource resource{};
@@ -104,16 +112,16 @@ RHITexture RHIVulkanBackend::createTexture(const RHITextureDesc& desc) {
     }
 
     const RHITexture handle = makeRenderHandle<RHITexture>(impl_->textures, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<RHIUInt64>(impl_->textures.back().image), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<u64>(impl_->textures.back().image), desc.debugName);
     return handle;
 }
 
 // ImageView 是 Vulkan 访问图片的入口：同一个 VkImage 可以有多个 view，分别选择不同 mip、
 // array layer、format reinterpretation 或 depth/stencil aspect。RenderGraph 找附件时也是
 // 通过 RHITextureView 找到可绑定的 VkImageView。
-RHITextureView RHIVulkanBackend::createTextureView(const RHITextureViewDesc& desc) {
+RHITextureView RHIVulkan::createTextureView(const RHITextureViewDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     const Impl::TextureResource* texture = getRenderResource(impl_->textures, desc.texture);
@@ -142,15 +150,15 @@ RHITextureView RHIVulkanBackend::createTextureView(const RHITextureViewDesc& des
     }
 
     const RHITextureView handle = makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<RHIUInt64>(impl_->textureViews.back().view), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<u64>(impl_->textureViews.back().view), desc.debugName);
     return handle;
 }
 
 // Sampler 只描述采样规则，不拥有纹理数据。Vulkan 把 sampled image 和 sampler 拆开是常见
 // 做法：同一张 texture 可以配多个 sampler，同一个 sampler 也能复用到多张 texture。
-RHISampler RHIVulkanBackend::createSampler(const RHISamplerDesc& desc) {
+RHISampler RHIVulkan::createSampler(const RHISamplerDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     Impl::SamplerResource resource{};
@@ -178,22 +186,22 @@ RHISampler RHIVulkanBackend::createSampler(const RHISamplerDesc& desc) {
     }
 
     const RHISampler handle = makeRenderHandle<RHISampler>(impl_->samplers, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<RHIUInt64>(impl_->samplers.back().sampler), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<u64>(impl_->samplers.back().sampler), desc.debugName);
     return handle;
 }
 
 // Vulkan shader module 只接收 SPIR-V bytecode。这里不编译 GLSL/HLSL，而是假定上层已经
 // 提供 bytecode 或文件路径；entry point 和 stage 会在创建 pipeline 时写进 shader stage。
-RHIShader RHIVulkanBackend::createShaderModule(const RHIShaderDesc& desc) {
+RHIShader RHIVulkan::createShaderModule(const RHIShaderDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     std::vector<std::byte> bytecode = desc.bytecode;
     if (bytecode.empty() && !desc.filePath.empty()) {
         bytecode = readBinaryFile(desc.filePath);
     }
-    if (bytecode.empty() || (bytecode.size() % sizeof(RHIUInt32)) != 0) {
+    if (bytecode.empty() || (bytecode.size() % sizeof(u32)) != 0) {
         throw std::runtime_error("Vulkan shader module 需要非空且 4 字节对齐的 SPIR-V bytecode");
     }
 
@@ -203,23 +211,23 @@ RHIShader RHIVulkanBackend::createShaderModule(const RHIShaderDesc& desc) {
     VkShaderModuleCreateInfo moduleInfo{};
     moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     moduleInfo.codeSize = bytecode.size();
-    moduleInfo.pCode = reinterpret_cast<const RHIUInt32*>(bytecode.data());
+    moduleInfo.pCode = reinterpret_cast<const u32*>(bytecode.data());
 
     if (vkCreateShaderModule(impl_->native.device, &moduleInfo, nullptr, &resource.module) != VK_SUCCESS) {
         throw std::runtime_error("vkCreateShaderModule 失败");
     }
 
     const RHIShader handle = makeRenderHandle<RHIShader>(impl_->shaders, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_SHADER_MODULE, reinterpret_cast<RHIUInt64>(impl_->shaders.back().module), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_SHADER_MODULE, reinterpret_cast<u64>(impl_->shaders.back().module), desc.debugName);
     return handle;
 }
 
 // BindGroupLayout 对应 Vulkan descriptor set layout：它声明某个 set 里有哪些 binding、
 // 每个 binding 是 buffer/image/sampler，以及哪些 shader stage 可见。Push constant 不在
 // descriptor set 中分配，所以这里跳过，稍后交给 PipelineLayout。
-RHIBindGroupLayout RHIVulkanBackend::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
+RHIBindGroupLayout RHIVulkan::createBindGroupLayout(const RHIBindGroupLayoutDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
@@ -245,7 +253,7 @@ RHIBindGroupLayout RHIVulkanBackend::createBindGroupLayout(const RHIBindGroupLay
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<RHIUInt32>(bindings.size());
+    layoutInfo.bindingCount = static_cast<u32>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(impl_->native.device, &layoutInfo, nullptr, &resource.layout) != VK_SUCCESS) {
@@ -253,15 +261,15 @@ RHIBindGroupLayout RHIVulkanBackend::createBindGroupLayout(const RHIBindGroupLay
     }
 
     const RHIBindGroupLayout handle = makeRenderHandle<RHIBindGroupLayout>(impl_->bindGroupLayouts, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<RHIUInt64>(impl_->bindGroupLayouts.back().layout), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<u64>(impl_->bindGroupLayouts.back().layout), desc.debugName);
     return handle;
 }
 
 // BindGroup 对应实际 descriptor set。layout 只声明“槽位形状”，这里把具体 buffer/view/sampler
 // 写入 VkDescriptorSet。绘制时只需要 vkCmdBindDescriptorSets，不再逐个资源绑定。
-RHIBindGroup RHIVulkanBackend::createBindGroup(const RHIBindGroupDesc& desc) {
+RHIBindGroup RHIVulkan::createBindGroup(const RHIBindGroupDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     const Impl::BindGroupLayoutResource* layout = getRenderResource(impl_->bindGroupLayouts, desc.layout);
@@ -347,7 +355,7 @@ RHIBindGroup RHIVulkanBackend::createBindGroup(const RHIBindGroupDesc& desc) {
     }
 
     if (!writes.empty()) {
-        vkUpdateDescriptorSets(impl_->native.device, static_cast<RHIUInt32>(writes.size()), writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(impl_->native.device, static_cast<u32>(writes.size()), writes.data(), 0, nullptr);
     }
 
     return makeRenderHandle<RHIBindGroup>(impl_->bindGroups, std::move(resource));
@@ -355,9 +363,9 @@ RHIBindGroup RHIVulkanBackend::createBindGroup(const RHIBindGroupDesc& desc) {
 
 // PipelineLayout 是 shader 资源接口的总表：它组合多个 descriptor set layout，并声明 push
 // constant 范围。图形/计算 pipeline 创建和命令绑定 descriptor set 时都必须使用同一个 layout。
-RHIPipelineLayout RHIVulkanBackend::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
+RHIPipelineLayout RHIVulkan::createPipelineLayout(const RHIPipelineLayoutDesc& desc) {
     if (!isInitialized()) {
-        throw std::runtime_error("RHIVulkanBackend 尚未初始化");
+        throw std::runtime_error("RHIVulkan 尚未初始化");
     }
 
     std::vector<VkDescriptorSetLayout> setLayouts;
@@ -385,9 +393,9 @@ RHIPipelineLayout RHIVulkanBackend::createPipelineLayout(const RHIPipelineLayout
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = static_cast<RHIUInt32>(setLayouts.size());
+    layoutInfo.setLayoutCount = static_cast<u32>(setLayouts.size());
     layoutInfo.pSetLayouts = setLayouts.data();
-    layoutInfo.pushConstantRangeCount = static_cast<RHIUInt32>(pushRanges.size());
+    layoutInfo.pushConstantRangeCount = static_cast<u32>(pushRanges.size());
     layoutInfo.pPushConstantRanges = pushRanges.data();
 
     if (vkCreatePipelineLayout(impl_->native.device, &layoutInfo, nullptr, &resource.layout) != VK_SUCCESS) {
@@ -395,11 +403,11 @@ RHIPipelineLayout RHIVulkanBackend::createPipelineLayout(const RHIPipelineLayout
     }
 
     const RHIPipelineLayout handle = makeRenderHandle<RHIPipelineLayout>(impl_->pipelineLayouts, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<RHIUInt64>(impl_->pipelineLayouts.back().layout), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<u64>(impl_->pipelineLayouts.back().layout), desc.debugName);
     return handle;
 }
 
-RHIPipelineCache RHIVulkanBackend::createPipelineCache(const RHIPipelineCacheDesc& desc) {
+RHIPipelineCache RHIVulkan::createPipelineCache(const RHIPipelineCacheDesc& desc) {
     Impl::PipelineCacheResource resource{};
     resource.desc = desc;
 
@@ -413,7 +421,11 @@ RHIPipelineCache RHIVulkanBackend::createPipelineCache(const RHIPipelineCacheDes
     }
 
     const RHIPipelineCache handle = makeRenderHandle<RHIPipelineCache>(impl_->pipelineCaches, std::move(resource));
-    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE_CACHE, reinterpret_cast<RHIUInt64>(impl_->pipelineCaches.back().cache), desc.debugName);
+    impl_->setObjectName(VK_OBJECT_TYPE_PIPELINE_CACHE, reinterpret_cast<u64>(impl_->pipelineCaches.back().cache), desc.debugName);
     return handle;
 }
+#if defined(__INTELLISENSE__) && !defined(RHI_VULKAN_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
 

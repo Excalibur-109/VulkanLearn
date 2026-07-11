@@ -1,4 +1,12 @@
-﻿bool RHID3D12Backend::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+﻿#pragma once
+
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+#include "RHID3D12.cpp"
+
+namespace rhi {
+#endif
+
+bool RHID3D12::recordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     try {
         // 先支持最基础的 CPU 可见 buffer 上传。GpuOnly buffer/texture 上传需要 staging resource +
         // CopyBufferRegion/CopyTextureRegion + resource barrier，这属于完整 command recording 的一部分。
@@ -49,7 +57,7 @@
     }
 }
 
-bool RHID3D12Backend::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D12::submitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
     const bool hasUploads = !packet.uploads.buffers.empty() || !packet.uploads.textures.empty();
     if (hasUploads || !packet.workloads.empty()) {
         return recordAndSubmitFrame(packet, errorMessage);
@@ -66,7 +74,7 @@ bool RHID3D12Backend::submitFrame(const RHIFramePacket& packet, std::string* err
     return true;
 }
 
-void RHID3D12Backend::waitIdle() const noexcept {
+void RHID3D12::waitIdle() const noexcept {
     if (!isInitialized() || impl_->fence == nullptr || impl_->fenceEvent == nullptr) {
         return;
     }
@@ -89,3 +97,8 @@ void RHID3D12Backend::waitIdle() const noexcept {
 // - 已经可以处理 CPU 可见 buffer 上传、submit、present 和 waitIdle；
 // - 还没有把 RenderGraph pass 录制成 command list；
 // - 下一步要补的是 resource barrier、RTV/DSV 绑定、descriptor heap 拷贝、root table 设置、Draw/Dispatch。
+#if defined(__INTELLISENSE__) && !defined(RHI_D3D12_IMPLEMENTATION_ASSEMBLY)
+} // namespace rhi
+#endif
+
+
