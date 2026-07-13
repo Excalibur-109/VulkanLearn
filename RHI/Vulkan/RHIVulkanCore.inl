@@ -299,6 +299,18 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
 
         // Per-frame 资源池:framesInFlight 个 command buffer + fence + 持久映射的 ring staging。
         // framesInFlight=1 时退化为单缓冲;2 是最常见的 GPU/CPU 重叠配置。
+        //
+        // 【教学】为什么 command pool 用 TRANSIENT_BIT:
+        //   - TRANSIENT_BIT 提示 driver 这些 command buffer 短生命周期,可以
+        //     用更便宜的内部 allocator(driver 内部是 ring buffer 而不是 tree)。
+        //   - RESET_COMMAND_BUFFER_BIT 允许单独 reset(否则只能 reset 整个 pool)。
+        //   - 这两个 flag 配合一次性提交或 frames-in-flight 都很合适。
+        //
+        // 【教学】为什么 fence 创建时要 SIGNALED:
+        //   - 第一次进 RecordAndSubmitFrame 时,这个 slot 还没提交过,没有"上一帧"可等。
+        //   - vkWaitForFences 等一个未 signaled 的 fence 会一直 block(死锁)。
+        //   - 初始 signaled 让第一次 wait 立即返回,之后每次提交后自动 un-signaled。
+        //   - vkQueueSubmit 后 fence 会被驱动置为 un-signaled,GPU 完成后回到 signaled。
         impl_->framesInFlight = std::max(1u, desc.backend.framesInFlight);
         impl_->frames.resize(impl_->framesInFlight);
         {
@@ -316,6 +328,11 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
             // Ring staging 容量:16 MB 每帧槽。多数 1080p 帧上传数据远小于此。
             constexpr VkDeviceSize kStagingCapacity = 16ull * 1024 * 1024;
 
+            // HOST_VISIBLE | HOST_COHERENT 组合:CPU 写完不用 vkFlushMappedMemory
+            // 就能被 GPU 看到(COHERENT 自动同步 driver cache 到 GPU)。
+            // 代价是每次写都走 cache 同步路径,比"非 COHERENT + 手动 flush"略慢,
+            // 但代码简洁很多——只要不是 ultra-high-throughput 的内存带宽瓶颈,
+            // 用 COHERENT 是合理默认。
             VkBufferCreateInfo stagingInfo{};
             stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             stagingInfo.size = kStagingCapacity;

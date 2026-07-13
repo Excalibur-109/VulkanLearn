@@ -16,8 +16,17 @@ bool RHID3D12::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             throw std::runtime_error("D3D12 device/command allocator/list is not initialized");
         }
 
-        // 1) 重置 command allocator + list。Allocator reset 必须等 GPU 用完,fence 等同于
-        //    frames-in-flight 同步模型(本后端暂时在 Submit 时 waitForFence)。
+        // 1) 重置 command allocator + list。
+        //
+        // 【教学】D3D12 跟 Vulkan 的关键差异:
+        //   - D3D12 用 command allocator(command buffer 的内存池) + command list(录制器)。
+        //     两者解耦,allocator 可以装多个 list。
+        //   - Reset allocator 必须等 GPU 用完——这跟 Vulkan 的 command pool reset
+        //     概念相同。但 D3D12 没"per-frame fence 自动等"机制,需要在 caller
+        //     侧保证;本例子里 AcquireNextImage 之前 WaitForCPUSignal(slot) 就够了。
+        //   - Reset list 第二个参数是"初始 PSO",nullptr 表示不绑定(之后用
+        //     SetPipelineState 单独设)。绑定初始 PSO 能省一次 state 切换,但
+        //     要求第一个 draw 用那个 PSO——本实现没这限制,所以传 nullptr。
         if (FAILED(impl_->commandAllocator->Reset())) {
             throw std::runtime_error("ID3D12CommandAllocator::Reset failed");
         }
@@ -27,6 +36,15 @@ bool RHID3D12::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
 
         // 2) SetDescriptorHeaps:必须在第一次 SetGraphicsRootDescriptorTable 之前。
         //    CBV_SRV_UAV + SAMPLER 都已 shader-visible(见 RHID3D12Core.inl)。
+        //
+        // 【教学】D3D12 的 descriptor 跟 Vulkan 关键差异:
+        //   - D3D12 descriptor heap 分 CPU-only 和 shader-visible 两类。
+        //     shader-visible heap 的 descriptor 可以直接 SetGraphicsRootDescriptorTable
+        //     绑定;CPU-only 的必须先 CopyDescriptors 到 shader-visible heap。
+        //   - 本实现把 CBV_SRV_UAV 和 SAMPLER heap 设为 shader-visible,
+        //     CreateTextureView/CBV/SRV 时直接拿到的 descriptor 就能 GPU 端用。
+        //   - 一个 command list 同时只能"激活"一组 heap(最多 1 个 CBV_SRV_UAV + 1 个 SAMPLER),
+        //     这就是为什么 SetDescriptorHeaps 只传两个。
         ID3D12DescriptorHeap* heaps[2] = {
             impl_->cbvSrvUavHeap.heap.Get(),
             impl_->samplerHeap.heap.Get()
@@ -201,6 +219,21 @@ bool RHID3D12::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             impl_->commandList->RSSetScissorRects(1, &d3dScissor);
 
             // 录制 draws
+            //
+            // 【教学】D3D12 draw 的最少必要动作:
+            //   1. SetPipelineState        — 切换 PSO(state 全烘进 PSO)
+            //   2. SetGraphicsRootSignature — 切换 root signature(PSO 创建时绑定,
+            //                                   但 explicit 调能 hot-swap 不同 PSO 共享 signature)
+            //   3. SetGraphicsRootDescriptorTable ×N — 绑定 descriptor table 到 root param slot
+            //   4. IASetVertexBuffers / IASetIndexBuffer — 几何输入
+            //   5. DrawIndexedInstanced    — draw
+            //
+            // 【教学】关于 root param index 的简化:
+            //   createRootSignatureForLayout 给 layout 每个 entry 加一个 root param,
+            //   所以 root param i = layout entry i。但 CombinedTextureSampler 实际上
+            //   会加 2 个 root param(SRV + SAMPLER),这里按 1 entry 1 root param 处理
+            //   是简化,真实工程应该把 root param 数量和顺序在 PipelineLayoutResource
+            //   里存下来,record 时直接索引。当前简化对 PBR 例子的非组合 binding 是对的。
             for (const RHIDrawIndexedCommand& draw : workload->indexedDraws) {
                 const Impl::PipelineResource* pipeline = getRenderResource(impl_->pipelines, draw.pipeline);
                 if (pipeline == nullptr || pipeline->pipelineState == nullptr) {

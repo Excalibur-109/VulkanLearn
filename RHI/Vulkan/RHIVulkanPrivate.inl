@@ -855,14 +855,31 @@ struct RHIVulkan::Impl {
     std::unordered_map<u64, std::vector<u64>> viewsByTexture;
 
     /// 帧资源:每帧独立的 command buffer + fence + ring staging buffer。
-    /// 提交时按 frameIndex % framesInFlight 轮转,等上一帧同一 slot 的 fence 即可,
+    /// 提交时按 frameIndex % framesInFlight 轮转,等上一帧同 slot 的 fence 即可,
     /// CPU 就能提前 N 帧录制下一帧,不必等 GPU 真正完成。
+    ///
+    /// 【教学】为什么每帧需要独立的 command buffer:
+    ///   - vkBeginCommandBuffer 后不能再次 begin(除非是 secondary),所以一个
+    ///     command buffer 只能录一帧。复用需要先 vkResetCommandBuffer。
+    ///   - 但 reset 必须等 GPU 用完。同一根 command buffer 录第 2 帧时,第 1 帧
+    ///     还在 GPU 跑,数据竞争。所以需要 N 个 command buffer 轮转。
+    ///   - 同样的逻辑也适用于 ring staging slot:CPU 写到一半时,GPU 还在读
+    ///     旧数据。N 个独立 slot 防止 race。
     struct FrameResources {
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFence inFlightFence = VK_NULL_HANDLE;
 
         // 持久映射的环形 staging buffer。Upload 走 offset 推进,跨帧自动回卷;
         // 满了就 wrap(等待上一帧的 fence 后回卷;理论上单帧不会装满 N MB)。
+        //
+        // 【教学】为什么是"环形"而不是"链式":
+        //   - 链式:每帧新建一个 staging buffer,本帧用完等 fence 后销毁。
+        //     缺点是 vkCreateBuffer / vkAllocateMemory / vkMapMemory 每帧都要走一遍。
+        //   - 环形:初始化时一次性 allocate 大 buffer,持久 mapped,所有帧共用。
+        //     提交时按 head 推进,head 超过 capacity 就等当前 slot 的 fence 后 wrap 回 0。
+        //   - 16MB/slot 的容量对 1080p PBR 例子绰绰有余;4K PBR 场景可能需要 64MB。
+        //   - stagingSubmittedHead 留作未来"等上一次提交的 head 之后才能 wrap"用
+        //     (本实现简化,直接假设单帧不会装满,跨帧直接回 0)。
         VkBuffer      stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
         void*         stagingMapped = nullptr;
@@ -901,6 +918,8 @@ struct RHIVulkan::Impl {
         if (view == nullptr) {
             return;
         }
+        // 同样的 view handle 可能因为 hash 冲突存进 bucket 多次——erase by value
+        // 配合 std::remove 可以安全去重(后续 unregisterView 不依赖唯一性)。
         viewsByTexture[view->desc.texture.value].push_back(viewHandle.value);
     }
 

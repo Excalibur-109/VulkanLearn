@@ -1,5 +1,42 @@
 ﻿#pragma once
 
+// =============================================================================
+//  Vulkan frame 录制
+// =============================================================================
+//
+// 一帧的核心任务是:把 RHIFramePacket(高层意图)翻译成 VkCommandBuffer 二进制,
+// 然后 vkQueueSubmit 提交给 GPU。这个文件围绕"性能"和"并发"两个主题组织:
+//
+// 性能:
+//   - ring staging buffer:跨帧复用一块大 HOST_VISIBLE buffer,避免每帧
+//     vkCreateBuffer / vkAllocateMemory / vkMapMemory。CPU 写完一个 upload 就
+//     推进 head,跨帧回卷;这是教科书级"避免 driver 开销"技巧。
+//   - barrier 合并:本帧所有 upload 共享一次 vkCmdPipelineBarrier(原版每个
+//     upload 一次),driver 内部 barrier graph 也会更小。
+//   - barrier stage 精确化:用 stageFromResourceState() 推导 src/dst pipeline
+//     stage,而不是 ALL_COMMANDS_BIT。后者强制 GPU 等待所有命令流,前者只等
+//     真正会读这个 buffer 的阶段。在大量并发的 command buffer 录制下差距明显。
+//   - hash 索引:viewsByTexture 让"按 texture 找 view"从 O(n) 线性扫变成
+//     O(1) 查表;每次 RenderGraph pass 都会触发这种查询。
+//
+// 并发:
+//   - frames-in-flight:每帧独立的 command buffer + fence + ring staging slot,
+//     配合 caller 提供的 per-slot cpuWaitGPUSignal,允许 CPU 提前 N 帧录制下一帧。
+//     不做 frames-in-flight 的 RHI 实际只跑出 GPU 性能的 30%~50%(CPU 干等
+//     GPU 完成才能复用 command buffer / 资源)。
+//   - 后端不持有自有 in-flight 状态:vkQueueSubmit 的 fence 直接用 packet 的
+//     cpuWaitGPUSignal,caller 拥有同步所有权,这样 caller 的 WaitForCPUSignal
+//     才能等到"提交完成",下一帧 AcquireNextImage 才能保证 semaphore 已被消费。
+//
+// 教学要点:
+//   - "所有权"问题:同一份资源(view/bindset/buffer)被多次引用,句柄
+//     是 1-based 索引,Destroy 只置 null 不压缩 vector——这是为了保持句柄稳定。
+//   - 一次性 staging 的回收:fallback path 的 buffer 在 GPU 仍在引用时不能
+//     立即销毁,得挂到下次同 slot 复用时统一释放。简化做法是 thread_local
+//     pendingFallback[] 数组,生产应该换成"等当前 slot fence 后释放"队列。
+//   - Vulkan 是显式 API:state 转换、barrier、queue submit 全部要自己写,这也是
+//     为什么每一行代码都在做事——没有"driver 帮忙"的余地。
+
 #include "RHIVulkanPrivate.inl"
 
 namespace rhi {
@@ -26,11 +63,27 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     //    后端不做自有 frames-in-flight 状态:frameIndex 由 caller 提供,
     //    每帧的 cpuWaitGPUSignal 是 caller 给的"上一帧已结束"信号。
     //    这样 caller 拥有同步所有权,后端只负责"用 caller 的 fence 完成 submit"。
+    //
+    // 【教学】frames-in-flight 的本质:CPU 录制和 GPU 执行天然 pipeline 化。
+    // 想要 CPU 不被 GPU 阻塞,必须让 CPU 写 command buffer 用的所有资源(command
+    // buffer 自身、staging buffer、descriptor、render target)对 GPU 的"上一帧
+    // 使用"已经结束。这就是为什么每帧需要独立的 ring staging slot——否则 slot 0
+    // 的 staging buffer 写到一半,GPU 还在读 slot 0 的旧数据,data race。
+    // 取模选 slot 是为了 slots 自动循环,slots 数 = CPU/GPU 重叠度。
     const u64 frameSlot = packet.settings.frameIndex % impl_->framesInFlight;
     Impl::FrameResources& frame = impl_->frames[static_cast<size_t>(frameSlot)];
 
     // 2) wrap ring staging 到 fence 已经等的 offset 之后。
     //    单帧上传量远小于 capacity,绝大多数情况下这里 head=0 就够了。
+    //
+    // 【教学】为什么 ring staging 比"每帧新建 staging buffer"快:
+    //   - vkCreateBuffer/vkAllocateMemory 内部要 driver 走系统调用,锁 heap,
+    //     还要刷 driver 内部 cache。1080p PBR 例子一帧 6 个 upload,6 套流程
+    //     累加 ~0.3-1ms 的 driver 开销。
+    //   - vkMapMemory/unmapMemory 同理,map 还要做 page 锁定。
+    //   - 用持久映射 + ring 后,所有这些都消掉。CPU 直接 memcpy 到 mapped pointer,
+    //     driver 看到的是普通的内存写入,不感知这是一次上传。
+    // 缺点:capacity 要预分配(本实现 16MB/slot),超了就 fallback 到一次性 staging。
     frame.stagingHead = 0;
     frame.stagingSubmittedHead = 0;
 
@@ -53,11 +106,20 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
     // 4) 上传:走持久映射的 ring staging buffer,合并 barrier 单次 vkCmdPipelineBarrier。
     //    单个 upload 直接 push 写入,跨 upload 自动落到 GPU 端的 vkCmdCopyBuffer。
+    //
+    // 【教学】为什么 upload barrier 要合并:Vulkan 允许一次 vkCmdPipelineBarrier
+    // 提交多个 buffer/texture barrier(用数组指针)。原版每 upload 一次 barrier,
+    // 6 个 upload = 6 次 driver call + 6 次 barrier graph node;合并后 1 次调用,
+    // barrier graph 也只有 1 个节点(可以批量 pass 优化)。
+    // GPU 端真正"等"的语义没变——只是少了几条 command buffer entry。
     std::vector<VkBufferMemoryBarrier> uploadBarriers;
     uploadBarriers.reserve(packet.uploads.buffers.size());
 
     auto tryAllocateStaging = [&](VkDeviceSize size, VkDeviceSize& outOffset) -> bool {
         // 4 字节对齐,保证任何 RHIBufferUsage 都能正确 copy。
+        // Vulkan spec 规定 copy 的 offset 和 size 必须满足 buffer usage 对齐要求
+        // (例如 uniform buffer 要求 16 字节对齐);这里取保守的 4 字节起步,
+        // 对齐要求更严的 buffer 类型在使用方保证。
         constexpr VkDeviceSize kAlignment = 4;
         const VkDeviceSize alignedHead = (frame.stagingHead + kAlignment - 1) & ~(kAlignment - 1);
         if (alignedHead + size > frame.stagingCapacity) {
@@ -180,6 +242,14 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     }
 
     // 5) barrier 合并:一次 vkCmdPipelineBarrier 处理所有 upload barrier,stage 用 ALL_TRANSFER。
+    //
+    // 【教学】srcStageMask 的意义:vkCmdPipelineBarrier 的 srcStageMask 告诉 GPU
+    // "等到 srcStage 之前的命令执行完再继续";ALL_COMMANDS_BIT 等所有阶段的命令
+    // (包括 graphics/compute/transfer),保守但慢。VK_PIPELINE_STAGE_TRANSFER_BIT
+    // 只等 transfer queue 阶段——我们这里唯一的 src 是 vkCmdCopyBuffer(transfer),
+    // 所以 TRANSFER 阶段就够,GPU 不用等 graphics/compute。
+    // dstStageMask 选 ALL_COMMANDS_BIT 是因为 upload 的目标 buffer 可能是 vertex
+    // / index / uniform / storage,这些被不同 stage 消费,得等所有 stage 才能用。
     if (!uploadBarriers.empty()) {
         vkCmdPipelineBarrier(
             commandBuffer,
@@ -207,6 +277,12 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     };
 
     // 走 viewsByTexture 哈希索引,O(1) 找到 attachment 的 view。
+    //
+    // 【教学】原版每个 RenderGraph pass 录制时,要在所有 textureViews 里线性扫
+    // 找匹配 texture + aspect 的 view。一个复杂场景几百个 view,4 个 pass × 2
+    // attachment = 8 次扫描,每帧白白消耗 10000+ vector 索引。改成 hash 后
+    // O(1) 查 bucket,然后只比对这个 texture 的几个 view(通常 1~3 个)。
+    // 创建/销毁 view 时维护这个 hash 表(registerView/unregisterView)是关键。
     const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
         if (!texture) {
             return {};
@@ -230,6 +306,17 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     };
 
     // 状态转换:用更精确的 stage mask,而不是 ALL_COMMANDS_BIT。
+    //
+    // 【教学】RHIResourceState::RenderTarget / DepthWrite / ShaderRead 等只是
+    // "意图",Vulkan 实际需要 VkPipelineStageFlags + VkAccessFlags + VkImageLayout
+    // 三元组才能正确表达 barrier。本函数把这三件事一次性做了:
+    //   - access:用 accessFromResourceState() 查表(也是 O(1) 查表版本)
+    //   - layout:用 toVkImageLayout() 查表
+    //   - stage:用 stageFromResourceState() 查表(关键:不是 ALL_COMMANDS_BIT)
+    //
+    // "Undefined" 特殊:刚创建或没被写入过的 image,oldLayout 必须是
+    // VK_IMAGE_LAYOUT_UNDEFINED,Vulkan 会丢弃旧内容(配合 discardContents
+    // 优化),但 src stage 必须是 TOP_OF_PIPE(没有前置命令要等)。
     const auto transitionTexture = [&](RHITexture handle, RHIResourceState after) {
         Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
         if (texture == nullptr || texture->image == VK_NULL_HANDLE || texture->currentState == after) {
@@ -386,6 +473,17 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         vkCmdSetScissor(commandBuffer, 0, 1, &vkScissor);
 
         // recordDraw 走 baked 句柄,避免每 draw 重复查 vector。
+        //
+        // 【教学】Vulkan draw 调用的最少"必要"动作:
+        //   1. vkCmdBindPipeline    — 切换 PSO(state 都烘进 PSO)
+        //   2. vkCmdBindDescriptorSets — 绑定本 draw 要用的所有 set
+        //   3. vkCmdBindVertexBuffers  — N 个 vertex stream(binding N)
+        //   4. vkCmdBindIndexBuffer  — index buffer + format
+        //   5. vkCmdDrawIndexed      — indexCount, instanceCount, firstIndex 等
+        //   6. optional: vkCmdPushConstants — 小块高频数据(b 在 pipelineLayout 范围内)
+        // 这里 1~5 都做了,6 留作未来。多个 draw 共享相同 pipeline/bindset/vertex
+        // buffer 时,Vulkan driver 会自动剔除 redundant state 设置(等价于
+        // D3D12 driver 的 PSO 缓存),所以不需要在 record 层手动去重。
         const auto recordDraw = [&](const RHIDrawIndexedCommand& draw) {
             const Impl::PipelineResource* pipeline = getRenderResource(impl_->pipelines, draw.pipeline);
             if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE) {
@@ -458,6 +556,17 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     }
 
     // 7) 提交 + Present。注意:不再 vkWaitForFences(UINT64_MAX),只等下一次这个 slot 复用时。
+    //
+    // 【教学】binary vs timeline semaphore 的选择:
+    //   - binary semaphore 只能 wait/signal 各一次(必须先 signal 再 wait,1:1 配对)。
+    //     适合单队列、顺序执行的场景——本 example 就是这种。
+    //   - timeline semaphore 可以"wait >= N"和"signal 到 N"任意顺序,适合:
+    //     · compute 跟 graphics 异步执行(compute 先 signal,graphics 之后 wait)
+    //     · 一根 timeline 表达多帧多提交的依赖关系,避免 N 根 binary
+    //     · 跨 queue 同步
+    //   - 决定走哪条路径看 usesTimelineSemaphore——packet 里有任一 timeline 就走。
+    //   - waitValues/signalValues 即使 binary 也 push(VkTimelineSemaphoreSubmitInfo
+    //     的 pNext 在 binary 模式下不挂载,值不会被读到,所以填啥都无所谓)。
     std::vector<VkSemaphore> waitSignals;
     std::vector<VkPipelineStageFlags> waitStages;
     std::vector<VkSemaphore> signalSemaphores;
@@ -510,6 +619,12 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     // 用 packet 的 cpuWaitGPUSignal 作为 vkQueueSubmit 的 fence。
     // 后端不维护自有 in-flight fence,完全交给 caller。这样 caller 的 WaitForCPUSignal
     // 才能等到真正的"提交完成",AcquireNextImage 之前才能保证 imageAvailable 已被消费。
+    //
+    // 【教学】vkQueueSubmit 的 fence 参数:当 fence 非 null 时,GPU 会在
+    // 整个 submit 链(command buffer + 所有 wait/signal semaphore)完成后
+    // signal 这个 fence。CPU 之后可以 vkWaitForFences() 阻塞等到完成,
+    // 这是 CPU/GPU 同步的标准机制。
+    // 一定要先 vkResetFences 再提交(否则 validation 会报 "submitted in SIGNALED state")。
     VkFence submitFence = frameFence;
     for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
         if (submitDesc.cpuWaitGPUSignal) {
@@ -535,6 +650,16 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
     //    这里把销毁动作挂到下一次这个 slot 被复用时(下一次 SubmitFrame 进来时先回收)。
     //    简化做法:本帧提交完不释放,等 Shutdown 统一回收或下次同 slot 复用时释放。
     //    真实工程应该用一个 per-slot 的"待回收"列表。
+    //
+    // 【教学】Vulkan 资源生命周期问题:vkCmdCopyBuffer 把 staging buffer 引用
+    // 进 command buffer,GPU 异步执行时还在读 staging buffer。如果提交完立即
+    // vkDestroyBuffer,vkFreeMemory,driver 会因为"buffer 仍在使用"而报错
+    // 或者更糟——释放后被另一个线程分配,GPU 读到错误数据。
+    // 正确做法:fence signal 表示 GPU 完成,完成之后才能释放。
+    // 这里的 pendingFallback[] 用"两次同 slot SubmitFrame 之间一定等过 fence"这个
+    // 不变量,简化实现:本帧的 fallback 挂到下次同 slot 进来时再释放。
+    // 8 个 slot 数组足够 frames-in-flight <= 8 的常见场景;真正的生产应该用
+    // (frameSlot, 资源列表) 这样的 map,或 per-slot "待回收"队列。
     static thread_local std::vector<std::pair<VkBuffer, VkDeviceMemory>> pendingFallback[8] = {};
     auto& pending = pendingFallback[frameSlot % 8];
     for (auto& fb : pending) {

@@ -391,6 +391,11 @@ enum class RHIFormat : u16 {
 };
 
 /// RHIFormat 枚举的元素数量。后端用查表映射时用作数组上界。
+///
+/// 【教学】为什么用 enum 最后一个值 + 1:enum class 不保证连续(可以有间隙),
+/// sizeof(RHIFormat) 也不等于 RHI_FORMAT_COUNT(因为底层类型是 u16,2 字节)。
+/// 这里用"最后枚举值 + 1"作为表大小,既能覆盖所有合法值,又不会因为中间留空
+/// 浪费表项。新加格式时只要追加到 ASTC8x8_SRGB 之后,这个常量就跟着扩。
 inline constexpr u32 RHI_FORMAT_COUNT = static_cast<u32>(RHIFormat::ASTC8x8_SRGB) + 1;
 
 /// 判断格式是否包含深度分量，用于选择 depth attachment 或 depth texture 采样路径。
