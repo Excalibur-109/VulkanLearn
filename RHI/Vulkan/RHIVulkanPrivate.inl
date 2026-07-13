@@ -675,6 +675,31 @@ static VkPipelineStageFlags toVkPipelineStages(RHIPipelineStage stages) {
     }
 }
 
+[[maybe_unused]] static VkPipelineStageFlags stageFromResourceState(RHIResourceState state) {
+    switch (state) {
+    case RHIResourceState::Undefined:          return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    case RHIResourceState::CopySource:
+    case RHIResourceState::CopyDestination:
+    case RHIResourceState::ResolveSource:
+    case RHIResourceState::ResolveDestination: return VK_PIPELINE_STAGE_TRANSFER_BIT;
+    case RHIResourceState::VertexBuffer:
+    case RHIResourceState::IndexBuffer:        return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    case RHIResourceState::ConstantBuffer:
+    case RHIResourceState::ShaderRead:
+    case RHIResourceState::ShaderWrite:        return VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+                                                      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    case RHIResourceState::RenderTarget:       return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case RHIResourceState::DepthRead:          return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                                      VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    case RHIResourceState::DepthWrite:         return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                                      VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    case RHIResourceState::Present:            return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    case RHIResourceState::IndirectArgument:   return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    default:                                   return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+}
+
 static VkDeviceSize toVkWholeSize(u64 size) {
     return size == RHI_WHOLE_SIZE ? VK_WHOLE_SIZE : static_cast<VkDeviceSize>(size);
 }
@@ -692,6 +717,25 @@ struct VulkanQueueFamilies {
 // Vulkan 对象、创建时的描述信息、是否拥有对象生命周期等都集中保存在这里。这样上层可以
 // 用统一句柄表达依赖关系，后端仍能拿到 native 对象执行命令。
 struct RHIVulkan::Impl {
+    struct StagingResource {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+    };
+
+    /// 一组可重复使用的逐帧资源。completionValue 是全局 frame timeline 上的值：
+    /// GPU 完成该帧提交时 signal，CPU 复用此槽位前通过 vkWaitSemaphores 等待。
+    struct FrameContext {
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        std::vector<StagingResource> stagingResources;
+        u64 completionValue = 0;
+        bool prepared = false;
+    };
+
+    struct DeferredRelease {
+        u64 retireAfterSerial = 0;
+        std::function<void()> release;
+    };
+
     struct BufferResource {
         RHIBufferDesc desc{};
         VkBuffer buffer = VK_NULL_HANDLE;
@@ -704,6 +748,8 @@ struct RHIVulkan::Impl {
         VkImage image = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         RHIResourceState currentState = RHIResourceState::Undefined;
+        VkPipelineStageFlags currentStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkAccessFlags currentAccess = 0;
         bool ownsImage = true;
     };
 
@@ -781,8 +827,16 @@ struct RHIVulkan::Impl {
     PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectName = nullptr;
     VkCommandPool graphicsCommandPool = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    VkSemaphore frameTimelineSemaphore = VK_NULL_HANDLE;
     bool ownsSurface = false;
     bool supportsTimelineSemaphore = false;
+    std::vector<FrameContext> frameContexts;
+    u32 nextFrameContext = 0;
+    u64 lastSubmissionSerial = 0;
+    u64 completedSubmissionSerial = 0;
+    std::vector<DeferredRelease> deferredReleases;
+    bool hasUntrackedSubmissions = false;
+    bool deviceKnownIdle = true;
 
     std::vector<BufferResource> buffers;
     std::vector<TextureResource> textures;
@@ -798,6 +852,106 @@ struct RHIVulkan::Impl {
     std::vector<GPUWaitGPUSignalResource> gpuWaitGPUSignals;
     std::vector<CPUWaitGPUSignalResource> cpuWaitGPUSignals;
     std::vector<SwapchainResource> swapchains;
+
+    void releaseStagingResources(FrameContext& frame) noexcept {
+        for (const StagingResource& staging : frame.stagingResources) {
+            if (staging.buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(native.device, staging.buffer, nullptr);
+            }
+            if (staging.memory != VK_NULL_HANDLE) {
+                vkFreeMemory(native.device, staging.memory, nullptr);
+            }
+        }
+        frame.stagingResources.clear();
+    }
+
+    void collectDeferredReleases() noexcept {
+        auto release = deferredReleases.begin();
+        while (release != deferredReleases.end()) {
+            if (release->retireAfterSerial <= completedSubmissionSerial) {
+                release->release();
+                release = deferredReleases.erase(release);
+            } else {
+                ++release;
+            }
+        }
+    }
+
+    void flushDeferredReleases() noexcept {
+        for (DeferredRelease& deferred : deferredReleases) {
+            deferred.release();
+        }
+        deferredReleases.clear();
+    }
+
+    template <typename Release>
+    void deferRelease(Release&& release, bool requireDeviceIdle = false) noexcept {
+        if ((requireDeviceIdle || hasUntrackedSubmissions) && !deviceKnownIdle) {
+            vkDeviceWaitIdle(native.device);
+            completedSubmissionSerial = lastSubmissionSerial;
+            hasUntrackedSubmissions = false;
+            deviceKnownIdle = true;
+            collectDeferredReleases();
+            release();
+            return;
+        }
+
+        if (lastSubmissionSerial <= completedSubmissionSerial) {
+            release();
+            return;
+        }
+
+        try {
+            deferredReleases.push_back({
+                lastSubmissionSerial,
+                std::forward<Release>(release)});
+        } catch (...) {
+            // Destroy 是 noexcept。内存不足时选择等待设备并立即安全释放，不能让异常
+            // 穿过 noexcept，也不能在 GPU 仍使用对象时提前销毁。
+            vkDeviceWaitIdle(native.device);
+            completedSubmissionSerial = lastSubmissionSerial;
+            deviceKnownIdle = true;
+            collectDeferredReleases();
+            release();
+        }
+    }
+
+    FrameContext& prepareNextFrameContext() {
+        if (frameContexts.empty()) {
+            throw std::runtime_error("RHIVulkan has no frame contexts");
+        }
+
+        FrameContext& frame = frameContexts[nextFrameContext];
+        if (frame.prepared) {
+            return frame;
+        }
+
+        if (frame.completionValue != 0) {
+            VkSemaphoreWaitInfo waitInfo{};
+            waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+            waitInfo.semaphoreCount = 1;
+            waitInfo.pSemaphores = &frameTimelineSemaphore;
+            waitInfo.pValues = &frame.completionValue;
+            if (vkWaitSemaphores(
+                    native.device,
+                    &waitInfo,
+                    std::numeric_limits<u64>::max()) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to wait for the Vulkan frame timeline");
+            }
+        }
+
+        completedSubmissionSerial =
+            std::max(completedSubmissionSerial, frame.completionValue);
+        releaseStagingResources(frame);
+        collectDeferredReleases();
+
+        if (vkResetCommandBuffer(frame.commandBuffer, 0) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to reset the Vulkan frame command buffer");
+        }
+
+        frame.prepared = true;
+        return frame;
+    }
 
     void setObjectName(VkObjectType type, u64 object, const std::string& name) const {
         if (setDebugUtilsObjectName == nullptr || object == 0 || name.empty()) {

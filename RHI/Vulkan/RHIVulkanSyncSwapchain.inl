@@ -44,8 +44,10 @@ RHIQueryPool RHIVulkan::CreateQueryPool(const RHIQueryPoolDesc& desc) {
     return handle;
 }
 
-// Semaphore/Fence 都是同步对象：semaphore 主要在 queue 之间或 acquire/present 之间传递依赖，
-// fence 用于 CPU 等 GPU 完成。timeline semaphore 需要 Vulkan 1.2 feature 支持。
+// RHI 同时暴露 Binary/Timeline GPU signal：
+// - 普通 queue 之间优先用 Timeline，一个对象配合递增 value 表达多次依赖；
+// - acquire/present 属于 WSI 边界，仍必须使用 Binary；
+// - CPUWaitGPUSignal 映射为 VkFence，供显式低层提交使用。
 RHIGPUWaitGPUSignal RHIVulkan::CreateGPUWaitGPUSignal(const RHIGPUWaitGPUSignalDesc& desc) {
     if (desc.type == RHIGPUWaitGPUSignalType::Timeline && !impl_->supportsTimelineSemaphore) {
         throw std::runtime_error("The current Vulkan device does not support timeline gpuWaitGPUSignals");
@@ -168,7 +170,11 @@ RHISwapchain RHIVulkan::CreateSwapchain(const RHISwapchainDesc& desc) {
         Impl::TextureResource texture{};
         texture.ownsImage = false;
         texture.image = images[index];
+        // 刚从 swapchain 取得的 image 在第一次使用前没有可依赖的旧布局。
+        // 首次 barrier 必须从 UNDEFINED 转换；完成一次 present 后状态跟踪才会变为 Present。
         texture.currentState = RHIResourceState::Undefined;
+        texture.currentStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        texture.currentAccess = 0;
         texture.desc.debugName = desc.debugName + ".Image" + std::to_string(index);
         texture.desc.dimension = RHITextureDimension::Texture2D;
         texture.desc.extent = {extent.width, extent.height, 1};
@@ -231,12 +237,30 @@ bool RHIVulkan::AcquireNextImage(
     u32* imageIndex,
     std::string* errorMessage) {
     // acquire 只是向 swapchain 取下一张可写图像的索引，并可选 signal semaphore/fence。
+    // 注意：传给 vkAcquireNextImageKHR 的 semaphore 必须是 Binary，不能传 Timeline。
     // 真正把图像从 Present 转到 ColorAttachment 的 layout transition 在 frame 录制阶段完成。
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, swapchainHandle);
     const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, gpuWaitGPUSignal);
     const Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, cpuWaitGPUSignal);
     if (swapchain == nullptr || swapchain->swapchain == VK_NULL_HANDLE || imageIndex == nullptr) {
         if (errorMessage != nullptr) *errorMessage = "AcquireNextImage 参数无效";
+        return false;
+    }
+    if (semaphore != nullptr && semaphore->desc.type != RHIGPUWaitGPUSignalType::Binary) {
+        if (errorMessage != nullptr) {
+            *errorMessage = "AcquireNextImage requires a Binary GPU signal; WSI cannot signal a Timeline semaphore";
+        }
+        return false;
+    }
+
+    // Acquire 会 signal image-available binary signal。复用该 signal 前，必须先确认
+    // 使用同一帧槽位的上一次 GPU 提交已经完成，因此帧等待必须发生在 acquire 之前。
+    try {
+        impl_->prepareNextFrameContext();
+    } catch (const std::exception& error) {
+        if (errorMessage != nullptr) {
+            *errorMessage = error.what();
+        }
         return false;
     }
 
@@ -321,11 +345,15 @@ bool RHIVulkan::Submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage
         if (errorMessage != nullptr) *errorMessage = "vkQueueSubmit 失败";
         return false;
     }
+    // 低层 Submit 不使用 FrameContext 内部 fence，资源管理器无法仅凭 frame serial
+    // 判断它何时完成。后续 Destroy 会选择 device-idle 的安全退化路径。
+    impl_->hasUntrackedSubmissions = true;
+    impl_->deviceKnownIdle = false;
     return true;
 }
 
 // Present 把 acquire 得到并渲染完成的 swapchain image 交还给窗口系统。
-// Vulkan 要求 Present 等待 render-finished semaphore，确保图像写入完成后才显示。
+// Vulkan 要求 Present 等待 Binary render-finished semaphore，确保图像写入完成后才显示。
 bool RHIVulkan::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
     const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, desc.swapchain);
     if (swapchain == nullptr || swapchain->swapchain == VK_NULL_HANDLE) {
@@ -339,6 +367,12 @@ bool RHIVulkan::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
         const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, handle);
         if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
             if (errorMessage != nullptr) *errorMessage = "RHIPresentDesc 包含无效 wait semaphore";
+            return false;
+        }
+        if (semaphore->desc.type != RHIGPUWaitGPUSignalType::Binary) {
+            if (errorMessage != nullptr) {
+                *errorMessage = "Present requires Binary GPU wait signals on the Vulkan WSI path";
+            }
             return false;
         }
         waitSignals.push_back(semaphore->semaphore);
@@ -358,12 +392,13 @@ bool RHIVulkan::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
         if (errorMessage != nullptr) *errorMessage = "vkQueuePresentKHR 失败";
         return false;
     }
+    impl_->deviceKnownIdle = false;
     return true;
 }
 
 // RecordAndSubmitFrame 是把 RHIFramePacket 真正落成 Vulkan 命令的地方。
-// 当前实现为学习和示例优先：每帧分配一个一次性 command buffer，处理上传、资源状态转换、
-// dynamic rendering begin/end、pipeline/descriptor/buffer 绑定和 draw，然后提交并等待 fence。
+// CommandBuffer/Fence 由 FrameContext 按 framesInFlight 轮转复用；CPU 只等待即将复用的
+// 帧槽位，而不是每次提交后立刻等待整帧完成。
 
 } // namespace rhi
 

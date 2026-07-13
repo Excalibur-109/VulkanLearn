@@ -27,6 +27,7 @@ using namespace rhi;
 namespace {
 
 constexpr u32 SHADOW_MAP_SIZE = 2048;
+constexpr u32 FRAMES_IN_FLIGHT = 2;
 constexpr float PI = 3.14159265358979323846F;
 
 /// PBR 顶点格式，对应 Shader 中的位置、法线和 UV 输入。
@@ -737,9 +738,11 @@ public:
 int main(int argc, char** argv) {
     try {
         u64 maxFrames = 0;
+        bool smokeTest = false;
         for (int index = 1; index < argc; ++index) {
             const std::string argument = argv[index];
             if (argument == "--smoke-test") {
+                smokeTest = true;
                 maxFrames = 1;
             } else if (argument.rfind("--frames=", 0) == 0) {
                 maxFrames = static_cast<u64>(std::stoull(argument.substr(9)));
@@ -768,6 +771,7 @@ int main(int argc, char** argv) {
         rendererDesc.backend.applicationName = "RHI PBR Shadow Example";
         rendererDesc.backend.engineName = "VulkanLearn";
         rendererDesc.backend.validation = RHIValidationMode::Enabled;
+        rendererDesc.backend.framesInFlight = FRAMES_IN_FLIGHT;
         rendererDesc.backend.requiredFeatures = RHIRenderFeature::DynamicRendering;
         rendererDesc.backend.optionalFeatures = RHIRenderFeature::DebugMarkers | RHIRenderFeature::SamplerAnisotropy;
         rendererDesc.requiredVulkanInstanceExtensions.assign(extensions, extensions + extensionCount);
@@ -789,8 +793,36 @@ int main(int argc, char** argv) {
         ExampleResources resources = createExampleResources(renderer, targets.colorFormat);
         updateSceneUniforms(resources, targets.extent);
 
-        RHIGPUWaitGPUSignal imageAvailable = renderer.CreateGPUWaitGPUSignal({"Example.ImageAvailable", RHIGPUWaitGPUSignalType::Binary});
-        RHIGPUWaitGPUSignal renderFinished = renderer.CreateGPUWaitGPUSignal({"Example.RenderFinished", RHIGPUWaitGPUSignalType::Binary});
+        std::vector<RHIGPUWaitGPUSignal> imageAvailableSignals;
+        std::vector<RHIGPUWaitGPUSignal> renderFinishedSignals;
+        imageAvailableSignals.reserve(FRAMES_IN_FLIGHT);
+        for (u32 index = 0; index < FRAMES_IN_FLIGHT; ++index) {
+            // WSI 是 Timeline 的例外：
+            // - vkAcquireNextImageKHR 负责 signal image-available，它要求 Binary semaphore；
+            // - vkQueuePresentKHR 等待 render-finished，传统 WSI 路径同样使用 Binary。
+            // GPU 帧完成进度由 RHIVulkan 内部的 Frame Timeline 负责，不使用这两个信号。
+            imageAvailableSignals.push_back(renderer.CreateGPUWaitGPUSignal({
+                "Example.ImageAvailable." + std::to_string(index),
+                RHIGPUWaitGPUSignalType::Binary}));
+        }
+
+        const auto CreateRenderFinishedSignals = [&]() {
+            renderFinishedSignals.reserve(targets.swapchainImages.size());
+            for (u32 index = 0; index < targets.swapchainImages.size(); ++index) {
+                // RenderFinished 按 swapchain image 分配，而不是按 frame slot 分配。
+                // 同一 image 再次 acquire 时，上一次 present 已经完成，可以安全复用该信号。
+                renderFinishedSignals.push_back(renderer.CreateGPUWaitGPUSignal({
+                    "Example.RenderFinished.Image." + std::to_string(index),
+                    RHIGPUWaitGPUSignalType::Binary}));
+            }
+        };
+        const auto DestroyRenderFinishedSignals = [&]() {
+            for (RHIGPUWaitGPUSignal signal : renderFinishedSignals) {
+                renderer.Destroy(signal);
+            }
+            renderFinishedSignals.clear();
+        };
+        CreateRenderFinishedSignals();
 
         u64 frameIndex = 0;
         while (!glfwWindowShouldClose(window) && (maxFrames == 0 || frameIndex < maxFrames)) {
@@ -799,17 +831,25 @@ int main(int argc, char** argv) {
             const RHIExtent2D drawableSize = waitForDrawableSize(window);
             if (drawableSize.width != targets.extent.width || drawableSize.height != targets.extent.height) {
                 renderer.WaitIdle();
+                DestroyRenderFinishedSignals();
                 DestroyFrameTargets(renderer, targets);
                 targets = createFrameTargets(renderer, drawableSize);
+                CreateRenderFinishedSignals();
             }
 
             updateSceneUniforms(resources, targets.extent);
 
+            const u32 frameSlot = static_cast<u32>(frameIndex % FRAMES_IN_FLIGHT);
+            const RHIGPUWaitGPUSignal imageAvailable = imageAvailableSignals[frameSlot];
             u32 imageIndex = 0;
             if (!renderer.AcquireNextImage(targets.swapchain, imageAvailable, RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
                 std::cerr << "AcquireNextImage 失败: " << errorMessage << '\n';
                 break;
             }
+            if (imageIndex >= renderFinishedSignals.size()) {
+                throw std::runtime_error("Swapchain image index exceeds RenderFinished signal count");
+            }
+            const RHIGPUWaitGPUSignal renderFinished = renderFinishedSignals[imageIndex];
 
             RHIFramePacket packet = buildFramePacket(resources, targets, imageIndex, imageAvailable, renderFinished, frameIndex++);
             // RHIFramePacket 将上传、阴影 Pass、PBR Pass、提交和呈现组织成一帧。
@@ -817,11 +857,23 @@ int main(int argc, char** argv) {
                 std::cerr << "SubmitFrame 失败: " << errorMessage << '\n';
                 break;
             }
+
+            if (smokeTest) {
+                const RHIBuffer deferredDestroyProbe = CreateBuffer(
+                    renderer,
+                    "Example.DeferredDestroyProbe",
+                    256,
+                    RHIBufferUsage::Storage,
+                    RHIMemoryUsage::GpuOnly);
+                renderer.Destroy(deferredDestroyProbe);
+            }
         }
 
         renderer.WaitIdle();
-        renderer.Destroy(renderFinished);
-        renderer.Destroy(imageAvailable);
+        DestroyRenderFinishedSignals();
+        for (RHIGPUWaitGPUSignal signal : imageAvailableSignals) {
+            renderer.Destroy(signal);
+        }
         DestroyExampleResources(renderer, resources);
         DestroyFrameTargets(renderer, targets);
         renderer.Shutdown();

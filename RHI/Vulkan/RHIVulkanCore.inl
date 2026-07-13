@@ -161,6 +161,10 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         }
 
         const VulkanDeviceSupport support = queryVulkanDeviceSupport(impl_->native.physicalDevice);
+        if (support.features12.timelineSemaphore != VK_TRUE) {
+            throw std::runtime_error(
+                "RHIVulkan requires Vulkan timeline semaphore support for frame synchronization");
+        }
 
         VkPhysicalDeviceFeatures enabledFeatures{};
         enabledFeatures.samplerAnisotropy = support.features.samplerAnisotropy;
@@ -169,7 +173,9 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
 
         VkPhysicalDeviceVulkan12Features enabled12{};
         enabled12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        enabled12.timelineSemaphore = support.features12.timelineSemaphore;
+        // FrameContext 使用 timeline value 表达递增的 GPU 完成进度，所以该 feature
+        // 是 Vulkan 后端的基础能力，而不是可选优化。
+        enabled12.timelineSemaphore = VK_TRUE;
         enabled12.drawIndirectCount = support.features12.drawIndirectCount;
 
         VkPhysicalDeviceVulkan13Features enabled13{};
@@ -213,14 +219,54 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
 
         VkCommandPoolCreateInfo commandPoolInfo{};
         commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        // 当前帧录制路径会频繁分配、提交并释放短生命周期 command buffer。
-        // TRANSIENT 是给驱动的使用提示；RESET_COMMAND_BUFFER 保留单独重置的扩展空间。
+        // CommandBuffer 在 FrameContext 中长期复用。RESET_COMMAND_BUFFER 允许某个帧槽位的
+        // timeline value 完成后单独重录；TRANSIENT 表示其中的命令通常只提交一次。
         commandPoolInfo.flags =
             VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
             VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         commandPoolInfo.queueFamilyIndex = impl_->queueFamilies.graphics;
         if (vkCreateCommandPool(impl_->native.device, &commandPoolInfo, nullptr, &impl_->graphicsCommandPool) != VK_SUCCESS) {
             throw std::runtime_error("vkCreateCommandPool(graphics) failed");
+        }
+
+        VkSemaphoreTypeCreateInfo frameTimelineTypeInfo{};
+        frameTimelineTypeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+        frameTimelineTypeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        frameTimelineTypeInfo.initialValue = 0;
+
+        VkSemaphoreCreateInfo frameTimelineInfo{};
+        frameTimelineInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        frameTimelineInfo.pNext = &frameTimelineTypeInfo;
+        if (vkCreateSemaphore(
+                impl_->native.device,
+                &frameTimelineInfo,
+                nullptr,
+                &impl_->frameTimelineSemaphore) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create the Vulkan frame timeline semaphore");
+        }
+        impl_->setObjectName(
+            VK_OBJECT_TYPE_SEMAPHORE,
+            reinterpret_cast<u64>(impl_->frameTimelineSemaphore),
+            "RHI.FrameTimeline");
+
+        const u32 frameContextCount = std::clamp(desc.backend.framesInFlight, 1u, 8u);
+        impl_->frameContexts.resize(frameContextCount);
+
+        std::vector<VkCommandBuffer> frameCommandBuffers(frameContextCount, VK_NULL_HANDLE);
+        VkCommandBufferAllocateInfo frameAllocateInfo{};
+        frameAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        frameAllocateInfo.commandPool = impl_->graphicsCommandPool;
+        frameAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        frameAllocateInfo.commandBufferCount = frameContextCount;
+        if (vkAllocateCommandBuffers(
+                impl_->native.device,
+                &frameAllocateInfo,
+                frameCommandBuffers.data()) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to allocate Vulkan frame command buffers");
+        }
+
+        for (u32 index = 0; index < frameContextCount; ++index) {
+            impl_->frameContexts[index].commandBuffer = frameCommandBuffers[index];
         }
 
         std::array<VkDescriptorPoolSize, 6> poolSizes{{
@@ -336,6 +382,10 @@ void RHIVulkan::Shutdown() noexcept {
     }
 
     vkDeviceWaitIdle(impl_->native.device);
+    impl_->completedSubmissionSerial = impl_->lastSubmissionSerial;
+    impl_->hasUntrackedSubmissions = false;
+    impl_->deviceKnownIdle = true;
+    impl_->flushDeferredReleases();
 
     // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind set 依赖 layout，
     // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
@@ -354,6 +404,23 @@ void RHIVulkan::Shutdown() noexcept {
     for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
     for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
     for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
+
+    for (Impl::FrameContext& frame : impl_->frameContexts) {
+        impl_->releaseStagingResources(frame);
+        frame.commandBuffer = VK_NULL_HANDLE;
+    }
+    impl_->frameContexts.clear();
+    impl_->nextFrameContext = 0;
+    impl_->lastSubmissionSerial = 0;
+    impl_->completedSubmissionSerial = 0;
+    impl_->hasUntrackedSubmissions = false;
+    impl_->deviceKnownIdle = true;
+    impl_->deferredReleases.clear();
+
+    if (impl_->frameTimelineSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(impl_->native.device, impl_->frameTimelineSemaphore, nullptr);
+        impl_->frameTimelineSemaphore = VK_NULL_HANDLE;
+    }
 
     if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);

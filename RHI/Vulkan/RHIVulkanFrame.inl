@@ -5,45 +5,16 @@
 namespace rhi {
 
 bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
-    struct StagingResource {
-        VkBuffer buffer = VK_NULL_HANDLE;
-        VkDeviceMemory memory = VK_NULL_HANDLE;
-    };
-
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    VkFence SubmitFence = VK_NULL_HANDLE;
-    std::vector<StagingResource> stagingResources;
-
-    const auto cleanup = [&]() noexcept {
-        if (SubmitFence != VK_NULL_HANDLE) {
-            vkDestroyFence(impl_->native.device, SubmitFence, nullptr);
-        }
-        if (commandBuffer != VK_NULL_HANDLE) {
-            vkFreeCommandBuffers(impl_->native.device, impl_->graphicsCommandPool, 1, &commandBuffer);
-        }
-        for (const StagingResource& staging : stagingResources) {
-            if (staging.buffer != VK_NULL_HANDLE) {
-                vkDestroyBuffer(impl_->native.device, staging.buffer, nullptr);
-            }
-            if (staging.memory != VK_NULL_HANDLE) {
-                vkFreeMemory(impl_->native.device, staging.memory, nullptr);
-            }
-        }
-    };
+    Impl::FrameContext* frame = nullptr;
+    bool frameSubmitted = false;
 
     try {
-        if (!IsInitialized() || impl_->graphicsCommandPool == VK_NULL_HANDLE) {
-            throw std::runtime_error("RHIVulkan is not initialized or has no graphics command pool");
+        if (!IsInitialized() || impl_->frameContexts.empty()) {
+            throw std::runtime_error("RHIVulkan is not initialized or has no frame contexts");
         }
 
-        VkCommandBufferAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocateInfo.commandPool = impl_->graphicsCommandPool;
-        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocateInfo.commandBufferCount = 1;
-        if (vkAllocateCommandBuffers(impl_->native.device, &allocateInfo, &commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("vkAllocateCommandBuffers failed");
-        }
+        frame = &impl_->prepareNextFrameContext();
+        VkCommandBuffer commandBuffer = frame->commandBuffer;
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -62,7 +33,25 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             return access == 0 ? VK_ACCESS_MEMORY_READ_BIT : access;
         };
 
+        const auto bufferDstStages = [](RHIBufferUsage usage) {
+            VkPipelineStageFlags stages = 0;
+            if (RHIHasAny(usage, RHIBufferUsage::Vertex) ||
+                RHIHasAny(usage, RHIBufferUsage::Index)) {
+                stages |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            }
+            if (RHIHasAny(usage, RHIBufferUsage::Uniform) ||
+                RHIHasAny(usage, RHIBufferUsage::Storage)) {
+                stages |= VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            }
+            if (RHIHasAny(usage, RHIBufferUsage::Indirect)) {
+                stages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+            }
+            return stages == 0 ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : stages;
+        };
+
         std::vector<VkBufferMemoryBarrier> uploadBarriers;
+        VkPipelineStageFlags uploadDestinationStages = 0;
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
             if (upload.data.empty()) {
                 continue;
@@ -73,7 +62,7 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 throw std::runtime_error("RHIFramePacket uploads contain an invalid destination buffer");
             }
 
-            StagingResource staging{};
+            Impl::StagingResource staging{};
             VkBufferCreateInfo stagingInfo{};
             stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             stagingInfo.size = static_cast<VkDeviceSize>(upload.data.size());
@@ -84,8 +73,8 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             }
 
             // buffer 创建成功后立即登记所有权，后续 memory allocation 失败时也能由 cleanup 回收。
-            stagingResources.push_back(staging);
-            StagingResource& trackedStaging = stagingResources.back();
+            frame->stagingResources.push_back(staging);
+            Impl::StagingResource& trackedStaging = frame->stagingResources.back();
 
             VkMemoryRequirements requirements{};
             vkGetBufferMemoryRequirements(impl_->native.device, trackedStaging.buffer, &requirements);
@@ -126,13 +115,14 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             barrier.offset = upload.destinationOffset;
             barrier.size = upload.data.size();
             uploadBarriers.push_back(barrier);
+            uploadDestinationStages |= bufferDstStages(destination->desc.usage);
         }
 
         if (!uploadBarriers.empty()) {
             vkCmdPipelineBarrier(
                 commandBuffer,
                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                uploadDestinationStages,
                 0,
                 0,
                 nullptr,
@@ -168,18 +158,36 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             return {};
         };
 
-        const auto transitionTexture = [&](RHITexture handle, RHIResourceState after) {
+        const auto transitionTexture = [&](
+            RHITexture handle,
+            RHIResourceState after,
+            RHIPipelineStage requestedStages = RHIPipelineStage::AllCommands,
+            RHIAccessFlags requestedAccess = RHIAccessFlags::None) {
             // RenderGraph 只描述 pass 读写需要的 RHIResourceState；Vulkan 需要实际 image layout
             // 和 access mask，所以这里根据当前状态生成 VkImageMemoryBarrier。
             Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
-            if (texture == nullptr || texture->image == VK_NULL_HANDLE || texture->currentState == after) {
+            if (texture == nullptr || texture->image == VK_NULL_HANDLE) {
+                return;
+            }
+
+            const VkPipelineStageFlags destinationStages =
+                requestedStages == RHIPipelineStage::AllCommands
+                    ? stageFromResourceState(after)
+                    : toVkPipelineStages(requestedStages);
+            const VkAccessFlags destinationAccess =
+                requestedAccess == RHIAccessFlags::None
+                    ? accessFromResourceState(after)
+                    : toVkAccessFlags(requestedAccess);
+            if (texture->currentState == after &&
+                texture->currentStages == destinationStages &&
+                texture->currentAccess == destinationAccess) {
                 return;
             }
 
             VkImageMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.srcAccessMask = accessFromResourceState(texture->currentState);
-            barrier.dstAccessMask = accessFromResourceState(after);
+            barrier.srcAccessMask = texture->currentAccess;
+            barrier.dstAccessMask = destinationAccess;
             barrier.oldLayout = toVkImageLayout(texture->currentState);
             barrier.newLayout = toVkImageLayout(after);
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -191,12 +199,10 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             barrier.subresourceRange.baseArrayLayer = 0;
             barrier.subresourceRange.layerCount = texture->desc.arrayLayers;
 
-            const VkPipelineStageFlags sourceStage =
-                texture->currentState == RHIResourceState::Undefined ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             vkCmdPipelineBarrier(
                 commandBuffer,
-                sourceStage,
-                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                texture->currentStages,
+                destinationStages,
                 0,
                 0,
                 nullptr,
@@ -205,6 +211,8 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 1,
                 &barrier);
             texture->currentState = after;
+            texture->currentStages = destinationStages;
+            texture->currentAccess = destinationAccess;
         };
 
         const auto findWorkload = [&](const std::string& passName) -> const RHIRenderPassWorkload* {
@@ -235,12 +243,12 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             // 这样“资源生命周期/状态”和“画什么”保持分离，便于之后扩展自动依赖分析。
             for (const RHIRenderGraphResourceRef& read : pass.reads) {
                 if (read.type == RHIRenderGraphResourceType::Texture || read.type == RHIRenderGraphResourceType::SwapchainImage) {
-                    transitionTexture(textureForName(read.name), read.state);
+                    transitionTexture(textureForName(read.name), read.state, read.stages, read.access);
                 }
             }
             for (const RHIRenderGraphResourceRef& write : pass.writes) {
                 if (write.type == RHIRenderGraphResourceType::Texture || write.type == RHIRenderGraphResourceType::SwapchainImage) {
-                    transitionTexture(textureForName(write.name), write.state);
+                    transitionTexture(textureForName(write.name), write.state, write.stages, write.access);
                 }
             }
 
@@ -425,6 +433,13 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             }
         }
 
+        // 每次图形提交都在同一个 timeline semaphore 上 signal 一个严格递增值。
+        // FrameContext 只保存自己对应的值，因此一个 semaphore 就能替代 N 个逐帧 fence。
+        const u64 frameCompletionValue = impl_->lastSubmissionSerial + 1;
+        signalSemaphores.push_back(impl_->frameTimelineSemaphore);
+        signalValues.push_back(frameCompletionValue);
+        usesTimelineSemaphore = true;
+
         VkTimelineSemaphoreSubmitInfo timelineInfo{};
         timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
         timelineInfo.waitSemaphoreValueCount = static_cast<u32>(waitValues.size());
@@ -443,31 +458,30 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         SubmitInfo.signalSemaphoreCount = static_cast<u32>(signalSemaphores.size());
         SubmitInfo.pSignalSemaphores = signalSemaphores.data();
 
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &SubmitFence) != VK_SUCCESS) {
-            throw std::runtime_error("vkCreateFence(Submit) failed");
-        }
-
-        if (vkQueueSubmit(impl_->native.graphicsQueue, 1, &SubmitInfo, SubmitFence) != VK_SUCCESS) {
+        if (vkQueueSubmit(
+                impl_->native.graphicsQueue,
+                1,
+                &SubmitInfo,
+                VK_NULL_HANDLE) != VK_SUCCESS) {
             throw std::runtime_error("vkQueueSubmit(recorded frame) failed");
         }
-        const VkResult waitResult = vkWaitForFences(
-            impl_->native.device, 1, &SubmitFence, VK_TRUE, std::numeric_limits<u64>::max());
-        if (waitResult != VK_SUCCESS) {
-            throw std::runtime_error("vkWaitForFences(recorded frame) failed");
-        }
-        cleanup();
-        commandBuffer = VK_NULL_HANDLE;
-        SubmitFence = VK_NULL_HANDLE;
-        stagingResources.clear();
+        frameSubmitted = true;
+        impl_->deviceKnownIdle = false;
+        frame->prepared = false;
+        frame->completionValue = frameCompletionValue;
+        impl_->lastSubmissionSerial = frameCompletionValue;
+        impl_->nextFrameContext =
+            (impl_->nextFrameContext + 1) % static_cast<u32>(impl_->frameContexts.size());
 
         if (packet.present.has_value()) {
             return Present(*packet.present, errorMessage);
         }
         return true;
     } catch (const std::exception& error) {
-        cleanup();
+        if (frame != nullptr && !frameSubmitted) {
+            impl_->releaseStagingResources(*frame);
+            frame->prepared = false;
+        }
         if (errorMessage != nullptr) {
             *errorMessage = error.what();
         }
@@ -496,10 +510,17 @@ bool RHIVulkan::SubmitFrame(const RHIFramePacket& packet, std::string* errorMess
 void RHIVulkan::WaitIdle() const noexcept {
     if (IsInitialized()) {
         vkDeviceWaitIdle(impl_->native.device);
+        impl_->completedSubmissionSerial = impl_->lastSubmissionSerial;
+        impl_->hasUntrackedSubmissions = false;
+        impl_->deviceKnownIdle = true;
+        for (Impl::FrameContext& frame : impl_->frameContexts) {
+            impl_->releaseStagingResources(frame);
+        }
+        impl_->flushDeferredReleases();
     }
 }
 
-// Destroy 系列只释放 native 对象并清空句柄槽里的内容，不压缩 vector。
+// Destroy 会先清空句柄槽，再按 submission serial 延迟释放 native 对象。
 
 } // namespace rhi
 

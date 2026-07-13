@@ -57,6 +57,35 @@ Scene / ECS
 
 `RHIDevice` 只消费 `RHIFramePacket`，不访问游戏对象、相机、灯光或 ECS。
 
+## Vulkan 帧生命周期
+
+Vulkan 后端按 `RHIBackendDesc::framesInFlight` 创建并轮转复用 `FrameContext`：
+
+```text
+FrameContext
+├── VkCommandBuffer
+├── timeline completionValue
+└── 本帧 staging resources
+```
+
+Vulkan 后端创建一个全局 Timeline Semaphore。每次 frame submit 都 signal 一个
+递增值，FrameContext 只记录自己的 completionValue；CPU 在 `AcquireNextImage`
+前通过 `vkWaitSemaphores` 只等待即将复用的帧槽位，不会在每次
+`vkQueueSubmit` 后立即等待 GPU。Buffer、Texture、Pipeline 等普通资源销毁时，
+RHI 先让逻辑句柄失效，再按 submission serial 延迟释放 Vulkan 对象。
+
+`vkAcquireNextImageKHR` 和传统 `vkQueuePresentKHR` 属于 WSI 边界，仍使用
+Binary Semaphore。Timeline 用于内部 frame completion 和普通 queue 依赖，不能把
+WSI 的 Binary Signal 机械替换成 Timeline。
+
+低层 `Submit` 可能使用 graphics 之外的队列，无法由 FrameContext fence 跟踪；
+这种情况下销毁会退化为 device-idle，以正确性优先。同步对象和 swapchain 也使用
+device-idle 销毁路径，避免和 present 操作发生生命周期冲突。
+
+Texture 状态跟踪同时保存 state、pipeline stage 和 access mask。RenderGraph 没有
+显式给出 stage/access 时，Vulkan 后端会根据 `RHIResourceState` 推导，不再默认
+把所有 transition 都扩大为 `ALL_COMMANDS -> ALL_COMMANDS`。
+
 ## 最小使用方式
 
 ```cpp

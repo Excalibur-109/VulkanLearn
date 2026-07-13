@@ -70,7 +70,11 @@ RHITexture RHIVulkan::CreateTexture(const RHITextureDesc& desc) {
 
     Impl::TextureResource resource{};
     resource.desc = desc;
-    resource.currentState = desc.initialState;
+    // 新建 VkImage 的真实初始布局固定为 UNDEFINED；desc.initialState 是上层期望，
+    // 必须由第一次使用时的 barrier 达成，不能提前伪造为已经转换完成。
+    resource.currentState = RHIResourceState::Undefined;
+    resource.currentStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    resource.currentAccess = 0;
     resource.ownsImage = true;
 
     VkImageCreateInfo imageInfo{};
