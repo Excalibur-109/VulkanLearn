@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -82,150 +83,168 @@ static std::vector<std::byte> readBinaryFile(const std::string& path) {
 
 // 统一 RHIFormat 到 VkFormat 的映射层。引擎其它模块只依赖 RHIDefinitions.hpp 中的
 // RHIFormat 枚举，后端在边界处一次性转换成 native enum，这样上层不会散落 Vulkan 类型。
+// 运行时直接走查表，避免大 switch 在 CreateTexture 等热路径上的分支开销。
+static const std::array<VkFormat, RHI_FORMAT_COUNT>& toVkFormatTable() {
+    static const std::array<VkFormat, RHI_FORMAT_COUNT> table = [] {
+        std::array<VkFormat, RHI_FORMAT_COUNT> t{};
+        t[static_cast<size_t>(RHIFormat::Undefined)]         = VK_FORMAT_UNDEFINED;
+        t[static_cast<size_t>(RHIFormat::R8_UNorm)]          = VK_FORMAT_R8_UNORM;
+        t[static_cast<size_t>(RHIFormat::R8_SNorm)]          = VK_FORMAT_R8_SNORM;
+        t[static_cast<size_t>(RHIFormat::R8_UInt)]           = VK_FORMAT_R8_UINT;
+        t[static_cast<size_t>(RHIFormat::R8_SInt)]           = VK_FORMAT_R8_SINT;
+        t[static_cast<size_t>(RHIFormat::RG8_UNorm)]         = VK_FORMAT_R8G8_UNORM;
+        t[static_cast<size_t>(RHIFormat::RG8_SNorm)]         = VK_FORMAT_R8G8_SNORM;
+        t[static_cast<size_t>(RHIFormat::RG8_UInt)]          = VK_FORMAT_R8G8_UINT;
+        t[static_cast<size_t>(RHIFormat::RG8_SInt)]          = VK_FORMAT_R8G8_SINT;
+        t[static_cast<size_t>(RHIFormat::RGBA8_UNorm)]       = VK_FORMAT_R8G8B8A8_UNORM;
+        t[static_cast<size_t>(RHIFormat::RGBA8_SNorm)]       = VK_FORMAT_R8G8B8A8_SNORM;
+        t[static_cast<size_t>(RHIFormat::RGBA8_UInt)]        = VK_FORMAT_R8G8B8A8_UINT;
+        t[static_cast<size_t>(RHIFormat::RGBA8_SInt)]        = VK_FORMAT_R8G8B8A8_SINT;
+        t[static_cast<size_t>(RHIFormat::RGBA8_SRGB)]        = VK_FORMAT_R8G8B8A8_SRGB;
+        t[static_cast<size_t>(RHIFormat::BGRA8_UNorm)]       = VK_FORMAT_B8G8R8A8_UNORM;
+        t[static_cast<size_t>(RHIFormat::BGRA8_SRGB)]        = VK_FORMAT_B8G8R8A8_SRGB;
+        t[static_cast<size_t>(RHIFormat::R16_UNorm)]         = VK_FORMAT_R16_UNORM;
+        t[static_cast<size_t>(RHIFormat::R16_SNorm)]         = VK_FORMAT_R16_SNORM;
+        t[static_cast<size_t>(RHIFormat::R16_UInt)]          = VK_FORMAT_R16_UINT;
+        t[static_cast<size_t>(RHIFormat::R16_SInt)]          = VK_FORMAT_R16_SINT;
+        t[static_cast<size_t>(RHIFormat::R16_Float)]         = VK_FORMAT_R16_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RG16_UNorm)]        = VK_FORMAT_R16G16_UNORM;
+        t[static_cast<size_t>(RHIFormat::RG16_SNorm)]        = VK_FORMAT_R16G16_SNORM;
+        t[static_cast<size_t>(RHIFormat::RG16_UInt)]         = VK_FORMAT_R16G16_UINT;
+        t[static_cast<size_t>(RHIFormat::RG16_SInt)]         = VK_FORMAT_R16G16_SINT;
+        t[static_cast<size_t>(RHIFormat::RG16_Float)]        = VK_FORMAT_R16G16_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RGBA16_UNorm)]      = VK_FORMAT_R16G16B16A16_UNORM;
+        t[static_cast<size_t>(RHIFormat::RGBA16_SNorm)]      = VK_FORMAT_R16G16B16A16_SNORM;
+        t[static_cast<size_t>(RHIFormat::RGBA16_UInt)]       = VK_FORMAT_R16G16B16A16_UINT;
+        t[static_cast<size_t>(RHIFormat::RGBA16_SInt)]       = VK_FORMAT_R16G16B16A16_SINT;
+        t[static_cast<size_t>(RHIFormat::RGBA16_Float)]      = VK_FORMAT_R16G16B16A16_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::R32_UInt)]          = VK_FORMAT_R32_UINT;
+        t[static_cast<size_t>(RHIFormat::R32_SInt)]          = VK_FORMAT_R32_SINT;
+        t[static_cast<size_t>(RHIFormat::R32_Float)]         = VK_FORMAT_R32_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RG32_UInt)]         = VK_FORMAT_R32G32_UINT;
+        t[static_cast<size_t>(RHIFormat::RG32_SInt)]         = VK_FORMAT_R32G32_SINT;
+        t[static_cast<size_t>(RHIFormat::RG32_Float)]        = VK_FORMAT_R32G32_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RGB32_UInt)]        = VK_FORMAT_R32G32B32_UINT;
+        t[static_cast<size_t>(RHIFormat::RGB32_SInt)]        = VK_FORMAT_R32G32B32_SINT;
+        t[static_cast<size_t>(RHIFormat::RGB32_Float)]       = VK_FORMAT_R32G32B32_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RGBA32_UInt)]       = VK_FORMAT_R32G32B32A32_UINT;
+        t[static_cast<size_t>(RHIFormat::RGBA32_SInt)]       = VK_FORMAT_R32G32B32A32_SINT;
+        t[static_cast<size_t>(RHIFormat::RGBA32_Float)]      = VK_FORMAT_R32G32B32A32_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::RGB10A2_UNorm)]     = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+        t[static_cast<size_t>(RHIFormat::R11G11B10_Float)]   = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+        t[static_cast<size_t>(RHIFormat::D16_UNorm)]         = VK_FORMAT_D16_UNORM;
+        t[static_cast<size_t>(RHIFormat::D24_UNorm)]         = VK_FORMAT_X8_D24_UNORM_PACK32;
+        t[static_cast<size_t>(RHIFormat::S8_UInt)]           = VK_FORMAT_S8_UINT;
+        t[static_cast<size_t>(RHIFormat::D24_UNorm_S8_UInt)] = VK_FORMAT_D24_UNORM_S8_UINT;
+        t[static_cast<size_t>(RHIFormat::D32_Float)]         = VK_FORMAT_D32_SFLOAT;
+        t[static_cast<size_t>(RHIFormat::D32_Float_S8_UInt)] = VK_FORMAT_D32_SFLOAT_S8_UINT;
+        t[static_cast<size_t>(RHIFormat::BC1RGBA_UNorm)]     = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC1RGBA_SRGB)]      = VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC3RGBA_UNorm)]     = VK_FORMAT_BC3_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC3RGBA_SRGB)]      = VK_FORMAT_BC3_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC5RG_UNorm)]       = VK_FORMAT_BC5_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC5RG_SNorm)]       = VK_FORMAT_BC5_SNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC7RGBA_UNorm)]     = VK_FORMAT_BC7_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::BC7RGBA_SRGB)]      = VK_FORMAT_BC7_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ETC2RGB8_UNorm)]    = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ETC2RGB8_SRGB)]     = VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ETC2RGBA8_UNorm)]   = VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ETC2RGBA8_SRGB)]    = VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ASTC4x4_UNorm)]     = VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ASTC4x4_SRGB)]      = VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ASTC8x8_UNorm)]     = VK_FORMAT_ASTC_8x8_UNORM_BLOCK;
+        t[static_cast<size_t>(RHIFormat::ASTC8x8_SRGB)]      = VK_FORMAT_ASTC_8x8_SRGB_BLOCK;
+        return t;
+    }();
+    return table;
+}
+
 static VkFormat toVkFormat(RHIFormat format) {
-    switch (format) {
-    case RHIFormat::Undefined:         return VK_FORMAT_UNDEFINED;
-    case RHIFormat::R8_UNorm:          return VK_FORMAT_R8_UNORM;
-    case RHIFormat::R8_SNorm:          return VK_FORMAT_R8_SNORM;
-    case RHIFormat::R8_UInt:           return VK_FORMAT_R8_UINT;
-    case RHIFormat::R8_SInt:           return VK_FORMAT_R8_SINT;
-    case RHIFormat::RG8_UNorm:         return VK_FORMAT_R8G8_UNORM;
-    case RHIFormat::RG8_SNorm:         return VK_FORMAT_R8G8_SNORM;
-    case RHIFormat::RG8_UInt:          return VK_FORMAT_R8G8_UINT;
-    case RHIFormat::RG8_SInt:          return VK_FORMAT_R8G8_SINT;
-    case RHIFormat::RGBA8_UNorm:       return VK_FORMAT_R8G8B8A8_UNORM;
-    case RHIFormat::RGBA8_SNorm:       return VK_FORMAT_R8G8B8A8_SNORM;
-    case RHIFormat::RGBA8_UInt:        return VK_FORMAT_R8G8B8A8_UINT;
-    case RHIFormat::RGBA8_SInt:        return VK_FORMAT_R8G8B8A8_SINT;
-    case RHIFormat::RGBA8_SRGB:        return VK_FORMAT_R8G8B8A8_SRGB;
-    case RHIFormat::BGRA8_UNorm:       return VK_FORMAT_B8G8R8A8_UNORM;
-    case RHIFormat::BGRA8_SRGB:        return VK_FORMAT_B8G8R8A8_SRGB;
-    case RHIFormat::R16_UNorm:         return VK_FORMAT_R16_UNORM;
-    case RHIFormat::R16_SNorm:         return VK_FORMAT_R16_SNORM;
-    case RHIFormat::R16_UInt:          return VK_FORMAT_R16_UINT;
-    case RHIFormat::R16_SInt:          return VK_FORMAT_R16_SINT;
-    case RHIFormat::R16_Float:         return VK_FORMAT_R16_SFLOAT;
-    case RHIFormat::RG16_UNorm:        return VK_FORMAT_R16G16_UNORM;
-    case RHIFormat::RG16_SNorm:        return VK_FORMAT_R16G16_SNORM;
-    case RHIFormat::RG16_UInt:         return VK_FORMAT_R16G16_UINT;
-    case RHIFormat::RG16_SInt:         return VK_FORMAT_R16G16_SINT;
-    case RHIFormat::RG16_Float:        return VK_FORMAT_R16G16_SFLOAT;
-    case RHIFormat::RGBA16_UNorm:      return VK_FORMAT_R16G16B16A16_UNORM;
-    case RHIFormat::RGBA16_SNorm:      return VK_FORMAT_R16G16B16A16_SNORM;
-    case RHIFormat::RGBA16_UInt:       return VK_FORMAT_R16G16B16A16_UINT;
-    case RHIFormat::RGBA16_SInt:       return VK_FORMAT_R16G16B16A16_SINT;
-    case RHIFormat::RGBA16_Float:      return VK_FORMAT_R16G16B16A16_SFLOAT;
-    case RHIFormat::R32_UInt:          return VK_FORMAT_R32_UINT;
-    case RHIFormat::R32_SInt:          return VK_FORMAT_R32_SINT;
-    case RHIFormat::R32_Float:         return VK_FORMAT_R32_SFLOAT;
-    case RHIFormat::RG32_UInt:         return VK_FORMAT_R32G32_UINT;
-    case RHIFormat::RG32_SInt:         return VK_FORMAT_R32G32_SINT;
-    case RHIFormat::RG32_Float:        return VK_FORMAT_R32G32_SFLOAT;
-    case RHIFormat::RGB32_UInt:        return VK_FORMAT_R32G32B32_UINT;
-    case RHIFormat::RGB32_SInt:        return VK_FORMAT_R32G32B32_SINT;
-    case RHIFormat::RGB32_Float:       return VK_FORMAT_R32G32B32_SFLOAT;
-    case RHIFormat::RGBA32_UInt:       return VK_FORMAT_R32G32B32A32_UINT;
-    case RHIFormat::RGBA32_SInt:       return VK_FORMAT_R32G32B32A32_SINT;
-    case RHIFormat::RGBA32_Float:      return VK_FORMAT_R32G32B32A32_SFLOAT;
-    case RHIFormat::RGB10A2_UNorm:     return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
-    case RHIFormat::R11G11B10_Float:   return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
-    case RHIFormat::D16_UNorm:         return VK_FORMAT_D16_UNORM;
-    case RHIFormat::D24_UNorm:         return VK_FORMAT_X8_D24_UNORM_PACK32;
-    case RHIFormat::S8_UInt:           return VK_FORMAT_S8_UINT;
-    case RHIFormat::D24_UNorm_S8_UInt: return VK_FORMAT_D24_UNORM_S8_UINT;
-    case RHIFormat::D32_Float:         return VK_FORMAT_D32_SFLOAT;
-    case RHIFormat::D32_Float_S8_UInt: return VK_FORMAT_D32_SFLOAT_S8_UINT;
-    case RHIFormat::BC1RGBA_UNorm:     return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-    case RHIFormat::BC1RGBA_SRGB:      return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
-    case RHIFormat::BC3RGBA_UNorm:     return VK_FORMAT_BC3_UNORM_BLOCK;
-    case RHIFormat::BC3RGBA_SRGB:      return VK_FORMAT_BC3_SRGB_BLOCK;
-    case RHIFormat::BC5RG_UNorm:       return VK_FORMAT_BC5_UNORM_BLOCK;
-    case RHIFormat::BC5RG_SNorm:       return VK_FORMAT_BC5_SNORM_BLOCK;
-    case RHIFormat::BC7RGBA_UNorm:     return VK_FORMAT_BC7_UNORM_BLOCK;
-    case RHIFormat::BC7RGBA_SRGB:      return VK_FORMAT_BC7_SRGB_BLOCK;
-    case RHIFormat::ETC2RGB8_UNorm:    return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
-    case RHIFormat::ETC2RGB8_SRGB:     return VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK;
-    case RHIFormat::ETC2RGBA8_UNorm:   return VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
-    case RHIFormat::ETC2RGBA8_SRGB:    return VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK;
-    case RHIFormat::ASTC4x4_UNorm:     return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
-    case RHIFormat::ASTC4x4_SRGB:      return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
-    case RHIFormat::ASTC8x8_UNorm:     return VK_FORMAT_ASTC_8x8_UNORM_BLOCK;
-    case RHIFormat::ASTC8x8_SRGB:      return VK_FORMAT_ASTC_8x8_SRGB_BLOCK;
+    const auto index = static_cast<size_t>(format);
+    if (index >= toVkFormatTable().size()) {
+        return VK_FORMAT_UNDEFINED;
     }
-    return VK_FORMAT_UNDEFINED;
+    return toVkFormatTable()[index];
 }
 
 /// 把 swapchain 实际选到的 Vulkan format 转回通用 RHIFormat，保证上层拿到的 texture 描述与真实后备缓冲一致。
+// 也做成查表；用静态数组存所有可能 VkFormat 的反向映射。
+static const std::unordered_map<VkFormat, RHIFormat>& fromVkFormatTable() {
+    static const std::unordered_map<VkFormat, RHIFormat> table = {
+        {VK_FORMAT_R8_UNORM, RHIFormat::R8_UNorm},
+        {VK_FORMAT_R8_SNORM, RHIFormat::R8_SNorm},
+        {VK_FORMAT_R8_UINT, RHIFormat::R8_UInt},
+        {VK_FORMAT_R8_SINT, RHIFormat::R8_SInt},
+        {VK_FORMAT_R8G8_UNORM, RHIFormat::RG8_UNorm},
+        {VK_FORMAT_R8G8_SNORM, RHIFormat::RG8_SNorm},
+        {VK_FORMAT_R8G8_UINT, RHIFormat::RG8_UInt},
+        {VK_FORMAT_R8G8_SINT, RHIFormat::RG8_SInt},
+        {VK_FORMAT_R8G8B8A8_UNORM, RHIFormat::RGBA8_UNorm},
+        {VK_FORMAT_R8G8B8A8_SNORM, RHIFormat::RGBA8_SNorm},
+        {VK_FORMAT_R8G8B8A8_UINT, RHIFormat::RGBA8_UInt},
+        {VK_FORMAT_R8G8B8A8_SINT, RHIFormat::RGBA8_SInt},
+        {VK_FORMAT_R8G8B8A8_SRGB, RHIFormat::RGBA8_SRGB},
+        {VK_FORMAT_B8G8R8A8_UNORM, RHIFormat::BGRA8_UNorm},
+        {VK_FORMAT_B8G8R8A8_SRGB, RHIFormat::BGRA8_SRGB},
+        {VK_FORMAT_R16_UNORM, RHIFormat::R16_UNorm},
+        {VK_FORMAT_R16_SNORM, RHIFormat::R16_SNorm},
+        {VK_FORMAT_R16_UINT, RHIFormat::R16_UInt},
+        {VK_FORMAT_R16_SINT, RHIFormat::R16_SInt},
+        {VK_FORMAT_R16_SFLOAT, RHIFormat::R16_Float},
+        {VK_FORMAT_R16G16_UNORM, RHIFormat::RG16_UNorm},
+        {VK_FORMAT_R16G16_SNORM, RHIFormat::RG16_SNorm},
+        {VK_FORMAT_R16G16_UINT, RHIFormat::RG16_UInt},
+        {VK_FORMAT_R16G16_SINT, RHIFormat::RG16_SInt},
+        {VK_FORMAT_R16G16_SFLOAT, RHIFormat::RG16_Float},
+        {VK_FORMAT_R16G16B16A16_UNORM, RHIFormat::RGBA16_UNorm},
+        {VK_FORMAT_R16G16B16A16_SNORM, RHIFormat::RGBA16_SNorm},
+        {VK_FORMAT_R16G16B16A16_UINT, RHIFormat::RGBA16_UInt},
+        {VK_FORMAT_R16G16B16A16_SINT, RHIFormat::RGBA16_SInt},
+        {VK_FORMAT_R16G16B16A16_SFLOAT, RHIFormat::RGBA16_Float},
+        {VK_FORMAT_R32_UINT, RHIFormat::R32_UInt},
+        {VK_FORMAT_R32_SINT, RHIFormat::R32_SInt},
+        {VK_FORMAT_R32_SFLOAT, RHIFormat::R32_Float},
+        {VK_FORMAT_R32G32_UINT, RHIFormat::RG32_UInt},
+        {VK_FORMAT_R32G32_SINT, RHIFormat::RG32_SInt},
+        {VK_FORMAT_R32G32_SFLOAT, RHIFormat::RG32_Float},
+        {VK_FORMAT_R32G32B32_UINT, RHIFormat::RGB32_UInt},
+        {VK_FORMAT_R32G32B32_SINT, RHIFormat::RGB32_SInt},
+        {VK_FORMAT_R32G32B32_SFLOAT, RHIFormat::RGB32_Float},
+        {VK_FORMAT_R32G32B32A32_UINT, RHIFormat::RGBA32_UInt},
+        {VK_FORMAT_R32G32B32A32_SINT, RHIFormat::RGBA32_SInt},
+        {VK_FORMAT_R32G32B32A32_SFLOAT, RHIFormat::RGBA32_Float},
+        {VK_FORMAT_A2B10G10R10_UNORM_PACK32, RHIFormat::RGB10A2_UNorm},
+        {VK_FORMAT_B10G11R11_UFLOAT_PACK32, RHIFormat::R11G11B10_Float},
+        {VK_FORMAT_D16_UNORM, RHIFormat::D16_UNorm},
+        {VK_FORMAT_X8_D24_UNORM_PACK32, RHIFormat::D24_UNorm},
+        {VK_FORMAT_S8_UINT, RHIFormat::S8_UInt},
+        {VK_FORMAT_D24_UNORM_S8_UINT, RHIFormat::D24_UNorm_S8_UInt},
+        {VK_FORMAT_D32_SFLOAT, RHIFormat::D32_Float},
+        {VK_FORMAT_D32_SFLOAT_S8_UINT, RHIFormat::D32_Float_S8_UInt},
+        {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, RHIFormat::BC1RGBA_UNorm},
+        {VK_FORMAT_BC1_RGBA_SRGB_BLOCK, RHIFormat::BC1RGBA_SRGB},
+        {VK_FORMAT_BC3_UNORM_BLOCK, RHIFormat::BC3RGBA_UNorm},
+        {VK_FORMAT_BC3_SRGB_BLOCK, RHIFormat::BC3RGBA_SRGB},
+        {VK_FORMAT_BC5_UNORM_BLOCK, RHIFormat::BC5RG_UNorm},
+        {VK_FORMAT_BC5_SNORM_BLOCK, RHIFormat::BC5RG_SNorm},
+        {VK_FORMAT_BC7_UNORM_BLOCK, RHIFormat::BC7RGBA_UNorm},
+        {VK_FORMAT_BC7_SRGB_BLOCK, RHIFormat::BC7RGBA_SRGB},
+        {VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK, RHIFormat::ETC2RGB8_UNorm},
+        {VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK, RHIFormat::ETC2RGB8_SRGB},
+        {VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK, RHIFormat::ETC2RGBA8_UNorm},
+        {VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK, RHIFormat::ETC2RGBA8_SRGB},
+        {VK_FORMAT_ASTC_4x4_UNORM_BLOCK, RHIFormat::ASTC4x4_UNorm},
+        {VK_FORMAT_ASTC_4x4_SRGB_BLOCK, RHIFormat::ASTC4x4_SRGB},
+        {VK_FORMAT_ASTC_8x8_UNORM_BLOCK, RHIFormat::ASTC8x8_UNorm},
+        {VK_FORMAT_ASTC_8x8_SRGB_BLOCK, RHIFormat::ASTC8x8_SRGB},
+    };
+    return table;
+}
+
 static RHIFormat fromVkFormat(VkFormat format) {
-    switch (format) {
-    case VK_FORMAT_R8_UNORM:                  return RHIFormat::R8_UNorm;
-    case VK_FORMAT_R8_SNORM:                  return RHIFormat::R8_SNorm;
-    case VK_FORMAT_R8_UINT:                   return RHIFormat::R8_UInt;
-    case VK_FORMAT_R8_SINT:                   return RHIFormat::R8_SInt;
-    case VK_FORMAT_R8G8_UNORM:                return RHIFormat::RG8_UNorm;
-    case VK_FORMAT_R8G8_SNORM:                return RHIFormat::RG8_SNorm;
-    case VK_FORMAT_R8G8_UINT:                 return RHIFormat::RG8_UInt;
-    case VK_FORMAT_R8G8_SINT:                 return RHIFormat::RG8_SInt;
-    case VK_FORMAT_R8G8B8A8_UNORM:            return RHIFormat::RGBA8_UNorm;
-    case VK_FORMAT_R8G8B8A8_SNORM:            return RHIFormat::RGBA8_SNorm;
-    case VK_FORMAT_R8G8B8A8_UINT:             return RHIFormat::RGBA8_UInt;
-    case VK_FORMAT_R8G8B8A8_SINT:             return RHIFormat::RGBA8_SInt;
-    case VK_FORMAT_R8G8B8A8_SRGB:             return RHIFormat::RGBA8_SRGB;
-    case VK_FORMAT_B8G8R8A8_UNORM:            return RHIFormat::BGRA8_UNorm;
-    case VK_FORMAT_B8G8R8A8_SRGB:             return RHIFormat::BGRA8_SRGB;
-    case VK_FORMAT_R16_UNORM:                 return RHIFormat::R16_UNorm;
-    case VK_FORMAT_R16_SNORM:                 return RHIFormat::R16_SNorm;
-    case VK_FORMAT_R16_UINT:                  return RHIFormat::R16_UInt;
-    case VK_FORMAT_R16_SINT:                  return RHIFormat::R16_SInt;
-    case VK_FORMAT_R16_SFLOAT:                return RHIFormat::R16_Float;
-    case VK_FORMAT_R16G16_UNORM:              return RHIFormat::RG16_UNorm;
-    case VK_FORMAT_R16G16_SNORM:              return RHIFormat::RG16_SNorm;
-    case VK_FORMAT_R16G16_UINT:               return RHIFormat::RG16_UInt;
-    case VK_FORMAT_R16G16_SINT:               return RHIFormat::RG16_SInt;
-    case VK_FORMAT_R16G16_SFLOAT:             return RHIFormat::RG16_Float;
-    case VK_FORMAT_R16G16B16A16_UNORM:        return RHIFormat::RGBA16_UNorm;
-    case VK_FORMAT_R16G16B16A16_SNORM:        return RHIFormat::RGBA16_SNorm;
-    case VK_FORMAT_R16G16B16A16_UINT:         return RHIFormat::RGBA16_UInt;
-    case VK_FORMAT_R16G16B16A16_SINT:         return RHIFormat::RGBA16_SInt;
-    case VK_FORMAT_R16G16B16A16_SFLOAT:       return RHIFormat::RGBA16_Float;
-    case VK_FORMAT_R32_UINT:                  return RHIFormat::R32_UInt;
-    case VK_FORMAT_R32_SINT:                  return RHIFormat::R32_SInt;
-    case VK_FORMAT_R32_SFLOAT:                return RHIFormat::R32_Float;
-    case VK_FORMAT_R32G32_UINT:               return RHIFormat::RG32_UInt;
-    case VK_FORMAT_R32G32_SINT:               return RHIFormat::RG32_SInt;
-    case VK_FORMAT_R32G32_SFLOAT:             return RHIFormat::RG32_Float;
-    case VK_FORMAT_R32G32B32_UINT:            return RHIFormat::RGB32_UInt;
-    case VK_FORMAT_R32G32B32_SINT:            return RHIFormat::RGB32_SInt;
-    case VK_FORMAT_R32G32B32_SFLOAT:          return RHIFormat::RGB32_Float;
-    case VK_FORMAT_R32G32B32A32_UINT:         return RHIFormat::RGBA32_UInt;
-    case VK_FORMAT_R32G32B32A32_SINT:         return RHIFormat::RGBA32_SInt;
-    case VK_FORMAT_R32G32B32A32_SFLOAT:       return RHIFormat::RGBA32_Float;
-    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:  return RHIFormat::RGB10A2_UNorm;
-    case VK_FORMAT_B10G11R11_UFLOAT_PACK32:   return RHIFormat::R11G11B10_Float;
-    case VK_FORMAT_D16_UNORM:                 return RHIFormat::D16_UNorm;
-    case VK_FORMAT_X8_D24_UNORM_PACK32:       return RHIFormat::D24_UNorm;
-    case VK_FORMAT_S8_UINT:                   return RHIFormat::S8_UInt;
-    case VK_FORMAT_D24_UNORM_S8_UINT:         return RHIFormat::D24_UNorm_S8_UInt;
-    case VK_FORMAT_D32_SFLOAT:                return RHIFormat::D32_Float;
-    case VK_FORMAT_D32_SFLOAT_S8_UINT:        return RHIFormat::D32_Float_S8_UInt;
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:      return RHIFormat::BC1RGBA_UNorm;
-    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:       return RHIFormat::BC1RGBA_SRGB;
-    case VK_FORMAT_BC3_UNORM_BLOCK:           return RHIFormat::BC3RGBA_UNorm;
-    case VK_FORMAT_BC3_SRGB_BLOCK:            return RHIFormat::BC3RGBA_SRGB;
-    case VK_FORMAT_BC5_UNORM_BLOCK:           return RHIFormat::BC5RG_UNorm;
-    case VK_FORMAT_BC5_SNORM_BLOCK:           return RHIFormat::BC5RG_SNorm;
-    case VK_FORMAT_BC7_UNORM_BLOCK:           return RHIFormat::BC7RGBA_UNorm;
-    case VK_FORMAT_BC7_SRGB_BLOCK:            return RHIFormat::BC7RGBA_SRGB;
-    case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:   return RHIFormat::ETC2RGB8_UNorm;
-    case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:    return RHIFormat::ETC2RGB8_SRGB;
-    case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK: return RHIFormat::ETC2RGBA8_UNorm;
-    case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:  return RHIFormat::ETC2RGBA8_SRGB;
-    case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:      return RHIFormat::ASTC4x4_UNorm;
-    case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:       return RHIFormat::ASTC4x4_SRGB;
-    case VK_FORMAT_ASTC_8x8_UNORM_BLOCK:      return RHIFormat::ASTC8x8_UNorm;
-    case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:       return RHIFormat::ASTC8x8_SRGB;
-    default:                                  return RHIFormat::Undefined;
-    }
+    const auto& table = fromVkFormatTable();
+    const auto it = table.find(format);
+    return it == table.end() ? RHIFormat::Undefined : it->second;
 }
 
 static VkSampleCountFlagBits toVkSampleCount(RHISampleCount samples) {
@@ -659,20 +678,47 @@ static VkPipelineStageFlags toVkPipelineStages(RHIPipelineStage stages) {
 }
 
 [[maybe_unused]] static VkAccessFlags accessFromResourceState(RHIResourceState state) {
-    switch (state) {
-    case RHIResourceState::CopySource:       return VK_ACCESS_TRANSFER_READ_BIT;
-    case RHIResourceState::CopyDestination:  return VK_ACCESS_TRANSFER_WRITE_BIT;
-    case RHIResourceState::VertexBuffer:     return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    case RHIResourceState::IndexBuffer:      return VK_ACCESS_INDEX_READ_BIT;
-    case RHIResourceState::ConstantBuffer:   return VK_ACCESS_UNIFORM_READ_BIT;
-    case RHIResourceState::ShaderRead:       return VK_ACCESS_SHADER_READ_BIT;
-    case RHIResourceState::ShaderWrite:      return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    case RHIResourceState::RenderTarget:     return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    case RHIResourceState::DepthRead:        return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-    case RHIResourceState::DepthWrite:       return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    case RHIResourceState::IndirectArgument: return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-    default:                              return 0;
-    }
+    // 256 槽查表，0 槽是 None。RHIResourceState 是 u16 不可能超 256。
+    static const std::array<VkAccessFlags, 256> table = [] {
+        std::array<VkAccessFlags, 256> t{};
+        t[static_cast<size_t>(RHIResourceState::CopySource)]       = VK_ACCESS_TRANSFER_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::CopyDestination)]  = VK_ACCESS_TRANSFER_WRITE_BIT;
+        t[static_cast<size_t>(RHIResourceState::VertexBuffer)]     = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::IndexBuffer)]      = VK_ACCESS_INDEX_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::ConstantBuffer)]   = VK_ACCESS_UNIFORM_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::ShaderRead)]       = VK_ACCESS_SHADER_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::ShaderWrite)]      = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        t[static_cast<size_t>(RHIResourceState::RenderTarget)]     = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        t[static_cast<size_t>(RHIResourceState::DepthRead)]        = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        t[static_cast<size_t>(RHIResourceState::DepthWrite)]       = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        t[static_cast<size_t>(RHIResourceState::IndirectArgument)] = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        return t;
+    }();
+    const auto index = static_cast<size_t>(state);
+    return index < table.size() ? table[index] : VkAccessFlags{0};
+}
+
+/// 把 RHIResourceState 映射到目标管线阶段。用于 barrier 的 dstStageMask,
+/// 比直接用 ALL_COMMANDS_BIT 更精确,能减少 GPU 端的等待。
+[[maybe_unused]] static VkPipelineStageFlags stageFromResourceState(RHIResourceState state) {
+    static const std::array<VkPipelineStageFlags, 256> table = [] {
+        std::array<VkPipelineStageFlags, 256> t{};
+        t[static_cast<size_t>(RHIResourceState::CopySource)]       = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        t[static_cast<size_t>(RHIResourceState::CopyDestination)]  = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        t[static_cast<size_t>(RHIResourceState::VertexBuffer)]     = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        t[static_cast<size_t>(RHIResourceState::IndexBuffer)]      = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        t[static_cast<size_t>(RHIResourceState::ConstantBuffer)]   = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        t[static_cast<size_t>(RHIResourceState::ShaderRead)]       = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        t[static_cast<size_t>(RHIResourceState::ShaderWrite)]      = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        t[static_cast<size_t>(RHIResourceState::RenderTarget)]     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        t[static_cast<size_t>(RHIResourceState::DepthRead)]        = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        t[static_cast<size_t>(RHIResourceState::DepthWrite)]       = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        t[static_cast<size_t>(RHIResourceState::IndirectArgument)] = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+        t[static_cast<size_t>(RHIResourceState::Present)]            = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        return t;
+    }();
+    const auto index = static_cast<size_t>(state);
+    return index < table.size() ? table[index] : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 }
 
 static VkDeviceSize toVkWholeSize(u64 size) {
@@ -783,6 +829,11 @@ struct RHIVulkan::Impl {
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     bool ownsSurface = false;
     bool supportsTimelineSemaphore = false;
+    u32 framesInFlight = 2;
+
+    // 缓存物理设备内存属性。findMemoryType() 在每个资源创建时调用,原本每次都查
+    // vkGetPhysicalDeviceMemoryProperties,初始化时统一缓存一次即可。
+    VkPhysicalDeviceMemoryProperties memoryProperties{};
 
     std::vector<BufferResource> buffers;
     std::vector<TextureResource> textures;
@@ -799,6 +850,29 @@ struct RHIVulkan::Impl {
     std::vector<CPUWaitGPUSignalResource> cpuWaitGPUSignals;
     std::vector<SwapchainResource> swapchains;
 
+    // RHITexture(1-based) → 该 texture 拥有的所有 view 句柄。RenderGraph pass 录制时
+    // 找 attachment 视图走 O(1),不再线性扫整个 textureViews vector。
+    std::unordered_map<u64, std::vector<u64>> viewsByTexture;
+
+    /// 帧资源:每帧独立的 command buffer + fence + ring staging buffer。
+    /// 提交时按 frameIndex % framesInFlight 轮转,等上一帧同一 slot 的 fence 即可,
+    /// CPU 就能提前 N 帧录制下一帧,不必等 GPU 真正完成。
+    struct FrameResources {
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkFence inFlightFence = VK_NULL_HANDLE;
+
+        // 持久映射的环形 staging buffer。Upload 走 offset 推进,跨帧自动回卷;
+        // 满了就 wrap(等待上一帧的 fence 后回卷;理论上单帧不会装满 N MB)。
+        VkBuffer      stagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void*         stagingMapped = nullptr;
+        VkDeviceSize  stagingCapacity = 0;
+        VkDeviceSize  stagingHead = 0;       // 当前分配 offset
+        VkDeviceSize  stagingSubmittedHead = 0; // 上一帧提交的 head,fence 等完才能 wrap
+    };
+    std::vector<FrameResources> frames;
+    u64 frameCounter = 0;  // 全局递增 frame index,用于轮转 frames[] 槽位
+
     void setObjectName(VkObjectType type, u64 object, const std::string& name) const {
         if (setDebugUtilsObjectName == nullptr || object == 0 || name.empty()) {
             return;
@@ -812,8 +886,6 @@ struct RHIVulkan::Impl {
     }
 
     u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const {
-        VkPhysicalDeviceMemoryProperties memoryProperties{};
-        vkGetPhysicalDeviceMemoryProperties(native.physicalDevice, &memoryProperties);
         for (u32 index = 0; index < memoryProperties.memoryTypeCount; ++index) {
             const bool typeMatches = (typeBits & (1u << index)) != 0;
             const bool flagsMatch = (memoryProperties.memoryTypes[index].propertyFlags & properties) == properties;
@@ -822,6 +894,30 @@ struct RHIVulkan::Impl {
             }
         }
         throw std::runtime_error("No compatible Vulkan memory type was found");
+    }
+
+    void registerView(RHITextureView viewHandle) {
+        const auto* view = getRenderResource(textureViews, viewHandle);
+        if (view == nullptr) {
+            return;
+        }
+        viewsByTexture[view->desc.texture.value].push_back(viewHandle.value);
+    }
+
+    void unregisterView(RHITextureView viewHandle) {
+        const auto* view = getRenderResource(textureViews, viewHandle);
+        if (view == nullptr) {
+            return;
+        }
+        const auto it = viewsByTexture.find(view->desc.texture.value);
+        if (it == viewsByTexture.end()) {
+            return;
+        }
+        auto& bucket = it->second;
+        bucket.erase(std::remove(bucket.begin(), bucket.end(), viewHandle.value), bucket.end());
+        if (bucket.empty()) {
+            viewsByTexture.erase(it);
+        }
     }
 
     VkQueue queueForType(RHIQueueType type) const {

@@ -89,6 +89,7 @@ public:
     [[nodiscard]] bool SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage = nullptr);
 
     void WaitIdle() const noexcept;
+    void WaitForCPUSignal(RHICPUWaitGPUSignal handle) const noexcept;
 
     void Destroy(RHIBuffer handle) noexcept;
     void Destroy(RHITexture handle) noexcept;

@@ -92,10 +92,10 @@ bool RHID3D12::Initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
             throw std::runtime_error("CreateEventW for D3D12 fence failed");
         }
 
-        impl_->createDescriptorHeap(impl_->cbvSrvUavHeap, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4096);
-        impl_->createDescriptorHeap(impl_->rtvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 512);
-        impl_->createDescriptorHeap(impl_->dsvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256);
-        impl_->createDescriptorHeap(impl_->samplerHeap, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 512);
+        impl_->createDescriptorHeap(impl_->cbvSrvUavHeap, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4096, true);
+        impl_->createDescriptorHeap(impl_->rtvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 512, false);
+        impl_->createDescriptorHeap(impl_->dsvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256, false);
+        impl_->createDescriptorHeap(impl_->samplerHeap, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 512, true);
 
         impl_->caps = makeCapabilities(impl_->adapter.Get(), impl_->featureLevel);
         if (!supportsRequiredFeatures(impl_->caps, desc.backend.requiredFeatures)) {

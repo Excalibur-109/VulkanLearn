@@ -496,6 +496,26 @@ void RHID3D11::WaitIdle() const noexcept {
     }
 }
 
+void RHID3D11::WaitForCPUSignal(RHICPUWaitGPUSignal handle) const noexcept {
+    if (!IsInitialized()) {
+        return;
+    }
+    // D3D11 没真正的 GPU fence,用 event query 等同于 WaitIdle 行为。
+    // 这是简化的同步方案,实际生产应该跟 WaitIdle 区分(本后端暂未实现真实 fence 等待)。
+    const Impl::CPUWaitGPUSignalResource* fence = getRenderResource(impl_->cpuWaitGPUSignals, handle);
+    if (fence == nullptr) {
+        return;
+    }
+    if (fence->eventQuery) {
+        BOOL done = FALSE;
+        while (impl_->context->GetData(fence->eventQuery.Get(), &done, sizeof(done), 0) == S_FALSE) {
+            Sleep(0);
+        }
+    } else {
+        impl_->context->Flush();
+    }
+}
+
 // Destroy 系列只清空对应槽位里的 COM 对象和描述，不压缩 vector。
 // RHIHandle 是 1-based index，压缩会导致已发出的 RHIHandle 指向错误资源。
 // D3D11 frame 片段负责把 RHIFramePacket 直接执行到 immediate context。

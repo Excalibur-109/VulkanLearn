@@ -606,6 +606,7 @@ static std::string defaultProfileForStage(RHIShaderStage stage) {
 struct CpuDescriptor {
     D3D12_DESCRIPTOR_HEAP_TYPE type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     D3D12_CPU_DESCRIPTOR_HANDLE handle{};
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle{};   // 仅 shader-visible heap 时有效
     UINT index = 0;
     bool valid = false;
 };
@@ -894,14 +895,15 @@ struct RHID3D12::Impl {
         object->SetName(wideName.c_str());
     }
 
-    void createDescriptorHeap(DescriptorHeapArena& arena, D3D12_DESCRIPTOR_HEAP_TYPE type, UINT capacity) {
+    void createDescriptorHeap(DescriptorHeapArena& arena, D3D12_DESCRIPTOR_HEAP_TYPE type, UINT capacity, bool shaderVisible) {
         arena.type = type;
         arena.capacity = capacity;
         arena.used = 0;
         D3D12_DESCRIPTOR_HEAP_DESC desc{};
         desc.Type = type;
         desc.NumDescriptors = capacity;
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        // CBV_SRV_UAV / SAMPLER 必须 shader-visible 才能在录制时直接绑定;RTV/DSV 不需要。
+        desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         throwIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&arena.heap)), "CreateDescriptorHeap failed");
         arena.increment = device->GetDescriptorHandleIncrementSize(type);
     }
@@ -927,6 +929,10 @@ struct RHID3D12::Impl {
         descriptor.valid = true;
         descriptor.handle = arena->heap->GetCPUDescriptorHandleForHeapStart();
         descriptor.handle.ptr += static_cast<SIZE_T>(descriptor.index) * arena->increment;
+        if (arena->heap->GetDesc().Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) {
+            descriptor.gpuHandle = arena->heap->GetGPUDescriptorHandleForHeapStart();
+            descriptor.gpuHandle.ptr += static_cast<SIZE_T>(descriptor.index) * arena->increment;
+        }
         return descriptor;
     }
 

@@ -149,6 +149,7 @@ RHITextureView RHIVulkan::CreateTextureView(const RHITextureViewDesc& desc) {
 
     const RHITextureView handle = makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(resource));
     impl_->setObjectName(VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<u64>(impl_->textureViews.back().view), desc.debugName);
+    impl_->registerView(handle);
     return handle;
 }
 
@@ -284,8 +285,16 @@ RHIBindSet RHIVulkan::CreateBindSet(const RHIBindSetDesc& desc) {
     allocateInfo.descriptorSetCount = 1;
     allocateInfo.pSetLayouts = &layout->layout;
 
+    // descriptor pool 满了先重置再重试一次。Vulkan 的 pool 不能动态扩,重置释放所有 set 后
+    // 再分配就够用。BindSet 是 Create 时立即填充的,重置不会丢正在用的描述符。
     if (vkAllocateDescriptorSets(impl_->native.device, &allocateInfo, &resource.set) != VK_SUCCESS) {
-        throw std::runtime_error("vkAllocateDescriptorSets failed");
+        if (vkResetDescriptorPool(impl_->native.device, impl_->descriptorPool, 0) == VK_SUCCESS) {
+            if (vkAllocateDescriptorSets(impl_->native.device, &allocateInfo, &resource.set) != VK_SUCCESS) {
+                throw std::runtime_error("vkAllocateDescriptorSets failed after descriptor pool reset");
+            }
+        } else {
+            throw std::runtime_error("vkAllocateDescriptorSets failed and pool reset was not successful");
+        }
     }
 
     std::vector<VkDescriptorBufferInfo> bufferInfos;

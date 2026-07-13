@@ -390,6 +390,9 @@ enum class RHIFormat : u16 {
     ASTC8x8_SRGB ///< ASTC 8x8 高压缩率 sRGB 格式。
 };
 
+/// RHIFormat 枚举的元素数量。后端用查表映射时用作数组上界。
+inline constexpr u32 RHI_FORMAT_COUNT = static_cast<u32>(RHIFormat::ASTC8x8_SRGB) + 1;
+
 /// 判断格式是否包含深度分量，用于选择 depth attachment 或 depth texture 采样路径。
 [[nodiscard]] constexpr bool isDepthFormat(RHIFormat format) noexcept {
     return format == RHIFormat::D16_UNorm ||

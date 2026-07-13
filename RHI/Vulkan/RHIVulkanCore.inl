@@ -241,8 +241,7 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
             throw std::runtime_error("vkCreateDescriptorPool failed");
         }
 
-        VkPhysicalDeviceMemoryProperties memoryProperties{};
-        vkGetPhysicalDeviceMemoryProperties(impl_->native.physicalDevice, &memoryProperties);
+        vkGetPhysicalDeviceMemoryProperties(impl_->native.physicalDevice, &impl_->memoryProperties);
 
         impl_->caps.api = RHIGraphicsAPI::Vulkan;
         impl_->caps.adapterName = support.properties.deviceName;
@@ -290,11 +289,68 @@ bool RHIVulkan::Initialize(const RHIVulkanDesc& desc, std::string* errorMessage)
         if (impl_->caps.supportsTextureCompressionETC2)  impl_->caps.features |= RHIRenderFeature::TextureCompressionETC2;
         if (impl_->caps.supportsTextureCompressionASTC)  impl_->caps.features |= RHIRenderFeature::TextureCompressionASTC;
 
-        for (u32 i = 0; i < memoryProperties.memoryHeapCount; ++i) {
-            if ((memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
-                impl_->caps.dedicatedVideoMemory += memoryProperties.memoryHeaps[i].size;
+        for (u32 i = 0; i < impl_->memoryProperties.memoryHeapCount; ++i) {
+            if ((impl_->memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
+                impl_->caps.dedicatedVideoMemory += impl_->memoryProperties.memoryHeaps[i].size;
             } else {
-                impl_->caps.sharedSystemMemory += memoryProperties.memoryHeaps[i].size;
+                impl_->caps.sharedSystemMemory += impl_->memoryProperties.memoryHeaps[i].size;
+            }
+        }
+
+        // Per-frame 资源池:framesInFlight 个 command buffer + fence + 持久映射的 ring staging。
+        // framesInFlight=1 时退化为单缓冲;2 是最常见的 GPU/CPU 重叠配置。
+        impl_->framesInFlight = std::max(1u, desc.backend.framesInFlight);
+        impl_->frames.resize(impl_->framesInFlight);
+        {
+            VkCommandBufferAllocateInfo cbInfo{};
+            cbInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            cbInfo.commandPool = impl_->graphicsCommandPool;
+            cbInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            cbInfo.commandBufferCount = 1;
+
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            // 初始 signaled:第一次录制时 vkWaitForFences 不会卡死(等的是上一帧的 fence)
+            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+            // Ring staging 容量:16 MB 每帧槽。多数 1080p 帧上传数据远小于此。
+            constexpr VkDeviceSize kStagingCapacity = 16ull * 1024 * 1024;
+
+            VkBufferCreateInfo stagingInfo{};
+            stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            stagingInfo.size = kStagingCapacity;
+            stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            for (auto& frame : impl_->frames) {
+                if (vkAllocateCommandBuffers(impl_->native.device, &cbInfo, &frame.commandBuffer) != VK_SUCCESS) {
+                    throw std::runtime_error("vkAllocateCommandBuffers(frame) failed");
+                }
+                if (vkCreateFence(impl_->native.device, &fenceInfo, nullptr, &frame.inFlightFence) != VK_SUCCESS) {
+                    throw std::runtime_error("vkCreateFence(frame) failed");
+                }
+
+                if (vkCreateBuffer(impl_->native.device, &stagingInfo, nullptr, &frame.stagingBuffer) != VK_SUCCESS) {
+                    throw std::runtime_error("vkCreateBuffer(staging) failed");
+                }
+                VkMemoryRequirements req{};
+                vkGetBufferMemoryRequirements(impl_->native.device, frame.stagingBuffer, &req);
+                VkMemoryAllocateInfo memInfo{};
+                memInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memInfo.allocationSize = req.size;
+                memInfo.memoryTypeIndex = impl_->findMemoryType(
+                    req.memoryTypeBits,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                if (vkAllocateMemory(impl_->native.device, &memInfo, nullptr, &frame.stagingMemory) != VK_SUCCESS) {
+                    throw std::runtime_error("vkAllocateMemory(staging) failed");
+                }
+                if (vkBindBufferMemory(impl_->native.device, frame.stagingBuffer, frame.stagingMemory, 0) != VK_SUCCESS) {
+                    throw std::runtime_error("vkBindBufferMemory(staging) failed");
+                }
+                if (vkMapMemory(impl_->native.device, frame.stagingMemory, 0, kStagingCapacity, 0, &frame.stagingMapped) != VK_SUCCESS) {
+                    throw std::runtime_error("vkMapMemory(staging) failed");
+                }
+                frame.stagingCapacity = kStagingCapacity;
             }
         }
 
@@ -354,6 +410,34 @@ void RHIVulkan::Shutdown() noexcept {
     for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
     for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
     for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
+
+    // 销毁 frames 池:先 unmap staging,再 free/destroy buffer + memory,
+    // 然后释放 command buffer(在 graphicsCommandPool 里),最后 destroy fence。
+    for (auto& frame : impl_->frames) {
+        if (frame.stagingMapped != nullptr) {
+            vkUnmapMemory(impl_->native.device, frame.stagingMemory);
+            frame.stagingMapped = nullptr;
+        }
+        if (frame.stagingBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(impl_->native.device, frame.stagingBuffer, nullptr);
+            frame.stagingBuffer = VK_NULL_HANDLE;
+        }
+        if (frame.stagingMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(impl_->native.device, frame.stagingMemory, nullptr);
+            frame.stagingMemory = VK_NULL_HANDLE;
+        }
+        if (frame.commandBuffer != VK_NULL_HANDLE) {
+            vkFreeCommandBuffers(impl_->native.device, impl_->graphicsCommandPool, 1, &frame.commandBuffer);
+            frame.commandBuffer = VK_NULL_HANDLE;
+        }
+        if (frame.inFlightFence != VK_NULL_HANDLE) {
+            vkDestroyFence(impl_->native.device, frame.inFlightFence, nullptr);
+            frame.inFlightFence = VK_NULL_HANDLE;
+        }
+    }
+    impl_->frames.clear();
+    impl_->viewsByTexture.clear();
+    impl_->frameCounter = 0;
 
     if (impl_->graphicsCommandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(impl_->native.device, impl_->graphicsCommandPool, nullptr);

@@ -155,6 +155,9 @@ public:
     /// 等待 device idle，通常只在 resize、退出或资源大清理时使用。
     void WaitIdle() const noexcept;
 
+    /// 等待单个 CPU fence signaled,用于 frames-in-flight 模式下确保当前 slot 的 GPU 工作完成。
+    void WaitForCPUSignal(RHICPUWaitGPUSignal handle) const noexcept;
+
     /// 按句柄销毁对应 Vulkan 资源；无效句柄或已经销毁的资源会被忽略。
     void Destroy(RHIBuffer handle) noexcept;
     void Destroy(RHITexture handle) noexcept;

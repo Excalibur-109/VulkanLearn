@@ -789,8 +789,20 @@ int main(int argc, char** argv) {
         ExampleResources resources = createExampleResources(renderer, targets.colorFormat);
         updateSceneUniforms(resources, targets.extent);
 
-        RHIGPUWaitGPUSignal imageAvailable = renderer.CreateGPUWaitGPUSignal({"Example.ImageAvailable", RHIGPUWaitGPUSignalType::Binary});
-        RHIGPUWaitGPUSignal renderFinished = renderer.CreateGPUWaitGPUSignal({"Example.RenderFinished", RHIGPUWaitGPUSignalType::Binary});
+        // frames-in-flight:每个 slot 独立一对 imageAvailable / renderFinished semaphore,
+        // 避免上一帧 GPU 还没用完就拿同一对 semaphore 去 acquire/present 导致 validation 报错。
+        constexpr u32 kFrameSlotCount = 2;
+        std::vector<RHIGPUWaitGPUSignal> imageAvailable(kFrameSlotCount);
+        std::vector<RHIGPUWaitGPUSignal> renderFinished(kFrameSlotCount);
+        std::vector<RHICPUWaitGPUSignal> inFlightFences(kFrameSlotCount);
+        for (u32 slot = 0; slot < kFrameSlotCount; ++slot) {
+            imageAvailable[slot] = renderer.CreateGPUWaitGPUSignal({
+                "Example.ImageAvailable[" + std::to_string(slot) + "]", RHIGPUWaitGPUSignalType::Binary});
+            renderFinished[slot] = renderer.CreateGPUWaitGPUSignal({
+                "Example.RenderFinished[" + std::to_string(slot) + "]", RHIGPUWaitGPUSignalType::Binary});
+            inFlightFences[slot] = renderer.CreateCPUWaitGPUSignal({
+                "Example.InFlight[" + std::to_string(slot) + "]", true /*signaled*/});
+        }
 
         u64 frameIndex = 0;
         while (!glfwWindowShouldClose(window) && (maxFrames == 0 || frameIndex < maxFrames)) {
@@ -805,13 +817,20 @@ int main(int argc, char** argv) {
 
             updateSceneUniforms(resources, targets.extent);
 
+            const u32 slot = static_cast<u32>(frameIndex % kFrameSlotCount);
+
+            // 等当前 slot 的 GPU 工作完成,确保 imageAvailable 上一帧已经被 GPU 消费。
+            renderer.WaitForCPUSignal(inFlightFences[slot]);
+
             u32 imageIndex = 0;
-            if (!renderer.AcquireNextImage(targets.swapchain, imageAvailable, RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
+            if (!renderer.AcquireNextImage(targets.swapchain, imageAvailable[slot], RHICPUWaitGPUSignal{}, &imageIndex, &errorMessage)) {
                 std::cerr << "AcquireNextImage 失败: " << errorMessage << '\n';
                 break;
             }
 
-            RHIFramePacket packet = buildFramePacket(resources, targets, imageIndex, imageAvailable, renderFinished, frameIndex++);
+            RHIFramePacket packet = buildFramePacket(resources, targets, imageIndex, imageAvailable[slot], renderFinished[slot], frameIndex);
+            packet.submissions[0].cpuWaitGPUSignal = inFlightFences[slot];
+            ++frameIndex;
             // RHIFramePacket 将上传、阴影 Pass、PBR Pass、提交和呈现组织成一帧。
             if (!renderer.SubmitFrame(packet, &errorMessage)) {
                 std::cerr << "SubmitFrame 失败: " << errorMessage << '\n';
@@ -820,8 +839,11 @@ int main(int argc, char** argv) {
         }
 
         renderer.WaitIdle();
-        renderer.Destroy(renderFinished);
-        renderer.Destroy(imageAvailable);
+        for (u32 slot = 0; slot < kFrameSlotCount; ++slot) {
+            renderer.Destroy(inFlightFences[slot]);
+            renderer.Destroy(renderFinished[slot]);
+            renderer.Destroy(imageAvailable[slot]);
+        }
         DestroyExampleResources(renderer, resources);
         DestroyFrameTargets(renderer, targets);
         renderer.Shutdown();

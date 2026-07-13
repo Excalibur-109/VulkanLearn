@@ -37,6 +37,7 @@ void RHIVulkan::Destroy(RHITexture handle) noexcept {
 void RHIVulkan::Destroy(RHITextureView handle) noexcept {
     Impl::TextureViewResource* resource = getRenderResource(impl_->textureViews, handle);
     if (resource != nullptr && resource->view != VK_NULL_HANDLE) {
+        impl_->unregisterView(handle);
         vkDestroyImageView(impl_->native.device, resource->view, nullptr);
         resource->view = VK_NULL_HANDLE;
     }

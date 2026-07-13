@@ -252,6 +252,10 @@ void RHIDevice::WaitIdle() const noexcept {
     visitImplementationNoexcept(impl_->implementation, [](const auto& implementation) { implementation.WaitIdle(); });
 }
 
+void RHIDevice::WaitForCPUSignal(RHICPUWaitGPUSignal handle) const noexcept {
+    visitImplementationNoexcept(impl_->implementation, [&](const auto& implementation) { implementation.WaitForCPUSignal(handle); });
+}
+
 #define RHI_FORWARD_DESTROY(HandleType) \
     void RHIDevice::Destroy(HandleType handle) noexcept { \
         visitImplementationNoexcept(impl_->implementation, [&](auto& implementation) { implementation.Destroy(handle); }); \
