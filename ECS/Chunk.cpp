@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cassert>
 #include <limits>
-#include <new>
 #include <stdexcept>
 
 namespace ecs {
@@ -13,15 +12,14 @@ namespace {
     return (value + alignment - 1U) & ~(alignment - 1U);
 }
 
-[[nodiscard]] ChunkLayout BuildLayoutForCapacity(
+[[nodiscard]] ChunkLayout BuildForCapacity(
     std::span<const ComponentInfo* const> componentInfos,
     u32 capacity) {
     ChunkLayout layout{};
     layout.capacity         = capacity;
     layout.storageAlignment = alignof(Entity);
 
-    std::size_t offset = 0;
-    offset = AlignUp(offset, alignof(Entity));
+    std::size_t offset = AlignUp(0, alignof(Entity));
     layout.entityOffset = offset;
     offset += sizeof(Entity) * capacity;
 
@@ -29,6 +27,12 @@ namespace {
     for (const ComponentInfo* info : componentInfos) {
         layout.storageAlignment = std::max(layout.storageAlignment, info->alignment);
         offset                  = AlignUp(offset, info->alignment);
+        if (layout.columnIndices.size() <= info->id) {
+            layout.columnIndices.resize(
+                static_cast<std::size_t>(info->id) + 1U,
+                INVALID_COMPONENT_TYPE);
+        }
+        layout.columnIndices[info->id] = static_cast<u32>(layout.columns.size());
         layout.columns.push_back(ComponentColumn{info->id, info, offset});
         offset += info->size * capacity;
     }
@@ -41,16 +45,11 @@ namespace {
 } // namespace
 
 const ComponentColumn* ChunkLayout::FindColumn(ComponentTypeId componentType) const noexcept {
-    const auto iterator = std::lower_bound(
-        columns.begin(),
-        columns.end(),
-        componentType,
-        [](const ComponentColumn& column, ComponentTypeId value) {
-            return column.componentType < value;
-        });
-    return iterator != columns.end() && iterator->componentType == componentType
-               ? std::addressof(*iterator)
-               : nullptr;
+    if (componentType >= columnIndices.size()) {
+        return nullptr;
+    }
+    const u32 columnIndex = columnIndices[componentType];
+    return columnIndex == INVALID_COMPONENT_TYPE ? nullptr : std::addressof(columns[columnIndex]);
 }
 
 ChunkLayout BuildChunkLayout(
@@ -65,28 +64,25 @@ ChunkLayout BuildChunkLayout(
         bytesPerEntity += info->size;
     }
 
-    const std::size_t estimatedCapacity =
+    const std::size_t estimate =
         std::max<std::size_t>(1, targetChunkSize / std::max<std::size_t>(1, bytesPerEntity));
-    const u32 firstCapacity = static_cast<u32>(std::min<std::size_t>(
-        estimatedCapacity,
-        std::numeric_limits<u32>::max()));
+    const u32 firstCapacity = static_cast<u32>(
+        std::min<std::size_t>(estimate, std::numeric_limits<u32>::max()));
 
-    // 对齐填充会让简单的 targetSize / bytesPerEntity 略微偏大，向下寻找首个可用容量。
+    // 列起始对齐会增加少量 padding，因此从估算容量向下找到实际可容纳的最大值。
     for (u32 capacity = firstCapacity; capacity > 1; --capacity) {
-        ChunkLayout layout = BuildLayoutForCapacity(componentInfos, capacity);
+        ChunkLayout layout = BuildForCapacity(componentInfos, capacity);
         if (layout.storageSize <= targetChunkSize) {
             return layout;
         }
     }
-
-    // 单个超大组件可能已经超过 16 KiB。仍允许 capacity=1，而不是拒绝这种组件。
-    return BuildLayoutForCapacity(componentInfos, 1);
+    return BuildForCapacity(componentInfos, 1);
 }
 
 Chunk::Chunk(const ChunkLayout& layout)
-    : layout_(&layout) {
-    storage_ = static_cast<std::byte*>(
-        ::operator new(layout.storageSize, std::align_val_t(layout.storageAlignment)));
+    : layout_(&layout),
+      storage_(static_cast<std::byte*>(
+          AllocateRawMemory(layout.storageSize, layout.storageAlignment))) {
 }
 
 Chunk::~Chunk() {
@@ -96,7 +92,7 @@ Chunk::~Chunk() {
         }
         std::destroy_at(EntityData() + row);
     }
-    ::operator delete(storage_, std::align_val_t(layout_->storageAlignment));
+    FreeRawMemory(storage_, layout_->storageAlignment);
 }
 
 Entity Chunk::EntityAt(u32 row) const {
@@ -133,15 +129,10 @@ void* Chunk::ComponentColumnData(ComponentTypeId componentType) {
     return storage_ + column->offset;
 }
 
-const void* Chunk::ComponentColumnData(ComponentTypeId componentType) const {
-    return const_cast<Chunk*>(this)->ComponentColumnData(componentType);
-}
-
 u32 Chunk::AllocateUninitialized(Entity entity) {
     if (Full()) {
         throw std::overflow_error("The ECS chunk has no free rows");
     }
-
     const u32 row = count_++;
     std::construct_at(EntityData() + row, entity);
     return row;
@@ -164,23 +155,43 @@ std::optional<Entity> Chunk::RemoveRow(u32 row) noexcept {
     const u32 lastRow = count_ - 1U;
 
     for (const ComponentColumn& column : layout_->columns) {
-        void* removedValue = storage_ + column.offset + column.info->size * row;
-        column.info->destroy(removedValue);
-
+        void* removed = storage_ + column.offset + column.info->size * row;
+        column.info->destroy(removed);
         if (row != lastRow) {
-            void* lastValue = storage_ + column.offset + column.info->size * lastRow;
-            column.info->moveConstruct(removedValue, lastValue);
-            column.info->destroy(lastValue);
+            void* last = storage_ + column.offset + column.info->size * lastRow;
+            column.info->moveConstruct(removed, last);
+            column.info->destroy(last);
         }
     }
 
     std::optional<Entity> movedEntity;
     if (row != lastRow) {
-        movedEntity      = EntityData()[lastRow];
+        movedEntity       = EntityData()[lastRow];
         EntityData()[row] = *movedEntity;
     }
-
     std::destroy_at(EntityData() + lastRow);
+    --count_;
+    return movedEntity;
+}
+
+Entity Chunk::MoveLastRowTo(Chunk& destination, u32 destinationRow) noexcept {
+    assert(this != std::addressof(destination));
+    assert(count_ > 0);
+    assert(destinationRow < destination.count_);
+
+    const u32 sourceRow = count_ - 1U;
+    for (const ComponentColumn& column : layout_->columns) {
+        void* destinationValue =
+            destination.storage_ + column.offset + column.info->size * destinationRow;
+        void* sourceValue = storage_ + column.offset + column.info->size * sourceRow;
+        column.info->destroy(destinationValue);
+        column.info->moveConstruct(destinationValue, sourceValue);
+        column.info->destroy(sourceValue);
+    }
+
+    const Entity movedEntity = EntityData()[sourceRow];
+    destination.EntityData()[destinationRow] = movedEntity;
+    std::destroy_at(EntityData() + sourceRow);
     --count_;
     return movedEntity;
 }

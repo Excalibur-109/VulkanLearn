@@ -4,13 +4,7 @@
 
 namespace ecs {
 
-/**
- * @brief Query 对 Archetype 的匹配条件。
- *
- * - all：Archetype 必须包含其中每一种组件。
- * - any：any 非空时，Archetype 至少包含其中一种组件。
- * - none：Archetype 不能包含其中任何组件。
- */
+/// all 全部需要、any 至少一个、none 一个也不能有。
 class Filter {
 public:
     Filter& Require(ComponentTypeId componentType) {
@@ -28,23 +22,15 @@ public:
         return *this;
     }
 
-    [[nodiscard]] bool Matches(const Signature& archetypeSignature) const noexcept {
-        return archetypeSignature.ContainsAll(all_) &&
-               (any_.Empty() || archetypeSignature.Intersects(any_)) &&
-               !archetypeSignature.Intersects(none_);
+    [[nodiscard]] bool Matches(const Signature& signature) const noexcept {
+        return signature.ContainsAll(all_) &&
+               (any_.Empty() || signature.Intersects(any_)) &&
+               !signature.Intersects(none_);
     }
 
-    [[nodiscard]] const Signature& All() const noexcept {
-        return all_;
-    }
-
-    [[nodiscard]] const Signature& Any() const noexcept {
-        return any_;
-    }
-
-    [[nodiscard]] const Signature& None() const noexcept {
-        return none_;
-    }
+    [[nodiscard]] const Signature& All() const noexcept { return all_; }
+    [[nodiscard]] const Signature& Any() const noexcept { return any_; }
+    [[nodiscard]] const Signature& None() const noexcept { return none_; }
 
 private:
     Signature all_;

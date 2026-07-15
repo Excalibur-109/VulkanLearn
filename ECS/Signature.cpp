@@ -1,5 +1,8 @@
 #include "Signature.hpp"
 
+#include <algorithm>
+#include <bit>
+
 namespace ecs {
 
 Signature::Signature(std::initializer_list<ComponentTypeId> componentTypes) {
@@ -42,8 +45,8 @@ bool Signature::ContainsAll(const Signature& required) const noexcept {
 }
 
 bool Signature::Intersects(const Signature& other) const noexcept {
-    const std::size_t commonWordCount = std::min(words_.size(), other.words_.size());
-    for (std::size_t index = 0; index < commonWordCount; ++index) {
+    const std::size_t count = std::min(words_.size(), other.words_.size());
+    for (std::size_t index = 0; index < count; ++index) {
         if ((words_[index] & other.words_[index]) != 0) {
             return true;
         }
@@ -56,23 +59,22 @@ bool Signature::Empty() const noexcept {
 }
 
 std::size_t Signature::Count() const noexcept {
-    std::size_t count = 0;
+    std::size_t result = 0;
     for (const u64 word : words_) {
-        count += std::popcount(word);
+        result += std::popcount(word);
     }
-    return count;
+    return result;
 }
 
 std::vector<ComponentTypeId> Signature::ComponentTypes() const {
     std::vector<ComponentTypeId> result;
     result.reserve(Count());
-
     for (std::size_t wordIndex = 0; wordIndex < words_.size(); ++wordIndex) {
-        u64 remainingBits = words_[wordIndex];
-        while (remainingBits != 0) {
-            const u32 bit = static_cast<u32>(std::countr_zero(remainingBits));
+        u64 remaining = words_[wordIndex];
+        while (remaining != 0) {
+            const u32 bit = static_cast<u32>(std::countr_zero(remaining));
             result.push_back(static_cast<ComponentTypeId>(wordIndex * BITS_PER_WORD + bit));
-            remainingBits &= remainingBits - 1U;
+            remaining &= remaining - 1U;
         }
     }
     return result;
@@ -85,11 +87,10 @@ void Signature::RemoveTrailingZeroWords() noexcept {
 }
 
 std::size_t SignatureHash::operator()(const Signature& signature) const noexcept {
-    // boost::hash_combine 的常用混合方式，逐个纳入所有非尾零 word。
     std::size_t seed = signature.Words().size();
     for (const u64 word : signature.Words()) {
-        const std::size_t value = std::hash<u64>{}(word);
-        seed ^= value + static_cast<std::size_t>(0x9e3779b9U) + (seed << 6U) + (seed >> 2U);
+        seed ^= std::hash<u64>{}(word) + static_cast<std::size_t>(0x9e3779b9U) +
+                (seed << 6U) + (seed >> 2U);
     }
     return seed;
 }

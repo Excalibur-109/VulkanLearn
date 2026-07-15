@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LinearArena.hpp"
 #include "World.hpp"
 
 #include <functional>
@@ -12,15 +13,13 @@
 namespace ecs {
 
 /**
- * @brief 延迟执行 ECS 结构变化。
- *
- * Query 遍历期间，Add/Remove/Destroy 可能迁移当前行并破坏遍历。CommandBuffer 先保存
- * 操作，SystemScheduler 在查询结束后 Playback。命令采用类型擦除对象而非 std::function，
- * 因此也能捕获 move-only 组件。
+ * 查询期间不能迁移当前实体，CommandBuffer 把结构变化保存到遍历结束后执行。
+ * 命令没有基类：每条记录只有 payload void*、Execute 函数指针和 Destroy 函数指针。
  */
 class CommandBuffer {
 public:
     CommandBuffer() = default;
+    ECS_API ~CommandBuffer();
 
     CommandBuffer(const CommandBuffer&)            = delete;
     CommandBuffer& operator=(const CommandBuffer&) = delete;
@@ -40,9 +39,7 @@ public:
     }
 
     void Destroy(Entity entity) {
-        Enqueue([entity](World& world) {
-            (void)world.DestroyEntity(entity);
-        });
+        Enqueue([entity](World& world) { (void)world.DestroyEntity(entity); });
     }
 
     template <typename Component, typename... Arguments>
@@ -59,15 +56,13 @@ public:
 
     template <typename Component>
     void Remove(Entity entity) {
-        Enqueue([entity](World& world) {
-            (void)world.Remove<Component>(entity);
-        });
+        Enqueue([entity](World& world) { (void)world.Remove<Component>(entity); });
     }
 
     template <typename Component, typename Value>
     void Set(Entity entity, Value&& value) {
-        using StoredValue = std::decay_t<Value>;
-        Enqueue([entity, value = StoredValue(std::forward<Value>(value))](World& world) mutable {
+        using Stored = std::decay_t<Value>;
+        Enqueue([entity, value = Stored(std::forward<Value>(value))](World& world) mutable {
             (void)world.Set<Component>(entity, std::move(value));
         });
     }
@@ -75,44 +70,94 @@ public:
     template <typename Function>
     void Enqueue(Function&& function) {
         using Type = std::decay_t<Function>;
-        commands_.push_back(std::make_unique<Command<Type>>(std::forward<Function>(function)));
+        void* payload = recording_.arena.Allocate(sizeof(Type), alignof(Type));
+        std::construct_at(static_cast<Type*>(payload), std::forward<Function>(function));
+
+        Command command{
+            payload,
+            [](void* object, World& world) {
+                std::invoke(*static_cast<Type*>(object), world);
+            },
+            [](void* object) noexcept {
+                std::destroy_at(static_cast<Type*>(object));
+            }};
+        recording_.commands.push_back(std::move(command));
     }
 
-    void Playback(World& world);
-
-    void Clear() noexcept {
-        commands_.clear();
-    }
-
-    [[nodiscard]] bool Empty() const noexcept {
-        return commands_.empty();
-    }
-
-    [[nodiscard]] std::size_t Size() const noexcept {
-        return commands_.size();
-    }
+    ECS_API void Playback(World& world);
+    ECS_API void Clear() noexcept;
+    void Reserve(std::size_t commandCount) { recording_.commands.reserve(commandCount); }
+    [[nodiscard]] bool Empty() const noexcept { return recording_.commands.empty(); }
+    [[nodiscard]] std::size_t Size() const noexcept { return recording_.commands.size(); }
+    [[nodiscard]] ECS_API std::size_t ReservedBytes() const noexcept;
 
 private:
-    struct CommandBase {
-        virtual ~CommandBase() = default;
-        virtual void Execute(World& world) = 0;
-    };
+    class Command {
+    public:
+        using ExecuteFunction = void (*)(void* payload, World& world);
+        using DestroyFunction = void (*)(void* payload) noexcept;
 
-    template <typename Function>
-    struct Command final : CommandBase {
-        template <typename Value>
-        explicit Command(Value&& value)
-            : function(std::forward<Value>(value)) {
+        Command(
+            void* payload,
+            ExecuteFunction execute,
+            DestroyFunction destroy) noexcept
+            : payload_(payload),
+              execute_(execute),
+              destroy_(destroy) {
         }
 
-        void Execute(World& world) override {
-            std::invoke(function, world);
+        ~Command() { Reset(); }
+        Command(const Command&)            = delete;
+        Command& operator=(const Command&) = delete;
+
+        Command(Command&& other) noexcept { MoveFrom(other); }
+
+        Command& operator=(Command&& other) noexcept {
+            if (this != std::addressof(other)) {
+                Reset();
+                MoveFrom(other);
+            }
+            return *this;
         }
 
-        Function function;
+        void Execute(World& world) { execute_(payload_, world); }
+
+    private:
+        void Reset() noexcept {
+            if (payload_ != nullptr) {
+                destroy_(payload_);
+                payload_ = nullptr;
+            }
+        }
+
+        void MoveFrom(Command& other) noexcept {
+            payload_   = std::exchange(other.payload_, nullptr);
+            execute_   = other.execute_;
+            destroy_   = other.destroy_;
+        }
+
+        void* payload_          = nullptr;
+        ExecuteFunction execute_ = nullptr;
+        DestroyFunction destroy_ = nullptr;
     };
 
-    std::vector<std::unique_ptr<CommandBase>> commands_;
+    struct CommandStorage {
+        LinearArena arena;
+        std::vector<Command> commands;
+
+        void Clear() noexcept {
+            commands.clear();
+            arena.Reset();
+        }
+
+        void Swap(CommandStorage& other) noexcept {
+            arena.Swap(other.arena);
+            commands.swap(other.commands);
+        }
+    };
+
+    CommandStorage recording_;
+    CommandStorage playback_;
 };
 
 } // namespace ecs
