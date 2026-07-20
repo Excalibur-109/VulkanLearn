@@ -73,6 +73,14 @@ endfunction()
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.vert)
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.frag)
 
+# D3D11/D3D12 在运行时通过 D3DCompileFromFile 编译同一份 HLSL。复制到统一输出目录，
+# 让三个后端都只依赖 PBRDemoConfig.hpp 提供的 SHADER_DIRECTORY。
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.hlsl
+    ${PBR_SHADER_OUT_DIR}/pbr.hlsl
+    COPYONLY
+)
+
 # 把 .spv 列成 PBRDemo 的源文件 → CMake 自动建立编译顺序
 target_sources(PBRDemo PRIVATE
     ${PBR_SHADER_OUT_DIR}/pbr.vert.spv

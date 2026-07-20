@@ -27,6 +27,9 @@ RHIBuffer RHID3D11::CreateBuffer(const RHIBufferDesc& desc) {
 
     Impl::BufferResource resource{};
     resource.desc = desc;
+    if (RHIHasAny(desc.usage, RHIBufferUsage::Uniform)) {
+        resource.uploadShadow.resize(bufferDesc.ByteWidth);
+    }
     throwIfFailed(impl_->device->CreateBuffer(&bufferDesc, nullptr, &resource.buffer), "ID3D11Device::CreateBuffer failed");
     impl_->setDebugName(resource.buffer.Get(), desc.debugName);
     return makeRenderHandle<RHIBuffer>(impl_->buffers, std::move(resource));

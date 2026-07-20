@@ -277,6 +277,20 @@ static DXGI_FORMAT toSwapchainFormat(RHIFormat format) {
     }
 }
 
+// DXGI swapchain 本体通常必须使用 UNORM，但同一资源可以通过 SRGB RTV 解释。
+// 因此公共层看到的是请求的 SRGB 视图格式，而不是被 DXGI 收敛后的物理格式。
+static RHIFormat fromSwapchainFormat(
+    RHIFormat preferredFormat,
+    DXGI_FORMAT physicalFormat) {
+    if ((preferredFormat == RHIFormat::RGBA8_SRGB &&
+         physicalFormat == DXGI_FORMAT_R8G8B8A8_UNORM) ||
+        (preferredFormat == RHIFormat::BGRA8_SRGB &&
+         physicalFormat == DXGI_FORMAT_B8G8R8A8_UNORM)) {
+        return preferredFormat;
+    }
+    return fromDxgiFormat(physicalFormat);
+}
+
 static UINT toSampleCount(RHISampleCount samples) {
     return static_cast<UINT>(samples);
 }
@@ -687,6 +701,10 @@ struct RHID3D11::Impl {
     struct BufferResource {
         RHIBufferDesc desc{};
         ComPtr<ID3D11Buffer> buffer;
+        // D3D11 constant buffer 不允许 UpdateSubresource 使用 D3D11_BOX，也不能只更新
+        // 一部分字节。shadow 保留完整原生内容，小范围 RHI upload 先写入 shadow，
+        // 再一次性提交整个 constant buffer。
+        std::vector<std::byte> uploadShadow;
         RHIResourceState currentState = RHIResourceState::Common;
     };
 

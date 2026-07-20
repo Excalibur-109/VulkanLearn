@@ -7,6 +7,7 @@ namespace rhi {
 void RHID3D11::Destroy(RHIBuffer handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
         resource->buffer.Reset();
+        resource->uploadShadow.clear();
     }
 }
 

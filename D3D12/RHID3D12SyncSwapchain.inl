@@ -82,7 +82,7 @@ RHISwapchain RHID3D12::CreateSwapchain(const RHISwapchainDesc& desc) {
 
     Impl::SwapchainResource resource{};
     resource.desc = desc;
-    resource.format = fromDxgiFormat(swapDesc.Format);
+    resource.format = fromSwapchainFormat(desc.preferredFormat, swapDesc.Format);
     resource.extent = desc.extent;
 
     ComPtr<IDXGISwapChain1> swapchain1;
@@ -133,7 +133,13 @@ RHISwapchain RHID3D12::CreateSwapchain(const RHISwapchainDesc& desc) {
         Impl::TextureViewResource viewResource{};
         viewResource.desc = viewDesc;
         viewResource.rtv = impl_->allocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        impl_->device->CreateRenderTargetView(backBuffer.Get(), nullptr, viewResource.rtv.handle);
+        D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
+        rtvDesc.Format = toDxgiFormat(viewDesc.format);
+        rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        impl_->device->CreateRenderTargetView(
+            backBuffer.Get(),
+            &rtvDesc,
+            viewResource.rtv.handle);
         RHITextureView viewHandle = makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(viewResource));
 
         resource.images.push_back(textureHandle);

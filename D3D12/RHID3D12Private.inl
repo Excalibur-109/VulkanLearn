@@ -260,6 +260,20 @@ static DXGI_FORMAT toSwapchainFormat(RHIFormat format) {
     }
 }
 
+// Flip-model swapchain 使用线性 UNORM 物理格式；SRGB 转换由 RTV 格式开启。
+// RHI 对外保留调用者请求的颜色空间，确保 pipeline RTVFormats 与实际 RTV 一致。
+static RHIFormat fromSwapchainFormat(
+    RHIFormat preferredFormat,
+    DXGI_FORMAT physicalFormat) {
+    if ((preferredFormat == RHIFormat::RGBA8_SRGB &&
+         physicalFormat == DXGI_FORMAT_R8G8B8A8_UNORM) ||
+        (preferredFormat == RHIFormat::BGRA8_SRGB &&
+         physicalFormat == DXGI_FORMAT_B8G8R8A8_UNORM)) {
+        return preferredFormat;
+    }
+    return fromDxgiFormat(physicalFormat);
+}
+
 // D3D12 的 resource state 是显式同步的核心。RHIDefinitions.hpp 的 RHIResourceState 是“意图”，
 // 后端在 barrier/创建资源时把它翻译成 D3D12_RESOURCE_STATES。
 static D3D12_RESOURCE_STATES toD3D12ResourceStates(RHIResourceState state) {

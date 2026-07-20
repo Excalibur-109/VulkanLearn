@@ -479,9 +479,16 @@ bool RHID3D12::RecordAndSubmitFrame(
                 const RHIRenderGraphAttachmentDesc& attachmentDesc =
                     *sourcePass.depthStencilAttachment;
                 if (attachmentDesc.loadOp == RHILoadOp::Clear) {
+                    D3D12_CLEAR_FLAGS clearFlags = D3D12_CLEAR_FLAG_DEPTH;
+                    if (hasStencilFormat(
+                            packet.graph.textures[attachment.textureIndex]
+                                .desc.format)) {
+                        clearFlags = static_cast<D3D12_CLEAR_FLAGS>(
+                            clearFlags | D3D12_CLEAR_FLAG_STENCIL);
+                    }
                     impl_->commandList->ClearDepthStencilView(
                         depthHandle,
-                        D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,
+                        clearFlags,
                         attachmentDesc.clearValue.depthStencil.depth,
                         static_cast<UINT8>(attachmentDesc.clearValue.depthStencil.stencil),
                         0,

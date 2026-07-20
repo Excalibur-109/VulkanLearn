@@ -254,10 +254,57 @@ bool RHID3D11::RecordAndSubmitFrame(
                     "RHIFramePacket buffer upload range exceeds destination buffer size");
             }
 
-            if (buffer->desc.memoryUsage == RHIMemoryUsage::CpuToGpu || buffer->desc.persistentlyMapped) {
+            const bool constantBuffer =
+                RHIHasAny(buffer->desc.usage, RHIBufferUsage::Uniform);
+            if (constantBuffer) {
+                // Constant buffers require a whole-resource update with pDstBox == nullptr.
+                // The shadow also preserves bytes outside a partial RHI upload.
+                std::memcpy(
+                    buffer->uploadShadow.data() + upload.destinationOffset,
+                    upload.data.data(),
+                    upload.data.size());
+                if (buffer->desc.memoryUsage == RHIMemoryUsage::CpuToGpu ||
+                    buffer->desc.persistentlyMapped) {
+                    D3D11_MAPPED_SUBRESOURCE mapped{};
+                    throwIfFailed(
+                        impl_->context->Map(
+                            buffer->buffer.Get(),
+                            0,
+                            D3D11_MAP_WRITE_DISCARD,
+                            0,
+                            &mapped),
+                        "Map constant buffer upload failed");
+                    std::memcpy(
+                        mapped.pData,
+                        buffer->uploadShadow.data(),
+                        buffer->uploadShadow.size());
+                    impl_->context->Unmap(buffer->buffer.Get(), 0);
+                } else {
+                    impl_->context->UpdateSubresource(
+                        buffer->buffer.Get(),
+                        0,
+                        nullptr,
+                        buffer->uploadShadow.data(),
+                        0,
+                        0);
+                }
+            } else if (
+                buffer->desc.memoryUsage == RHIMemoryUsage::CpuToGpu ||
+                buffer->desc.persistentlyMapped) {
                 D3D11_MAPPED_SUBRESOURCE mapped{};
-                throwIfFailed(impl_->context->Map(buffer->buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Map buffer upload failed");
-                std::memcpy(static_cast<std::byte*>(mapped.pData) + upload.destinationOffset, upload.data.data(), upload.data.size());
+                throwIfFailed(
+                    impl_->context->Map(
+                        buffer->buffer.Get(),
+                        0,
+                        D3D11_MAP_WRITE_DISCARD,
+                        0,
+                        &mapped),
+                    "Map buffer upload failed");
+                std::memcpy(
+                    static_cast<std::byte*>(mapped.pData) +
+                        upload.destinationOffset,
+                    upload.data.data(),
+                    upload.data.size());
                 impl_->context->Unmap(buffer->buffer.Get(), 0);
             } else {
                 D3D11_BOX box{};
@@ -602,9 +649,15 @@ bool RHID3D11::RecordAndSubmitFrame(
                 }
                 dsv = view->dsv.Get();
                 if (attachment.loadOp == RHILoadOp::Clear) {
+                    UINT clearFlags = D3D11_CLEAR_DEPTH;
+                    if (hasStencilFormat(
+                            packet.graph.textures[compiledAttachment.textureIndex]
+                                .desc.format)) {
+                        clearFlags |= D3D11_CLEAR_STENCIL;
+                    }
                     impl_->context->ClearDepthStencilView(
                         dsv,
-                        D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
+                        clearFlags,
                         attachment.clearValue.depthStencil.depth,
                         static_cast<UINT8>(attachment.clearValue.depthStencil.stencil));
                 }

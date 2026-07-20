@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -26,8 +27,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -58,6 +61,55 @@ struct Mesh {
     std::vector<Vertex> vertices;
     std::vector<rhi::u32> indices;
 };
+
+struct DemoOptions {
+    rhi::RHIGraphicsAPI api = rhi::RHIGraphicsAPI::Vulkan;
+    rhi::u64 maxFrames = 0;
+};
+
+DemoOptions ParseOptions(std::string_view commandLine) {
+    DemoOptions options{};
+    std::istringstream arguments{std::string(commandLine)};
+    for (std::string argument; arguments >> argument;) {
+        constexpr std::string_view apiPrefix = "--api=";
+        constexpr std::string_view framesPrefix = "--frames=";
+        if (argument.starts_with(apiPrefix)) {
+            const std::string_view value(
+                argument.data() + apiPrefix.size(),
+                argument.size() - apiPrefix.size());
+            if (value == "vulkan") {
+                options.api = rhi::RHIGraphicsAPI::Vulkan;
+            } else if (value == "d3d11") {
+                options.api = rhi::RHIGraphicsAPI::Direct3D11;
+            } else if (value == "d3d12") {
+                options.api = rhi::RHIGraphicsAPI::Direct3D12;
+            } else {
+                throw std::runtime_error("Unknown --api value: " + std::string(value));
+            }
+        } else if (argument.starts_with(framesPrefix)) {
+            const std::string_view value(
+                argument.data() + framesPrefix.size(),
+                argument.size() - framesPrefix.size());
+            const auto [end, error] = std::from_chars(
+                value.data(),
+                value.data() + value.size(),
+                options.maxFrames);
+            if (error != std::errc{} || end != value.data() + value.size()) {
+                throw std::runtime_error("Invalid --frames value: " + std::string(value));
+            }
+        }
+    }
+    return options;
+}
+
+const wchar_t* ApiDisplayName(rhi::RHIGraphicsAPI api) noexcept {
+    switch (api) {
+    case rhi::RHIGraphicsAPI::Vulkan:     return L"Vulkan";
+    case rhi::RHIGraphicsAPI::Direct3D11: return L"Direct3D 11";
+    case rhi::RHIGraphicsAPI::Direct3D12: return L"Direct3D 12";
+    default:                              return L"Unknown";
+    }
+}
 
 Mesh MakePlane(float halfSize = 4.0F) {
     Mesh mesh{};
@@ -124,6 +176,10 @@ std::vector<std::byte> ToBytes(const Type& value) {
 
 class PBRDemoApp {
 public:
+    explicit PBRDemoApp(DemoOptions options)
+        : options_(options) {
+    }
+
     void Run(HINSTANCE instance) {
         CreateWindowHandle(instance);
         CreateDevice(instance);
@@ -134,6 +190,7 @@ public:
     }
 
 private:
+    DemoOptions options_{};
     HWND window_ = nullptr;
     bool running_ = true;
     bool framebufferResized_ = false;
@@ -214,10 +271,13 @@ private:
 
         RECT rectangle{0, 0, static_cast<LONG>(WINDOW_WIDTH), static_cast<LONG>(WINDOW_HEIGHT)};
         AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
+        const std::wstring windowTitle =
+            std::wstring(L"RHI RenderGraph PBR Demo - ") +
+            ApiDisplayName(options_.api);
         window_ = CreateWindowExW(
             0,
             windowClass.lpszClassName,
-            L"RHI RenderGraph PBR Demo",
+            windowTitle.c_str(),
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
@@ -235,30 +295,36 @@ private:
     void CreateDevice(HINSTANCE instance) {
         rhi::RHIDeviceCreateDesc desc{};
         desc.backend.applicationName = "RHI RenderGraph PBR Demo";
-        desc.backend.preferredApi = rhi::RHIGraphicsAPI::Vulkan;
+        desc.backend.preferredApi = options_.api;
         desc.backend.validation = rhi::RHIValidationMode::Enabled;
         desc.backend.framesInFlight = FRAMES_IN_FLIGHT;
         desc.nativeWindow = window_;
-        desc.requiredVulkanInstanceExtensions = {
-            VK_KHR_SURFACE_EXTENSION_NAME,
-            VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
-        desc.requiredVulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-        desc.createVulkanSurface = [instance, window = window_](std::uintptr_t nativeInstance) {
-            VkWin32SurfaceCreateInfoKHR surfaceInfo{};
-            surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-            surfaceInfo.hinstance = instance;
-            surfaceInfo.hwnd = window;
-            VkSurfaceKHR surface = VK_NULL_HANDLE;
-            if (vkCreateWin32SurfaceKHR(
-                    reinterpret_cast<VkInstance>(nativeInstance),
-                    &surfaceInfo,
-                    nullptr,
-                    &surface) != VK_SUCCESS) {
-                return std::uintptr_t{0};
-            }
-            return reinterpret_cast<std::uintptr_t>(surface);
-        };
-        desc.ownsVulkanSurface = true;
+
+        // Vulkan 必须由平台层提供 VkSurfaceKHR；D3D 后端直接使用上面的 HWND。
+        // 将原生参数限制在对应 API 分支，避免公共 Demo 无意间依赖某个后端。
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            desc.requiredVulkanInstanceExtensions = {
+                VK_KHR_SURFACE_EXTENSION_NAME,
+                VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
+            desc.requiredVulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+            desc.createVulkanSurface = [instance, window = window_](
+                                           std::uintptr_t nativeInstance) {
+                VkWin32SurfaceCreateInfoKHR surfaceInfo{};
+                surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+                surfaceInfo.hinstance = instance;
+                surfaceInfo.hwnd = window;
+                VkSurfaceKHR surface = VK_NULL_HANDLE;
+                if (vkCreateWin32SurfaceKHR(
+                        reinterpret_cast<VkInstance>(nativeInstance),
+                        &surfaceInfo,
+                        nullptr,
+                        &surface) != VK_SUCCESS) {
+                    return std::uintptr_t{0};
+                }
+                return reinterpret_cast<std::uintptr_t>(surface);
+            };
+            desc.ownsVulkanSurface = true;
+        }
 
         std::string error;
         device_ = rhi::CreateInitializedRHIDevice(desc, &error);
@@ -395,16 +461,30 @@ private:
         rhi::RHIShaderDesc vertexShader{};
         vertexShader.debugName = "PBR.VertexShader";
         vertexShader.stage = rhi::RHIShaderStage::Vertex;
-        vertexShader.language = rhi::RHIShaderLanguage::SPIRV;
-        vertexShader.filePath =
-            std::string(pbr_demo_config::SHADER_DIRECTORY) + "/pbr.vert.spv";
 
         rhi::RHIShaderDesc fragmentShader{};
         fragmentShader.debugName = "PBR.FragmentShader";
         fragmentShader.stage = rhi::RHIShaderStage::Fragment;
-        fragmentShader.language = rhi::RHIShaderLanguage::SPIRV;
-        fragmentShader.filePath =
-            std::string(pbr_demo_config::SHADER_DIRECTORY) + "/pbr.frag.spv";
+
+        const std::string shaderDirectory = pbr_demo_config::SHADER_DIRECTORY;
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            vertexShader.language = rhi::RHIShaderLanguage::SPIRV;
+            vertexShader.filePath = shaderDirectory + "/pbr.vert.spv";
+            fragmentShader.language = rhi::RHIShaderLanguage::SPIRV;
+            fragmentShader.filePath = shaderDirectory + "/pbr.frag.spv";
+        } else {
+            // D3D11 与 D3D12 共用 HLSL 源码，但分别编译到各自合适的 shader model。
+            // b0、POSITION/NORMAL/TEXCOORD 和 SV_POSITION/SV_TARGET 共同构成 D3D 管线契约。
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            vertexShader.language = rhi::RHIShaderLanguage::HLSL;
+            vertexShader.filePath = shaderDirectory + "/pbr.hlsl";
+            vertexShader.entryPoint = "VSMain";
+            vertexShader.compileOptions.targetProfile = d3d12 ? "vs_5_1" : "vs_5_0";
+            fragmentShader.language = rhi::RHIShaderLanguage::HLSL;
+            fragmentShader.filePath = shaderDirectory + "/pbr.hlsl";
+            fragmentShader.entryPoint = "PSMain";
+            fragmentShader.compileOptions.targetProfile = d3d12 ? "ps_5_1" : "ps_5_0";
+        }
 
         rhi::RHIVertexBufferLayoutDesc vertexLayout{};
         vertexLayout.binding = 0;
@@ -465,7 +545,11 @@ private:
                 static_cast<float>(swapchainExtent_.height),
             0.1F,
             100.0F);
-        uniform.projection[1][1] *= -1.0F;
+        // GLM 的投影与 D3D 的 viewport Y 方向可直接配合；Vulkan 的正高度 viewport
+        // 需要翻转 clip-space Y。若 D3D 也翻转，画面会上下颠倒且三角形屏幕绕序反转。
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            uniform.projection[1][1] *= -1.0F;
+        }
         uniform.lightDirection = glm::vec4(
             glm::normalize(glm::vec3{-0.5F, -1.0F, -0.3F}), 0.0F);
         uniform.lightColor = {1.0F, 0.96F, 0.90F, 1.0F};
@@ -686,6 +770,9 @@ private:
                 RecreateSwapchain();
             }
             DrawFrame();
+            if (options_.maxFrames != 0 && frameIndex_ >= options_.maxFrames) {
+                running_ = false;
+            }
         }
     }
 
@@ -716,9 +803,9 @@ private:
 
 } // namespace
 
-int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int) {
+int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
     try {
-        PBRDemoApp app;
+        PBRDemoApp app(ParseOptions(commandLine != nullptr ? commandLine : ""));
         app.Run(instance);
         return EXIT_SUCCESS;
     } catch (const std::exception& exception) {

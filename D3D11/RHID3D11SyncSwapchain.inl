@@ -76,7 +76,9 @@ RHISwapchain RHID3D11::CreateSwapchain(const RHISwapchainDesc& desc) {
     resource.desc = desc;
     throwIfFailed(impl_->factory->CreateSwapChain(impl_->device.Get(), &swapDesc, &resource.swapchain), "IDXGIFactory::CreateSwapChain failed");
     impl_->factory->MakeWindowAssociation(impl_->initDesc.surface.hwnd, DXGI_MWA_NO_ALT_ENTER);
-    resource.format = fromDxgiFormat(swapDesc.BufferDesc.Format);
+    resource.format = fromSwapchainFormat(
+        desc.preferredFormat,
+        swapDesc.BufferDesc.Format);
     resource.extent = desc.extent;
 
     ComPtr<ID3D11Texture2D> backBuffer;
@@ -109,8 +111,29 @@ RHISwapchain RHID3D11::CreateSwapchain(const RHISwapchainDesc& desc) {
 
     Impl::TextureViewResource viewResource{};
     viewResource.desc = viewDesc;
-    throwIfFailed(impl_->device->CreateRenderTargetView(backBuffer.Get(), nullptr, &viewResource.rtv), "Create backbuffer RTV failed");
-    throwIfFailed(impl_->device->CreateShaderResourceView(backBuffer.Get(), nullptr, &viewResource.srv), "Create backbuffer SRV failed");
+    D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
+    rtvDesc.Format = toDxgiFormat(viewDesc.format);
+    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    throwIfFailed(
+        impl_->device->CreateRenderTargetView(
+            backBuffer.Get(),
+            &rtvDesc,
+            &viewResource.rtv),
+        "Create backbuffer RTV failed");
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    // 部分 D3D11 驱动允许 back buffer 创建 SRGB RTV，却拒绝 SRGB SRV。
+    // SRV 使用交换链物理 UNORM 格式；颜色空间转换只由呈现用 RTV 负责。
+    srvDesc.Format = swapDesc.BufferDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+    throwIfFailed(
+        impl_->device->CreateShaderResourceView(
+            backBuffer.Get(),
+            &srvDesc,
+            &viewResource.srv),
+        "Create backbuffer SRV failed");
     RHITextureView viewHandle = makeRenderHandle<RHITextureView>(impl_->textureViews, std::move(viewResource));
 
     resource.images = {textureHandle};

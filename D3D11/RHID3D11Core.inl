@@ -47,45 +47,46 @@ bool RHID3D11::Initialize(const RHID3D11Desc& desc, std::string* errorMessage) {
             D3D_FEATURE_LEVEL_9_3
         };
 
-        HRESULT hr = E_FAIL;
-        if (impl_->adapter) {
-            hr = D3D11CreateDevice(
+        const auto createDevice = [&](
+            IDXGIAdapter* adapter,
+            D3D_DRIVER_TYPE driverType,
+            UINT flags) {
+            return D3D11CreateDevice(
+                adapter,
+                driverType,
+                nullptr,
+                flags,
+                featureLevels.data(),
+                static_cast<UINT>(featureLevels.size()),
+                D3D11_SDK_VERSION,
+                &impl_->device,
+                &impl_->featureLevel,
+                &impl_->context);
+        };
+
+        const D3D_DRIVER_TYPE initialDriverType = impl_->adapter
+            ? D3D_DRIVER_TYPE_UNKNOWN
+            : desc.driverType;
+        HRESULT hr =
+            initialDriverType == D3D_DRIVER_TYPE_UNKNOWN && !impl_->adapter
+                ? E_FAIL
+                : createDevice(
+                      impl_->adapter.Get(),
+                      initialDriverType,
+                      createFlags);
+
+        // D3D11_CREATE_DEVICE_DEBUG 依赖 Windows 的 Graphics Tools 可选组件。验证层是开发
+        // 辅助能力，不应因为该组件未安装而让渲染后端完全无法启动。
+        if (FAILED(hr) && (createFlags & D3D11_CREATE_DEVICE_DEBUG) != 0) {
+            createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+            hr = createDevice(
                 impl_->adapter.Get(),
-                D3D_DRIVER_TYPE_UNKNOWN,
-                nullptr,
-                createFlags,
-                featureLevels.data(),
-                static_cast<UINT>(featureLevels.size()),
-                D3D11_SDK_VERSION,
-                &impl_->device,
-                &impl_->featureLevel,
-                &impl_->context);
-        } else if (desc.driverType != D3D_DRIVER_TYPE_UNKNOWN) {
-            hr = D3D11CreateDevice(
-                nullptr,
-                desc.driverType,
-                nullptr,
-                createFlags,
-                featureLevels.data(),
-                static_cast<UINT>(featureLevels.size()),
-                D3D11_SDK_VERSION,
-                &impl_->device,
-                &impl_->featureLevel,
-                &impl_->context);
+                initialDriverType,
+                createFlags);
         }
 
         if (FAILED(hr) && desc.allowWarpFallback) {
-            hr = D3D11CreateDevice(
-                nullptr,
-                D3D_DRIVER_TYPE_WARP,
-                nullptr,
-                createFlags,
-                featureLevels.data(),
-                static_cast<UINT>(featureLevels.size()),
-                D3D11_SDK_VERSION,
-                &impl_->device,
-                &impl_->featureLevel,
-                &impl_->context);
+            hr = createDevice(nullptr, D3D_DRIVER_TYPE_WARP, createFlags);
         }
         throwIfFailed(hr, "D3D11CreateDevice failed");
 
