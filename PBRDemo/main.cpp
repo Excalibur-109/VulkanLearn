@@ -206,6 +206,8 @@ private:
     HWND window_ = nullptr;
     bool running_ = true;
     bool framebufferResized_ = false;
+    // true：无边框全屏并覆盖主显示器；false：使用原来的 1280x800 窗口模式。
+    bool isFullscreen_ = false;
 
     std::unique_ptr<rhi::RHIDevice> device_;
     rhi::RHISwapchain swapchain_{};
@@ -305,6 +307,33 @@ private:
 
         RECT rectangle{0, 0, static_cast<LONG>(WINDOW_WIDTH), static_cast<LONG>(WINDOW_HEIGHT)};
         AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
+
+        DWORD windowStyle = WS_OVERLAPPEDWINDOW;
+        int windowX = CW_USEDEFAULT;
+        int windowY = CW_USEDEFAULT;
+        int windowWidth = rectangle.right - rectangle.left;
+        int windowHeight = rectangle.bottom - rectangle.top;
+
+        if (isFullscreen_) {
+            // 无边框全屏不改变显示器分辨率，只让 WS_POPUP 窗口覆盖整个主显示器。
+            // 使用 rcMonitor 而不是 rcWork，确保窗口也覆盖任务栏所在区域。
+            const POINT primaryMonitorPoint{0, 0};
+            const HMONITOR monitor = MonitorFromPoint(
+                primaryMonitorPoint,
+                MONITOR_DEFAULTTOPRIMARY);
+            MONITORINFO monitorInfo{};
+            monitorInfo.cbSize = sizeof(MONITORINFO);
+            if (GetMonitorInfoW(monitor, &monitorInfo) == FALSE) {
+                throw std::runtime_error("GetMonitorInfoW failed");
+            }
+
+            windowStyle = WS_POPUP;
+            windowX = monitorInfo.rcMonitor.left;
+            windowY = monitorInfo.rcMonitor.top;
+            windowWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+            windowHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+        }
+
         const std::wstring windowTitle =
             std::wstring(L"RHI RenderGraph PBR Demo - ") +
             ApiDisplayName(options_.api);
@@ -312,11 +341,11 @@ private:
             0,
             windowClass.lpszClassName,
             windowTitle.c_str(),
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            rectangle.right - rectangle.left,
-            rectangle.bottom - rectangle.top,
+            windowStyle | WS_VISIBLE,
+            windowX,
+            windowY,
+            windowWidth,
+            windowHeight,
             nullptr,
             nullptr,
             instance,
