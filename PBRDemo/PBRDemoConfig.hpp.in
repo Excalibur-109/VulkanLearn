@@ -1,0 +1,8 @@
+#pragma once
+
+// 由 CMake configure_file 生成。源码和编辑器共同读取该定义，避免命令行宏无法跳转。
+namespace pbr_demo_config {
+
+inline constexpr char SHADER_DIRECTORY[] = "@PBR_SHADER_OUT_DIR@";
+
+} // namespace pbr_demo_config

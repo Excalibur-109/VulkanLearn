@@ -36,6 +36,28 @@ add_executable(PBRDemo WIN32 main.cpp)
 set(PBR_SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 file(MAKE_DIRECTORY ${PBR_SHADER_OUT_DIR})
 
+# 生成源码可见的配置头。相比只用 target_compile_definitions 注入宏，这种方式让
+# 编译器和 IntelliSense 看到同一个 constexpr 定义，并支持“转到定义”。
+set(PBR_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${PBR_GENERATED_INCLUDE_DIR})
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/PBRDemoConfig.hpp.in
+    ${PBR_GENERATED_INCLUDE_DIR}/PBRDemoConfig.hpp
+    @ONLY
+)
+set_source_files_properties(
+    ${PBR_GENERATED_INCLUDE_DIR}/PBRDemoConfig.hpp
+    PROPERTIES
+        GENERATED TRUE
+        HEADER_FILE_ONLY TRUE
+)
+target_sources(PBRDemo PRIVATE
+    ${PBR_GENERATED_INCLUDE_DIR}/PBRDemoConfig.hpp
+)
+target_include_directories(PBRDemo PRIVATE
+    ${PBR_GENERATED_INCLUDE_DIR}
+)
+
 # shader 编译：.vert / .frag → .spv
 function(rhi_compile_shader SRC_FILE)
     get_filename_component(SRC_NAME ${SRC_FILE} NAME)
@@ -55,11 +77,6 @@ rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.frag)
 target_sources(PBRDemo PRIVATE
     ${PBR_SHADER_OUT_DIR}/pbr.vert.spv
     ${PBR_SHADER_OUT_DIR}/pbr.frag.spv
-)
-
-# 注入 shader 绝对路径
-target_compile_definitions(PBRDemo PRIVATE
-    PBR_SHADER_DIR="${PBR_SHADER_OUT_DIR}"
 )
 
 # -----------------------------------------------------------------------------

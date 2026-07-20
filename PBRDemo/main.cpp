@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "PBRDemoConfig.hpp"
 #include "RHI.hpp"
 
 #include <algorithm>
@@ -395,13 +396,15 @@ private:
         vertexShader.debugName = "PBR.VertexShader";
         vertexShader.stage = rhi::RHIShaderStage::Vertex;
         vertexShader.language = rhi::RHIShaderLanguage::SPIRV;
-        vertexShader.filePath = std::string(PBR_SHADER_DIR) + "/pbr.vert.spv";
+        vertexShader.filePath =
+            std::string(pbr_demo_config::SHADER_DIRECTORY) + "/pbr.vert.spv";
 
         rhi::RHIShaderDesc fragmentShader{};
         fragmentShader.debugName = "PBR.FragmentShader";
         fragmentShader.stage = rhi::RHIShaderStage::Fragment;
         fragmentShader.language = rhi::RHIShaderLanguage::SPIRV;
-        fragmentShader.filePath = std::string(PBR_SHADER_DIR) + "/pbr.frag.spv";
+        fragmentShader.filePath =
+            std::string(pbr_demo_config::SHADER_DIRECTORY) + "/pbr.frag.spv";
 
         rhi::RHIVertexBufferLayoutDesc vertexLayout{};
         vertexLayout.binding = 0;
