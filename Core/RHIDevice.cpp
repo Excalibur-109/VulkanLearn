@@ -256,8 +256,12 @@ bool RHIDevice::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 }
 
 bool RHIDevice::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+    // RenderGraph 的拓扑通常连续很多帧不变。结构哈希只覆盖会影响依赖、裁剪、
+    // barrier 和 transient 槽分配的静态声明，因此每帧计算一次的成本远低于重新编译。
     const u64 graphHash = HashRHIRenderGraphStructure(packet.graph, packet.workloads);
     if (!impl_->hasCachedGraph || impl_->cachedGraphHash != graphHash) {
+        // 首帧或结构改变时才编译。编译失败不会覆盖上一份可用计划，错误会直接返回
+        // 调用方，避免后端执行一个只有部分依赖信息的 plan。
         RHIRenderGraphCompileResult graph =
             CompileRHIRenderGraph(packet.graph, packet.workloads);
         if (!graph.Succeeded()) {
@@ -272,6 +276,9 @@ bool RHIDevice::SubmitFrame(const RHIFramePacket& packet, std::string* errorMess
         impl_->hasCachedGraph = true;
     }
 
+    // 缓存的是纯静态 ExecutionPlan，而 packet 始终使用当前帧版本。clear value、
+    // viewport、draw 参数、upload 数据及 imported native handle 都能逐帧变化；后端
+    // 用 plan 的整数下标回到当前 packet 解析这些动态数据。
     return visitImplementation<bool>(
         impl_->implementation,
         [&](auto& implementation) {

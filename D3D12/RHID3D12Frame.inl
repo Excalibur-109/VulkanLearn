@@ -8,6 +8,9 @@ bool RHID3D12::RecordAndSubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // staging ComPtr 和 transient RHI 句柄都必须至少存活到 command list 执行完成。
+    // 它们会在成功提交后移动到 impl_->pending*，下一次确认 fence 完成时再回收；
+    // 提交前出现异常则由当前函数的局部清理路径释放。
     std::vector<ComPtr<ID3D12Resource>> stagingResources;
     std::vector<RHIBuffer> transientBuffers;
     std::vector<RHITexture> transientTextures;
@@ -74,6 +77,8 @@ bool RHID3D12::RecordAndSubmitFrame(
             "ID3D12GraphicsCommandList::Reset failed");
         impl_->commandListOpen = true;
 
+        // D3D12 command list 只能从 shader-visible heap 取 descriptor。持久 RHI descriptor
+        // 会在 bind 时复制到这两个帧内线性 heap，fence 完成后才能安全 Reset 并复用。
         ID3D12DescriptorHeap* shaderVisibleHeaps[] = {
             impl_->shaderVisibleCbvSrvUavHeap.heap.Get(),
             impl_->shaderVisibleSamplerHeap.heap.Get()};
@@ -81,6 +86,9 @@ bool RHID3D12::RecordAndSubmitFrame(
             static_cast<UINT>(std::size(shaderVisibleHeaps)),
             shaderVisibleHeaps);
 
+        // D3D12 和 Vulkan 一样要求应用显式维护 native 状态。普通状态变化使用
+        // TRANSITION barrier；UAV 连续保持同一状态时仍要发 UAV barrier，以保证前一次
+        // unordered write 在后一次读写前完成并可见。
         const auto transitionResource = [&] (
             ID3D12Resource* resource,
             D3D12_RESOURCE_STATES& currentState,
@@ -110,6 +118,8 @@ bool RHID3D12::RecordAndSubmitFrame(
             currentState = destination;
         };
 
+        // logical 数组供 compiled resource index 查询；physical 数组按 allocation slot
+        // 真正创建资源。多个逻辑资源共享槽时只创建一个 ID3D12Resource。
         std::vector<RHIBuffer> graphBuffers(packet.graph.buffers.size());
         std::vector<RHIBuffer> physicalGraphBuffers(
             graphPlan.bufferAllocationCount);
@@ -328,6 +338,8 @@ bool RHID3D12::RecordAndSubmitFrame(
             }
         };
 
+        // 编译计划已经是稳定拓扑序。每个 pass 的 transition 必须先录制，再执行 copy、
+        // clear、draw 或 dispatch，才能把抽象依赖转换成同一 command list 上的 GPU 顺序。
         for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
             const RHIRenderGraphPassDesc& sourcePass =
                 packet.graph.passes[compiledPass.sourcePassIndex];
@@ -367,6 +379,8 @@ bool RHID3D12::RecordAndSubmitFrame(
                     : &packet.workloads[compiledPass.workloadIndex];
 
             if (workload != nullptr) {
+                // RenderGraph reads/writes 是自动 barrier 的唯一入口。未实现的 workload
+                // 立即失败，防止调用方误以为 query、indirect 或 texture copy 已经执行。
                 if (!workload->barriers.globals.empty() ||
                     !workload->barriers.textures.empty() ||
                     !workload->barriers.buffers.empty()) {
@@ -423,6 +437,8 @@ bool RHID3D12::RecordAndSubmitFrame(
                 }
             }
 
+            // plan 缓存资源/attachment 下标；当前帧的 clear value 和 loadOp 仍从 packet
+            // 读取。这样动态参数变化不会导致重新编译静态 RenderGraph。
             std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> renderTargets;
             renderTargets.reserve(compiledPass.colorAttachments.size());
             for (const RHICompiledRenderGraphAttachment& attachment :
@@ -588,6 +604,8 @@ bool RHID3D12::RecordAndSubmitFrame(
             }
         }
 
+        // 当前实现把整帧录在一个 graphics command list。空 submissions 使用默认提交；
+        // 非空 submissions 主要提供外部 wait/signal，执行顺序已由 command list 固定。
         if (packet.submissions.empty()) {
             if (!Submit(RHIQueueSubmitDesc{}, errorMessage)) {
                 throw std::runtime_error(
@@ -606,6 +624,8 @@ bool RHID3D12::RecordAndSubmitFrame(
             }
         }
 
+        // Submit 已 signal 新 fence value。把所有 GPU 仍可能访问的临时所有权移交给 Impl，
+        // 下一次 RecordAndSubmitFrame 等待该 fence 后再销毁和重置 descriptor heap。
         impl_->pendingStagingResources = std::move(stagingResources);
         impl_->pendingTransientBuffers = std::move(transientBuffers);
         impl_->pendingTransientTextures = std::move(transientTextures);
@@ -644,6 +664,8 @@ bool RHID3D12::SubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // 后端只接受不违反 compiled dependency 的 submission 描述。这样未来拆分多队列或
+    // 多 command list 时，可以继续沿用同一份 plan 而不改变上层帧声明。
     if (!ValidateRHIRenderGraphSubmissions(
             packet.graph,
             graphPlan,

@@ -10,6 +10,10 @@ bool RHIVulkan::RecordAndSubmitFrame(
     std::string* errorMessage) {
     Impl::FrameContext* frame = nullptr;
     bool frameSubmitted = false;
+
+    // 这些句柄只代表本次 RenderGraph 为内部 transient 资源创建的 RHI 对象。
+    // 成功提交后调用 Destroy 不会立刻销毁仍被 GPU 使用的 native 对象：Vulkan 资源层
+    // 会按 submission serial 延迟回收。异常发生在提交前时则可以直接清理。
     std::vector<RHIBuffer> transientBuffers;
     std::vector<RHITexture> transientTextures;
     std::vector<RHITextureView> transientTextureViews;
@@ -188,6 +192,9 @@ bool RHIVulkan::RecordAndSubmitFrame(
             }
         }
 
+        // graphBuffers 是“逻辑资源下标 -> RHI 句柄”；physicalGraphBuffers 是“物理槽
+        // -> RHI 句柄”。Imported 逻辑资源直接引用 packet 的外部句柄，内部资源才按
+        // allocation slot 创建。多个生命周期不重叠的逻辑资源会得到同一个物理句柄。
         std::vector<RHIBuffer> graphBuffers(packet.graph.buffers.size());
         std::vector<RHIBuffer> physicalGraphBuffers(
             graphPlan.bufferAllocationCount);
@@ -209,6 +216,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             }
         }
 
+        // Texture 使用相同的两级映射。view 跟随物理 texture 创建一次；逻辑资源切换
+        // 发生在同一物理槽上时，由后面的 aliasing barrier 处理可见性与 layout。
         std::vector<RHITexture> graphTextures(packet.graph.textures.size());
         std::vector<RHITexture> physicalGraphTextures(
             graphPlan.textureAllocationCount);
@@ -286,8 +295,11 @@ bool RHIVulkan::RecordAndSubmitFrame(
             bool forceBarrier = false,
             bool discardContents = false,
             bool aliasingBarrier = false) {
-            // RenderGraph 只描述 pass 读写需要的 RHIResourceState；Vulkan 需要实际 image layout
-            // 和 access mask，所以这里根据当前状态生成 VkImageMemoryBarrier。
+            // RenderGraph 只描述 pass 读写需要的 RHIResourceState；Vulkan 同步还需要回答：
+            //   stage：生产/消费发生在哪一段流水线；
+            //   access：该阶段读写哪类内存；
+            //   layout：image 以何种专用布局被访问。
+            // 三者必须匹配，单独修改 layout 并不能保证前一次写入对后一次读取可见。
             Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
             if (texture == nullptr || texture->image == VK_NULL_HANDLE) {
                 return;
@@ -409,6 +421,9 @@ bool RHIVulkan::RecordAndSubmitFrame(
             return value;
         };
 
+        // plan.passes 已经完成拓扑排序和裁剪，因此后端只需线性录制。每个 pass 先执行
+        // 编译器生成的 transition，再录制 workload；这条顺序就是依赖真正落到 GPU
+        // command stream 的位置。
         for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
             const RHIRenderGraphPassDesc& sourcePass =
                 packet.graph.passes[compiledPass.sourcePassIndex];
@@ -440,6 +455,9 @@ bool RHIVulkan::RecordAndSubmitFrame(
             }
 
             if (workload != nullptr) {
+                // barrier 的唯一事实来源是 RenderGraph reads/writes。若同时接受 workload
+                // 手写 barrier，就会出现两套状态追踪互相覆盖。尚未实现的命令也必须
+                // 显式失败，不能静默跳过后得到“成功提交但画面错误”的结果。
                 if (!workload->barriers.globals.empty() ||
                     !workload->barriers.textures.empty() ||
                     !workload->barriers.buffers.empty()) {
@@ -544,6 +562,9 @@ bool RHIVulkan::RecordAndSubmitFrame(
                 continue;
             }
 
+            // ExecutionPlan 只缓存 attachment 的整数下标；load/store、clear value 等
+            // 动态值仍从当前 packet 的 sourcePass 读取，所以清屏颜色可逐帧变化而不触发
+            // RenderGraph 重新编译。
             std::vector<VkRenderingAttachmentInfo> colorAttachments;
             std::vector<VkClearValue> colorClearValues;
             colorAttachments.reserve(compiledPass.colorAttachments.size());
@@ -762,6 +783,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             throw std::runtime_error("vkEndCommandBuffer failed");
         }
 
+        // packet 中的 waits/signals 描述外部 GPU 工作依赖；RenderGraph 内部 pass 当前录在
+        // 同一 command buffer，天然按命令顺序执行。这里把外部同步值组装到一次 queue submit。
         std::vector<VkSemaphore> waitSignals;
         std::vector<VkPipelineStageFlags> waitStages;
         std::vector<VkSemaphore> signalSemaphores;
@@ -830,6 +853,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         impl_->lastSubmissionSerial = frameCompletionValue;
         impl_->nextFrameContext =
             (impl_->nextFrameContext + 1) % static_cast<u32>(impl_->frameContexts.size());
+        // completionValue 已写入 FrameContext，此后 Destroy 会把 native 资源挂到对应
+        // serial 的延迟回收队列，直到 frame timeline 到达该值才真正释放。
         releaseTransientResources();
 
         if (packet.present.has_value()) {
@@ -865,6 +890,8 @@ bool RHIVulkan::SubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // 自定义 submissions 可以按 passName 表达提交范围。执行前验证它们没有打乱 compiled
+    // dependency 顺序；空 submissions 则让本后端把整帧合并成一次图形队列提交。
     if (!ValidateRHIRenderGraphSubmissions(
             packet.graph,
             graphPlan,

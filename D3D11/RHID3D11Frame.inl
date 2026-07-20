@@ -207,11 +207,14 @@ bool RHID3D11::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 
 // D3D11 的 RecordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
 // 先上传 buffer/texture，再按 RenderGraph pass 绑定 RTV/DSV、viewport/scissor，最后执行
-// draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种 barrier。
+// draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种
+// native barrier；但 RenderGraph 的 RAW/WAR/WAW、裁剪和执行顺序仍然有价值，不能省略。
 bool RHID3D11::RecordAndSubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // transient 容器保存本帧创建的 RHI 句柄，确保正常和异常路径都能统一回收。
+    // D3D11 immediate context 会持有已提交资源的内部引用，因此 CPU 侧句柄可在执行后释放。
     std::vector<RHIBuffer> transientBuffers;
     std::vector<RHITexture> transientTextures;
     std::vector<RHITextureView> transientTextureViews;
@@ -289,6 +292,8 @@ bool RHID3D11::RecordAndSubmitFrame(
             impl_->context->UpdateSubresource(texture->resource.Get(), subresource, &box, upload.data.data(), rowPitch, rowPitch * rows);
         }
 
+        // 第一层数组按逻辑资源下标寻址，第二层数组按编译器分配的物理槽寻址。
+        // imported 资源不占物理槽；兼容且生命周期不重叠的 transient 逻辑资源共享句柄。
         std::vector<RHIBuffer> graphBuffers(packet.graph.buffers.size());
         std::vector<RHIBuffer> physicalGraphBuffers(
             graphPlan.bufferAllocationCount);
@@ -447,6 +452,8 @@ bool RHID3D11::RecordAndSubmitFrame(
             impl_->context->Dispatch(dispatch.groupCountX, dispatch.groupCountY, dispatch.groupCountZ);
         };
 
+        // D3D11 驱动管理 native resource state，所以下面的 transition 只同步 RHI 的逻辑
+        // 状态追踪，不调用显式 barrier API。compiled pass 顺序仍保证生产者先于消费者。
         for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
             const RHIRenderGraphPassDesc& sourcePass =
                 packet.graph.passes[compiledPass.sourcePassIndex];
@@ -482,6 +489,8 @@ bool RHID3D11::RecordAndSubmitFrame(
             }
 
             if (workload != nullptr) {
+                // 所有资源依赖必须写在 graph pass 的 reads/writes 中，避免 workload barrier
+                // 与编译器推导冲突。未实现命令显式报错，便于尽早发现跨后端能力缺口。
                 if (!workload->barriers.globals.empty() ||
                     !workload->barriers.textures.empty() ||
                     !workload->barriers.buffers.empty()) {
@@ -550,6 +559,8 @@ bool RHID3D11::RecordAndSubmitFrame(
                 }
             }
 
+            // attachment 的资源索引来自缓存计划，clear/load/store 值来自当前 sourcePass。
+            // 因此每帧动态清屏值不会破坏计划缓存。
             std::vector<ID3D11RenderTargetView*> rtvs;
             rtvs.reserve(compiledPass.colorAttachments.size());
             for (const RHICompiledRenderGraphAttachment& compiledAttachment :
@@ -679,6 +690,8 @@ bool RHID3D11::SubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // 即使 D3D11 使用 immediate context，也要验证自定义 submission 中的 passName
+    // 是否覆盖并遵守 compiled dependency 顺序，使三套后端共享同一帧图语义。
     if (!ValidateRHIRenderGraphSubmissions(
             packet.graph,
             graphPlan,
