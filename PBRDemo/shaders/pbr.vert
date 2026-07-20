@@ -24,7 +24,9 @@ layout(set = 0, binding = 0) uniform PBRUBO {
     vec4 cameraPos;      // xyz=世界空间相机位置
     vec4 baseColor;      // rgb=albedo，a=metallic
     vec4 materialParams; // x=roughness, y=ao, zw=unused
+    // 世界空间 -> 光源裁剪空间。Fragment Shader 用它查询当前片元在阴影图中的位置。
     mat4 lightViewProjection;
+    // xy=1/ShadowMapSize，z=最小 bias，w=法线斜率 bias。
     vec4 shadowParameters;
 } ubo;
 

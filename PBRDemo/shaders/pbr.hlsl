@@ -1,16 +1,16 @@
 // =============================================================================
-// PBRDemo shared HLSL for Direct3D 11 and Direct3D 12
+// PBRDemo · D3D11/D3D12 共用 HLSL
 //
-// RHI binding contract:
-//   b0         : one per-object constant buffer
-//   t1 + s1    : shadow depth texture + comparison sampler
-//   POSITION0  : float3 position
-//   NORMAL0    : float3 normal
+// RHI 与 HLSL 的绑定契约：
+//   b0         : 每个物体自己的常量缓冲（矩阵、光照、材质）
+//   t1 + s1    : Shadow Map SRV + 深度比较 Sampler
+//   POSITION0  : float3 顶点位置
+//   NORMAL0    : float3 顶点法线
 //   TEXCOORD0  : float2 UV
 //
-// The cbuffer field order exactly matches UniformBufferObject in main.cpp.
-// Matrices are explicitly column-major because GLM uploads column-major matrices,
-// and mul(matrix, vector) then matches the GLSL expression "matrix * vector".
+// cbuffer 字段顺序必须和 main.cpp 的 UniformBufferObject 完全一致，不能只按名称匹配。
+// GLM 默认上传列主序矩阵，所以这里显式使用 column_major，并采用 mul(matrix, vector)，
+// 使其和 GLSL 的 matrix * vector 得到相同变换结果。
 // =============================================================================
 
 static const float PI = 3.14159265359F;
@@ -24,10 +24,14 @@ cbuffer PBRConstants : register(b0) {
     float4 cameraPosition;
     float4 baseColor;
     float4 materialParameters;
+    // 世界空间 -> 光源裁剪空间，生成和查询 Shadow Map 都使用同一个矩阵。
     column_major float4x4 lightViewProjection;
+    // xy=1/ShadowMapSize，z=最小 bias，w=法线斜率 bias。
     float4 shadowParameters;
 };
 
+// D3D 将纹理和采样状态分成 t/s 两类寄存器。RHI 的 CombinedTextureSampler
+// 在 D3D 后端会拆成 t1 和 s1，在 Vulkan 后端则对应一个 combined descriptor。
 Texture2D<float> shadowMap : register(t1);
 SamplerComparisonState shadowSampler : register(s1);
 
@@ -38,9 +42,9 @@ struct VertexInput {
 };
 
 struct VertexOutput {
-    // SV_POSITION is the final clip-space position consumed by the rasterizer.
+    // SV_POSITION 是交给光栅器的最终裁剪空间位置。
     float4 clipPosition : SV_POSITION;
-    // TEXCOORD semantics are generic interpolator channels between VS and PS.
+    // TEXCOORDn 在这里是 VS -> PS 的通用插值通道，不只表示模型 UV。
     float3 worldPosition : TEXCOORD0;
     float3 worldNormal   : TEXCOORD1;
     float2 uv            : TEXCOORD2;
@@ -52,8 +56,8 @@ VertexOutput VSMain(VertexInput input) {
     output.clipPosition = mul(projection, mul(view, worldPosition));
     output.worldPosition = worldPosition.xyz;
 
-    // The demo model matrix contains only rotation and translation. A production
-    // shader must use transpose(inverse((float3x3)model)) for non-uniform scale.
+    // Demo 的 model 只有旋转和平移；若存在非均匀缩放，必须改用
+    // transpose(inverse((float3x3)model)) 变换法线。
     output.worldNormal = mul((float3x3)model, input.normal);
     output.uv = input.uv;
     return output;
@@ -63,7 +67,7 @@ struct ShadowVertexInput {
     float3 position : POSITION0;
 };
 
-// The shadow pass has no pixel shader and writes only rasterized depth.
+// Shadow Pass 没有 Pixel Shader：SV_POSITION 经光栅化后直接写入深度附件。
 float4 ShadowVSMain(ShadowVertexInput input) : SV_POSITION {
     const float4 worldPosition = mul(model, float4(input.position, 1.0F));
     return mul(lightViewProjection, worldPosition);
@@ -91,6 +95,7 @@ float3 FresnelSchlick(float VoH, float3 f0) {
 }
 
 float ShadowVisibility(float3 worldPosition, float3 normal, float3 lightVector) {
+    // 步骤 1：把主相机片元重新投影到光源裁剪空间。
     const float4 lightClip = mul(
         lightViewProjection,
         float4(worldPosition, 1.0F));
@@ -98,9 +103,10 @@ float ShadowVisibility(float3 worldPosition, float3 normal, float3 lightVector) 
         return 1.0F;
     }
 
+    // 步骤 2：透视除法得到 NDC。启用 GLM_FORCE_DEPTH_ZERO_TO_ONE 后，z 已是 [0,1]。
     const float3 lightNdc = lightClip.xyz / lightClip.w;
-    // D3D maps NDC +Y toward the top of a viewport. Texture V grows downward,
-    // while Vulkan performs the equivalent Y correction in its projection.
+    // D3D viewport 把 NDC +Y 映射到纹理顶部，而纹理 V 向下增长，所以 Y 需要取反。
+    // Vulkan 版本已在 CPU 的 lightProjection 中完成等价翻转，GLSL 不在这里再翻一次。
     const float2 shadowUV = float2(
         lightNdc.x * 0.5F + 0.5F,
         -lightNdc.y * 0.5F + 0.5F);
@@ -110,11 +116,18 @@ float ShadowVisibility(float3 worldPosition, float3 normal, float3 lightVector) 
         return 1.0F;
     }
 
+    // 步骤 3：斜面使用更大 bias，降低有限深度精度造成的 self-shadow acne。
+    // currentDepth - bias 会把 receiver 的比较位置轻微拉向光源；bias 过大则会让
+    // 阴影离开物体接触点，形成 Peter-panning。
     const float normalFactor = 1.0F - max(dot(normal, lightVector), 0.0F);
     const float bias = max(
         shadowParameters.z,
         shadowParameters.w * normalFactor);
 
+    // 步骤 4：在 3x3 邻域执行 9 次 Percentage-Closer Filtering。
+    // SampleCmpLevelZero 以第三个参数为 referenceDepth，使用 SamplerComparisonState
+    // 比较 referenceDepth <= storedDepth，并返回可见度而不是原始深度。
+    // [unroll] 建议编译器展开固定小循环，减少循环控制开销，不改变计算结果。
     float visibility = 0.0F;
     [unroll]
     for (int y = -1; y <= 1; ++y) {
@@ -157,6 +170,7 @@ float4 PSMain(VertexOutput input) : SV_TARGET0 {
     const float3 diffuse =
         (1.0F.xxx - fresnel) * (1.0F - metallic) * albedo / PI;
 
+    // 只遮蔽当前方向光的直接照明；环境光模拟间接照明，不应一起变成全黑。
     const float shadow = ShadowVisibility(input.worldPosition, N, L);
     const float3 directLight =
         (diffuse + specular) * lightColor.rgb * NoL * shadow;

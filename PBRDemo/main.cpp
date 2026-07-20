@@ -38,6 +38,8 @@ namespace {
 constexpr rhi::u32 WINDOW_WIDTH = 1280;
 constexpr rhi::u32 WINDOW_HEIGHT = 800;
 constexpr rhi::u32 FRAMES_IN_FLIGHT = 2;
+// Shadow Map 分辨率只影响光源深度图，不必与窗口分辨率相同。
+// 分辨率越高，阴影轮廓越精细，但显存、清理和采样开销也越大；2048 是演示用的折中值。
 constexpr rhi::u32 SHADOW_MAP_SIZE = 2048;
 constexpr float PI = 3.14159265359F;
 
@@ -48,16 +50,22 @@ struct Vertex {
 };
 
 struct alignas(16) UniformBufferObject {
+    // 主相机和物体变换。Shader 中按 projection * view * model * position 使用。
     glm::mat4 model{1.0F};
     glm::mat4 view{1.0F};
     glm::mat4 projection{1.0F};
+
+    // lightDirection.xyz 表示光线传播方向，因此 Shader 取反得到“表面指向光源”的 L。
+    // vec4 可让 C++、GLSL std140 和 HLSL cbuffer 都自然满足 16 字节对齐。
     glm::vec4 lightDirection{};
     glm::vec4 lightColor{};
     glm::vec4 cameraPosition{};
-    glm::vec4 baseColor{};
-    glm::vec4 materialParameters{};
+    glm::vec4 baseColor{};          // rgb = albedo，a = metallic。
+    glm::vec4 materialParameters{}; // x = roughness，y = AO。
+
+    // 把世界空间位置变换到“光源相机”的裁剪空间，是生成和查询 Shadow Map 的共同坐标系。
     glm::mat4 lightViewProjection{1.0F};
-    // xy = one shadow texel in UV space, z = minimum bias, w = slope bias.
+    // xy = 单个阴影 texel 的 UV 尺寸，z = 最小 bias，w = 随法线斜率增长的 bias。
     glm::vec4 shadowParameters{};
 };
 
@@ -212,9 +220,13 @@ private:
     rhi::RHIBuffer sphereUniformBuffer_{};
     rhi::RHIBuffer planeUniformBuffer_{};
 
-    // The main pass samples this texture while the shadow pass writes it as a
-    // depth attachment. RenderGraph transitions the same resource between the
-    // two usages; no CPU readback is involved.
+    // Shadow Mapping 的核心资源：
+    // 1. ShadowMap Pass 从光源视角把最近深度写入 shadowTexture_；
+    // 2. OpaquePBR Pass 通过 shadowView_ + shadowSampler_ 比较当前片元深度；
+    // 3. 全过程只发生在 GPU，CPU 不读取阴影图。
+    //
+    // Texture 是实际显存资源，View 说明如何解释其 depth aspect，Sampler 说明过滤、
+    // 越界和深度比较规则。三者职责不同，所以 RHI 将它们拆成三个对象。
     rhi::RHITexture shadowTexture_{};
     rhi::RHITextureView shadowView_{};
     rhi::RHISampler shadowSampler_{};
@@ -225,9 +237,11 @@ private:
     rhi::RHIPipelineLayout pipelineLayout_{};
     rhi::RHIPipeline pipeline_{};
 
-    // A depth-only pass only needs the per-object UBO. Keeping a separate
-    // layout prevents the shadow texture from being sampled while it is bound
-    // as the current depth attachment, which is especially important in D3D11.
+    // Shadow Pass 只需要物体 UBO，不需要读取 Shadow Map 自己，因此使用独立 BindSet。
+    // 如果直接复用主 PBR BindSet，就可能在同一时刻把 shadowTexture_ 同时绑定为：
+    // - DSV/depth attachment：当前 Pass 正在写；
+    // - SRV/sampled texture：Shader 准备读。
+    // 这是资源读写冲突，D3D11 会强制解绑并报告警告，Vulkan/D3D12 则需要非法状态组合。
     rhi::RHIBindSetLayout shadowBindSetLayout_{};
     rhi::RHIBindSet shadowSphereBindSet_{};
     rhi::RHIPipelineLayout shadowPipelineLayout_{};
@@ -403,6 +417,11 @@ private:
         uniformDesc.debugName = "PBR.PlaneUniform";
         planeUniformBuffer_ = device_->CreateBuffer(uniformDesc);
 
+        // Shadow Map 本质是一张“可采样的深度附件”：
+        // - DepthStencilAttachment：允许 Shadow Pass 做深度测试并写入最近深度；
+        // - Sampled：允许后续 PBR Fragment Shader 把它当只读纹理采样。
+        // Vulkan 会据此组合 VkImageUsageFlags；D3D11/D3D12 后端会创建 typeless 资源，
+        // 再分别建立 D32 DSV 与 R32_FLOAT SRV，使同一块显存支持两种解释方式。
         rhi::RHITextureDesc shadowTextureDesc{};
         shadowTextureDesc.debugName = "PBR.ShadowDepth";
         shadowTextureDesc.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1};
@@ -411,6 +430,7 @@ private:
                                   rhi::RHITextureUsage::Sampled;
         shadowTexture_ = device_->CreateTexture(shadowTextureDesc);
 
+        // View 只暴露 depth aspect。这里没有 stencil，也不需要 color view。
         rhi::RHITextureViewDesc shadowViewDesc{};
         shadowViewDesc.debugName = "PBR.ShadowDepthView";
         shadowViewDesc.texture = shadowTexture_;
@@ -418,6 +438,11 @@ private:
         shadowViewDesc.aspect = rhi::RHITextureAspect::Depth;
         shadowView_ = device_->CreateTextureView(shadowViewDesc);
 
+        // Comparison Sampler 不直接返回纹理中的深度，而是执行：
+        //     referenceDepth <= storedDepth ? 1 : 0
+        // Shader 传入当前片元的光源空间深度作为 referenceDepth；返回 1 表示没有被挡住。
+        // Linear 过滤会在硬件支持时对邻近比较结果插值，再叠加 Shader 的 3x3 PCF，
+        // 从而把锯齿状硬边变成较平滑的阴影边缘。
         rhi::RHISamplerDesc shadowSamplerDesc{};
         shadowSamplerDesc.debugName = "PBR.ShadowComparisonSampler";
         shadowSamplerDesc.minFilter = rhi::RHIFilterMode::Linear;
@@ -429,10 +454,15 @@ private:
         shadowSamplerDesc.maxLod = 0.0F;
         shadowSamplerDesc.enableCompare = true;
         shadowSamplerDesc.compareOp = rhi::RHICompareOp::LessOrEqual;
-        // Samples outside the light frustum read depth 1 and therefore remain lit.
+        // 光源视锥外采到边框深度 1.0；标准深度下它代表最远处，因此默认判定为受光。
         shadowSamplerDesc.borderColor = rhi::RHIBorderColor::OpaqueWhite;
         shadowSampler_ = device_->CreateSampler(shadowSamplerDesc);
 
+        // 主 PBR BindSet 的资源契约必须与 Shader 完全一致：
+        // binding 0 -> 每个物体各自的 UniformBuffer；
+        // binding 1 -> 全场景共享的 Shadow Map + Comparison Sampler。
+        // CombinedTextureSampler 在 Vulkan 对应 combined image sampler；D3D 后端会拆到
+        // 同编号的 SRV(t1) 和 Sampler(s1)。
         rhi::RHIBindSetLayoutDesc bindLayoutDesc{};
         bindLayoutDesc.debugName = "PBR.BindSetLayout";
         bindLayoutDesc.set = 0;
@@ -458,6 +488,8 @@ private:
         pipelineLayoutDesc.bindSetLayouts.push_back(bindSetLayout_);
         pipelineLayout_ = device_->CreatePipelineLayout(pipelineLayoutDesc);
 
+        // Depth-only Shadow Pipeline 的布局只有 binding 0。它只需要 model 和
+        // lightViewProjection，不会访问 binding 1 的 Shadow Map。
         rhi::RHIBindSetLayoutDesc shadowBindLayoutDesc{};
         shadowBindLayoutDesc.debugName = "PBR.ShadowBindSetLayout";
         shadowBindLayoutDesc.set = 0;
@@ -478,6 +510,8 @@ private:
     }
 
     rhi::RHIBindSet CreatePBRBindSet(const char* name, rhi::RHIBuffer buffer) {
+        // 球和 Plane 各有自己的 UBO（model、材质不同），但共享同一张阴影图。
+        // BindSet 把“这个 draw 实际使用哪些资源”与 Pipeline 的静态布局分离。
         rhi::RHIBindSetDesc desc{};
         desc.debugName = name;
         desc.layout = bindSetLayout_;
@@ -500,6 +534,9 @@ private:
     rhi::RHIBindSet CreateShadowBindSet(
         const char* name,
         rhi::RHIBuffer buffer) {
+        // Shadow Pass 当前只有球体充当 caster，所以只创建球体 BindSet。
+        // Plane 是 receiver，不写入 Shadow Map；否则它只会写下自身平面深度，
+        // 对“球是否挡住光线”的判断没有额外帮助，并增加一次无意义绘制。
         rhi::RHIBindSetDesc desc{};
         desc.debugName = name;
         desc.layout = shadowBindSetLayout_;
@@ -609,6 +646,9 @@ private:
         pipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
         pipeline_ = device_->CreateGraphicsPipeline(pipelineDesc);
 
+        // Shadow Pipeline 只包含 Vertex Shader：顶点经过 model 和光源 VP 矩阵后，
+        // 固定功能光栅器会自动生成片元深度并写入 D32 attachment。没有颜色输出，
+        // 所以不需要 Fragment/Pixel Shader，也不声明 colorFormats。
         rhi::RHIShaderDesc shadowVertexShader{};
         shadowVertexShader.debugName = "PBR.ShadowVertexShader";
         shadowVertexShader.stage = rhi::RHIShaderStage::Vertex;
@@ -623,8 +663,9 @@ private:
             shadowVertexShader.compileOptions.targetProfile = d3d12 ? "vs_5_1" : "vs_5_0";
         }
 
-        // The shadow shader reads only POSITION. The stream stride remains the
-        // complete Vertex size so the same interleaved vertex buffer can be reused.
+        // Shadow Shader 只读取 POSITION，但 stride 仍是 sizeof(Vertex)：
+        // position/normal/uv 在同一交错顶点中，下一顶点仍需跨过完整 Vertex。
+        // 省略 NORMAL 和 UV attribute 只会减少输入布局声明，不会改变内存步长。
         rhi::RHIVertexBufferLayoutDesc shadowVertexLayout{};
         shadowVertexLayout.binding = 0;
         shadowVertexLayout.stride = sizeof(Vertex);
@@ -639,8 +680,10 @@ private:
         shadowPipelineDesc.inputAssembly.topology = rhi::RHIPrimitiveTopology::TriangleList;
         shadowPipelineDesc.raster.cullMode = rhi::RHICullMode::Back;
         shadowPipelineDesc.raster.frontFace = rhi::RHIFrontFace::CounterClockwise;
-        // A small raster bias moves stored caster depth away from the light.
-        // The receiver also applies a normal-dependent bias before comparison.
+        // Shadow acne 的来源：有限深度精度和光栅化采样位置会让接收面与自己写入的深度
+        // 略有误差，从而被错误判断为“自己遮挡自己”。Raster Depth Bias 将 caster
+        // 写入的深度轻微推远；Fragment Shader 还会在比较前使用法线相关 bias。
+        // bias 太小会出现条纹，太大则会产生阴影与物体分离的 Peter-panning。
         shadowPipelineDesc.raster.depthBiasEnable = true;
         shadowPipelineDesc.raster.depthBiasConstantFactor = 1.0F;
         shadowPipelineDesc.raster.depthBiasSlopeFactor = 1.5F;
@@ -695,9 +738,11 @@ private:
         uniform.lightColor = {1.0F, 0.96F, 0.90F, 1.0F};
         uniform.cameraPosition = glm::vec4(eye, 1.0F);
 
-        // Directional lights have no physical position. Shadow mapping creates
-        // a virtual orthographic camera opposite the ray direction so parallel
-        // light rays preserve their direction and do not gain perspective.
+        // 方向光没有真实位置，所有光线互相平行。为了生成 Shadow Map，仍需构造一个
+        // “虚拟光源相机”：把它放在光线传播方向的反方向，并朝场景中心观察。
+        //
+        // lightPosition = target - lightDirection * distance
+        // 因为 lightDirection 指向光线前进方向，减去它才会回到光线来源一侧。
         const glm::vec3 lightDirection = glm::vec3(uniform.lightDirection);
         const glm::vec3 shadowTarget{0.0F, 0.5F, 0.0F};
         const glm::vec3 lightPosition = shadowTarget - lightDirection * 8.0F;
@@ -705,6 +750,11 @@ private:
             lightPosition,
             shadowTarget,
             glm::vec3{0.0F, 1.0F, 0.0F});
+
+        // 方向光没有“近大远小”，所以使用正交投影而不是透视投影。
+        // left/right/bottom/top 决定 Shadow Map 覆盖的世界区域；范围过大时，每个 texel
+        // 覆盖更多世界空间，阴影会变糊；范围过小时，范围外物体不会进入阴影图。
+        // near/far 决定光源方向上的可记录深度范围，也应尽量贴合场景以提高精度。
         glm::mat4 lightProjection = glm::ortho(
             -5.0F,
             5.0F,
@@ -712,10 +762,20 @@ private:
             5.0F,
             0.1F,
             16.0F);
+
+        // 主相机和光源相机必须采用相同的后端 Y 约定。这里为 Vulkan 翻转光源投影 Y，
+        // 因此 GLSL 查询阴影时可以直接执行 ndc.xy * 0.5 + 0.5；D3D 不翻矩阵，
+        // 转而在 HLSL 计算 shadowUV 时翻转 Y。
         if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
             lightProjection[1][1] *= -1.0F;
         }
+
+        // 顶点先 world = model * local，再 lightClip = lightVP * world。
+        // model 因物体而异，lightVP 对同一个方向光覆盖的所有物体相同。
         uniform.lightViewProjection = lightProjection * lightView;
+
+        // PCF 每次偏移一个 texel，因此把 1 / resolution 传给 Shader，避免硬编码。
+        // z/w 是经过实际画面调节的比较 bias，单位是归一化光源深度 [0, 1]。
         uniform.shadowParameters = {
             1.0F / static_cast<float>(SHADOW_MAP_SIZE),
             1.0F / static_cast<float>(SHADOW_MAP_SIZE),
@@ -802,6 +862,9 @@ private:
         depth.desc.usage = rhi::RHITextureUsage::DepthStencilAttachment;
         packet.graph.textures.push_back(depth);
 
+        // shadowTexture_ 在图外长期创建，所以作为 Imported 资源交给 RenderGraph。
+        // RenderGraph 不拥有它的生命周期，但会追踪本帧内的状态和访问顺序。
+        // 同一资源同时声明 DepthStencilAttachment 与 Sampled，正好对应先写后读两种用途。
         rhi::RHIRenderGraphTextureDesc shadowDepth{};
         shadowDepth.name = "ShadowDepth";
         shadowDepth.imported = true;
@@ -813,6 +876,11 @@ private:
                                  rhi::RHITextureUsage::Sampled;
         packet.graph.textures.push_back(shadowDepth);
 
+        // -----------------------------------------------------------------
+        // Pass 1：从光源视角生成 Shadow Map。
+        // -----------------------------------------------------------------
+        // reads 声明顶点、索引和球体 UBO 的读取阶段；depth attachment 会被编译器
+        // 自动视为对 ShadowDepth 的 DepthWrite。这里只画 sphere，所以 sphere 是 caster。
         rhi::RHIRenderGraphPassDesc shadowPass{};
         shadowPass.name = "ShadowMap";
         shadowPass.type = rhi::RHIRenderGraphPassType::Raster;
@@ -824,12 +892,23 @@ private:
         rhi::RHIRenderGraphAttachmentDesc shadowAttachment{};
         shadowAttachment.resourceName = "ShadowDepth";
         shadowAttachment.aspect = rhi::RHITextureAspect::Depth;
+        // 每帧都从 1.0（最远深度）开始。Clear 避免保留上一帧球体位置造成残影。
         shadowAttachment.loadOp = rhi::RHILoadOp::Clear;
+        // 后续 OpaquePBR 要采样结果，必须 Store；Discard 会允许后端丢掉深度内容。
         shadowAttachment.storeOp = rhi::RHIStoreOp::Store;
         shadowAttachment.clearValue.depthStencil = {1.0F, 0};
         shadowPass.depthStencilAttachment = shadowAttachment;
         packet.graph.passes.push_back(shadowPass);
 
+        // -----------------------------------------------------------------
+        // Pass 2：主相机 PBR 绘制。
+        // -----------------------------------------------------------------
+        // 对 ShadowDepth 声明 FragmentShader/ShaderRead 后，RenderGraph 能从同一资源的
+        // DepthWrite -> ShaderRead 自动推导：
+        // - ShadowMap 必须先于 OpaquePBR；
+        // - Vulkan 插入 image layout/access barrier；
+        // - D3D12 插入 DEPTH_WRITE -> PIXEL_SHADER_RESOURCE transition；
+        // - D3D11 虽无显式 barrier，也会按编译后的 Pass 顺序解绑 DSV 再绑定 SRV。
         rhi::RHIRenderGraphPassDesc opaque{};
         opaque.name = "OpaquePBR";
         opaque.type = rhi::RHIRenderGraphPassType::Raster;
@@ -867,6 +946,9 @@ private:
             rhi::RHIPipelineStage::BottomOfPipe});
         packet.graph.passes.push_back(presentPass);
 
+        // PassDesc 只描述依赖和 attachment；Workload 才保存真正的 draw command。
+        // Shadow Pass 必须使用 Shadow Map 自己的 2048x2048 viewport/scissor，不能沿用窗口
+        // 尺寸，否则只会写入深度图的一部分，或者产生错误的 texel 到像素映射。
         rhi::RHIRenderPassWorkload shadowWorkload{};
         shadowWorkload.passName = "ShadowMap";
         shadowWorkload.viewport = {
@@ -878,6 +960,8 @@ private:
             1.0F};
         shadowWorkload.scissor = {{0, 0}, {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE}};
 
+        // Shadow draw 复用主场景的 vertex/index buffer，但切换为 depth-only Pipeline 和
+        // 只含 UBO 的 BindSet。索引范围只覆盖球体，Plane 不作为 caster 绘制。
         rhi::RHIDrawIndexedCommand shadowSphereDraw{};
         shadowSphereDraw.pipeline = shadowPipeline_;
         shadowSphereDraw.bindSets = {shadowSphereBindSet_};
@@ -919,6 +1003,8 @@ private:
         opaqueWorkload.indexedDraws.push_back(planeDraw);
         packet.workloads.push_back(std::move(opaqueWorkload));
 
+        // 三个 Pass 放在同一次 Graphics Queue submission 中。passNames 的顺序还会接受
+        // RenderGraph 依赖验证，防止调用方把消费者 OpaquePBR 提交到生产者 ShadowMap 前面。
         rhi::RHIQueueSubmitDesc submit{};
         submit.debugName = "PBR.RenderGraphSubmit";
         submit.queue = rhi::RHIQueueType::Graphics;
@@ -1001,6 +1087,8 @@ private:
             return;
         }
         device_->WaitIdle();
+        // 销毁顺序与引用关系相反：先销毁使用资源的 Pipeline/BindSet/Layout，再销毁
+        // Sampler/View/Texture。WaitIdle 保证 GPU 不再访问这些对象。
         device_->Destroy(pipeline_);
         device_->Destroy(shadowPipeline_);
         device_->Destroy(pipelineLayout_);

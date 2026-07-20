@@ -72,6 +72,8 @@ endfunction()
 
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.vert)
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.frag)
+# Shadow Pass 是 depth-only，所以只需要编译 shadow.vert，不存在 shadow.frag。
+# 顶点输出的 gl_Position 会由固定功能光栅器转换成 Shadow Map 深度。
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.vert)
 
 # D3D11/D3D12 在运行时通过 D3DCompileFromFile 编译同一份 HLSL。复制到统一输出目录，
