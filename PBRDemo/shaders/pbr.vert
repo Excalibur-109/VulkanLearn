@@ -8,7 +8,7 @@
 //   layout(location = 1) in vec3 inNormal;
 //   layout(location = 2) in vec2 inUV;
 //
-// 单一 UBO（set=0, binding=0）携带 MVP、方向光、相机位置和材质参数。
+// 单一 UBO（set=0, binding=0）携带 MVP、方向光、光源矩阵、相机和材质参数。
 // =============================================================================
 
 layout(location = 0) in vec3 inPosition;
@@ -19,11 +19,13 @@ layout(set = 0, binding = 0) uniform PBRUBO {
     mat4 model;
     mat4 view;
     mat4 proj;
-    vec4 lightDir;       // xyz=世界空间方向（指向光源）
+    vec4 lightDir;       // xyz=光线在世界空间中的传播方向
     vec4 lightColor;     // rgb=光强，a=unused
     vec4 cameraPos;      // xyz=世界空间相机位置
     vec4 baseColor;      // rgb=albedo，a=metallic
     vec4 materialParams; // x=roughness, y=ao, zw=unused
+    mat4 lightViewProjection;
+    vec4 shadowParameters;
 } ubo;
 
 layout(location = 0) out vec3 vWorldPos;

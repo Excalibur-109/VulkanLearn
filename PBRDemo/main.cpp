@@ -38,6 +38,7 @@ namespace {
 constexpr rhi::u32 WINDOW_WIDTH = 1280;
 constexpr rhi::u32 WINDOW_HEIGHT = 800;
 constexpr rhi::u32 FRAMES_IN_FLIGHT = 2;
+constexpr rhi::u32 SHADOW_MAP_SIZE = 2048;
 constexpr float PI = 3.14159265359F;
 
 struct Vertex {
@@ -55,6 +56,9 @@ struct alignas(16) UniformBufferObject {
     glm::vec4 cameraPosition{};
     glm::vec4 baseColor{};
     glm::vec4 materialParameters{};
+    glm::mat4 lightViewProjection{1.0F};
+    // xy = one shadow texel in UV space, z = minimum bias, w = slope bias.
+    glm::vec4 shadowParameters{};
 };
 
 struct Mesh {
@@ -207,11 +211,27 @@ private:
     rhi::RHIBuffer indexBuffer_{};
     rhi::RHIBuffer sphereUniformBuffer_{};
     rhi::RHIBuffer planeUniformBuffer_{};
+
+    // The main pass samples this texture while the shadow pass writes it as a
+    // depth attachment. RenderGraph transitions the same resource between the
+    // two usages; no CPU readback is involved.
+    rhi::RHITexture shadowTexture_{};
+    rhi::RHITextureView shadowView_{};
+    rhi::RHISampler shadowSampler_{};
+
     rhi::RHIBindSetLayout bindSetLayout_{};
     rhi::RHIBindSet sphereBindSet_{};
     rhi::RHIBindSet planeBindSet_{};
     rhi::RHIPipelineLayout pipelineLayout_{};
     rhi::RHIPipeline pipeline_{};
+
+    // A depth-only pass only needs the per-object UBO. Keeping a separate
+    // layout prevents the shadow texture from being sampled while it is bound
+    // as the current depth attachment, which is especially important in D3D11.
+    rhi::RHIBindSetLayout shadowBindSetLayout_{};
+    rhi::RHIBindSet shadowSphereBindSet_{};
+    rhi::RHIPipelineLayout shadowPipelineLayout_{};
+    rhi::RHIPipeline shadowPipeline_{};
 
     std::vector<std::byte> initialVertexData_;
     std::vector<std::byte> initialIndexData_;
@@ -383,6 +403,36 @@ private:
         uniformDesc.debugName = "PBR.PlaneUniform";
         planeUniformBuffer_ = device_->CreateBuffer(uniformDesc);
 
+        rhi::RHITextureDesc shadowTextureDesc{};
+        shadowTextureDesc.debugName = "PBR.ShadowDepth";
+        shadowTextureDesc.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1};
+        shadowTextureDesc.format = rhi::RHIFormat::D32_Float;
+        shadowTextureDesc.usage = rhi::RHITextureUsage::DepthStencilAttachment |
+                                  rhi::RHITextureUsage::Sampled;
+        shadowTexture_ = device_->CreateTexture(shadowTextureDesc);
+
+        rhi::RHITextureViewDesc shadowViewDesc{};
+        shadowViewDesc.debugName = "PBR.ShadowDepthView";
+        shadowViewDesc.texture = shadowTexture_;
+        shadowViewDesc.format = shadowTextureDesc.format;
+        shadowViewDesc.aspect = rhi::RHITextureAspect::Depth;
+        shadowView_ = device_->CreateTextureView(shadowViewDesc);
+
+        rhi::RHISamplerDesc shadowSamplerDesc{};
+        shadowSamplerDesc.debugName = "PBR.ShadowComparisonSampler";
+        shadowSamplerDesc.minFilter = rhi::RHIFilterMode::Linear;
+        shadowSamplerDesc.magFilter = rhi::RHIFilterMode::Linear;
+        shadowSamplerDesc.mipmapMode = rhi::RHIMipmapMode::Nearest;
+        shadowSamplerDesc.addressU = rhi::RHIAddressMode::ClampToBorder;
+        shadowSamplerDesc.addressV = rhi::RHIAddressMode::ClampToBorder;
+        shadowSamplerDesc.addressW = rhi::RHIAddressMode::ClampToBorder;
+        shadowSamplerDesc.maxLod = 0.0F;
+        shadowSamplerDesc.enableCompare = true;
+        shadowSamplerDesc.compareOp = rhi::RHICompareOp::LessOrEqual;
+        // Samples outside the light frustum read depth 1 and therefore remain lit.
+        shadowSamplerDesc.borderColor = rhi::RHIBorderColor::OpaqueWhite;
+        shadowSampler_ = device_->CreateSampler(shadowSamplerDesc);
+
         rhi::RHIBindSetLayoutDesc bindLayoutDesc{};
         bindLayoutDesc.debugName = "PBR.BindSetLayout";
         bindLayoutDesc.set = 0;
@@ -390,26 +440,75 @@ private:
             0,
             rhi::RHIBindingType::UniformBuffer,
             rhi::RHIShaderStage::Vertex | rhi::RHIShaderStage::Fragment});
+
+        rhi::RHIBindSetLayoutEntry shadowMapEntry{};
+        shadowMapEntry.binding = 1;
+        shadowMapEntry.type = rhi::RHIBindingType::CombinedTextureSampler;
+        shadowMapEntry.visibility = rhi::RHIShaderStage::Fragment;
+        shadowMapEntry.textureViewDimension = rhi::RHITextureViewDimension::View2D;
+        shadowMapEntry.textureSampleType = rhi::RHITextureSampleType::Depth;
+        bindLayoutDesc.entries.push_back(shadowMapEntry);
         bindSetLayout_ = device_->CreateBindSetLayout(bindLayoutDesc);
 
-        sphereBindSet_ = CreateUniformBindSet("PBR.SphereBindSet", sphereUniformBuffer_);
-        planeBindSet_ = CreateUniformBindSet("PBR.PlaneBindSet", planeUniformBuffer_);
+        sphereBindSet_ = CreatePBRBindSet("PBR.SphereBindSet", sphereUniformBuffer_);
+        planeBindSet_ = CreatePBRBindSet("PBR.PlaneBindSet", planeUniformBuffer_);
 
         rhi::RHIPipelineLayoutDesc pipelineLayoutDesc{};
         pipelineLayoutDesc.debugName = "PBR.PipelineLayout";
         pipelineLayoutDesc.bindSetLayouts.push_back(bindSetLayout_);
         pipelineLayout_ = device_->CreatePipelineLayout(pipelineLayoutDesc);
+
+        rhi::RHIBindSetLayoutDesc shadowBindLayoutDesc{};
+        shadowBindLayoutDesc.debugName = "PBR.ShadowBindSetLayout";
+        shadowBindLayoutDesc.set = 0;
+        shadowBindLayoutDesc.entries.push_back({
+            0,
+            rhi::RHIBindingType::UniformBuffer,
+            rhi::RHIShaderStage::Vertex});
+        shadowBindSetLayout_ = device_->CreateBindSetLayout(shadowBindLayoutDesc);
+        shadowSphereBindSet_ = CreateShadowBindSet(
+            "PBR.ShadowSphereBindSet",
+            sphereUniformBuffer_);
+
+        rhi::RHIPipelineLayoutDesc shadowPipelineLayoutDesc{};
+        shadowPipelineLayoutDesc.debugName = "PBR.ShadowPipelineLayout";
+        shadowPipelineLayoutDesc.bindSetLayouts.push_back(shadowBindSetLayout_);
+        shadowPipelineLayout_ = device_->CreatePipelineLayout(
+            shadowPipelineLayoutDesc);
     }
 
-    rhi::RHIBindSet CreateUniformBindSet(const char* name, rhi::RHIBuffer buffer) {
+    rhi::RHIBindSet CreatePBRBindSet(const char* name, rhi::RHIBuffer buffer) {
         rhi::RHIBindSetDesc desc{};
         desc.debugName = name;
         desc.layout = bindSetLayout_;
-        rhi::RHIResourceBinding binding{};
-        binding.binding = 0;
-        binding.type = rhi::RHIBindingType::UniformBuffer;
-        binding.buffer = {buffer, 0, sizeof(UniformBufferObject)};
-        desc.bindings.push_back(binding);
+
+        rhi::RHIResourceBinding uniformBinding{};
+        uniformBinding.binding = 0;
+        uniformBinding.type = rhi::RHIBindingType::UniformBuffer;
+        uniformBinding.buffer = {buffer, 0, sizeof(UniformBufferObject)};
+        desc.bindings.push_back(uniformBinding);
+
+        rhi::RHIResourceBinding shadowBinding{};
+        shadowBinding.binding = 1;
+        shadowBinding.type = rhi::RHIBindingType::CombinedTextureSampler;
+        shadowBinding.texture = {shadowView_, shadowTexture_};
+        shadowBinding.sampler = shadowSampler_;
+        desc.bindings.push_back(shadowBinding);
+        return device_->CreateBindSet(desc);
+    }
+
+    rhi::RHIBindSet CreateShadowBindSet(
+        const char* name,
+        rhi::RHIBuffer buffer) {
+        rhi::RHIBindSetDesc desc{};
+        desc.debugName = name;
+        desc.layout = shadowBindSetLayout_;
+
+        rhi::RHIResourceBinding uniformBinding{};
+        uniformBinding.binding = 0;
+        uniformBinding.type = rhi::RHIBindingType::UniformBuffer;
+        uniformBinding.buffer = {buffer, 0, sizeof(UniformBufferObject)};
+        desc.bindings.push_back(uniformBinding);
         return device_->CreateBindSet(desc);
     }
 
@@ -509,6 +608,47 @@ private:
         pipelineDesc.colorFormats.push_back(swapchainFormat_);
         pipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
         pipeline_ = device_->CreateGraphicsPipeline(pipelineDesc);
+
+        rhi::RHIShaderDesc shadowVertexShader{};
+        shadowVertexShader.debugName = "PBR.ShadowVertexShader";
+        shadowVertexShader.stage = rhi::RHIShaderStage::Vertex;
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            shadowVertexShader.language = rhi::RHIShaderLanguage::SPIRV;
+            shadowVertexShader.filePath = shaderDirectory + "/shadow.vert.spv";
+        } else {
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            shadowVertexShader.language = rhi::RHIShaderLanguage::HLSL;
+            shadowVertexShader.filePath = shaderDirectory + "/pbr.hlsl";
+            shadowVertexShader.entryPoint = "ShadowVSMain";
+            shadowVertexShader.compileOptions.targetProfile = d3d12 ? "vs_5_1" : "vs_5_0";
+        }
+
+        // The shadow shader reads only POSITION. The stream stride remains the
+        // complete Vertex size so the same interleaved vertex buffer can be reused.
+        rhi::RHIVertexBufferLayoutDesc shadowVertexLayout{};
+        shadowVertexLayout.binding = 0;
+        shadowVertexLayout.stride = sizeof(Vertex);
+        shadowVertexLayout.attributes = {
+            {"POSITION", 0, 0, 0, rhi::RHIVertexFormat::Float32x3, offsetof(Vertex, position)}};
+
+        rhi::RHIGraphicsPipelineDesc shadowPipelineDesc{};
+        shadowPipelineDesc.debugName = "PBR.ShadowGraphicsPipeline";
+        shadowPipelineDesc.layout = shadowPipelineLayout_;
+        shadowPipelineDesc.shaders = {shadowVertexShader};
+        shadowPipelineDesc.vertexBuffers.push_back(shadowVertexLayout);
+        shadowPipelineDesc.inputAssembly.topology = rhi::RHIPrimitiveTopology::TriangleList;
+        shadowPipelineDesc.raster.cullMode = rhi::RHICullMode::Back;
+        shadowPipelineDesc.raster.frontFace = rhi::RHIFrontFace::CounterClockwise;
+        // A small raster bias moves stored caster depth away from the light.
+        // The receiver also applies a normal-dependent bias before comparison.
+        shadowPipelineDesc.raster.depthBiasEnable = true;
+        shadowPipelineDesc.raster.depthBiasConstantFactor = 1.0F;
+        shadowPipelineDesc.raster.depthBiasSlopeFactor = 1.5F;
+        shadowPipelineDesc.depthStencil.depthTestEnable = true;
+        shadowPipelineDesc.depthStencil.depthWriteEnable = true;
+        shadowPipelineDesc.depthStencil.depthCompareOp = rhi::RHICompareOp::Less;
+        shadowPipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
+        shadowPipeline_ = device_->CreateGraphicsPipeline(shadowPipelineDesc);
     }
 
     void RecreateSwapchain() {
@@ -554,6 +694,34 @@ private:
             glm::normalize(glm::vec3{-0.5F, -1.0F, -0.3F}), 0.0F);
         uniform.lightColor = {1.0F, 0.96F, 0.90F, 1.0F};
         uniform.cameraPosition = glm::vec4(eye, 1.0F);
+
+        // Directional lights have no physical position. Shadow mapping creates
+        // a virtual orthographic camera opposite the ray direction so parallel
+        // light rays preserve their direction and do not gain perspective.
+        const glm::vec3 lightDirection = glm::vec3(uniform.lightDirection);
+        const glm::vec3 shadowTarget{0.0F, 0.5F, 0.0F};
+        const glm::vec3 lightPosition = shadowTarget - lightDirection * 8.0F;
+        const glm::mat4 lightView = glm::lookAt(
+            lightPosition,
+            shadowTarget,
+            glm::vec3{0.0F, 1.0F, 0.0F});
+        glm::mat4 lightProjection = glm::ortho(
+            -5.0F,
+            5.0F,
+            -5.0F,
+            5.0F,
+            0.1F,
+            16.0F);
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            lightProjection[1][1] *= -1.0F;
+        }
+        uniform.lightViewProjection = lightProjection * lightView;
+        uniform.shadowParameters = {
+            1.0F / static_cast<float>(SHADOW_MAP_SIZE),
+            1.0F / static_cast<float>(SHADOW_MAP_SIZE),
+            0.00035F,
+            0.0025F};
+
         if (sphere) {
             uniform.model = glm::translate(glm::mat4{1.0F}, {0.0F, 1.0F, 0.0F}) *
                             glm::rotate(
@@ -634,6 +802,34 @@ private:
         depth.desc.usage = rhi::RHITextureUsage::DepthStencilAttachment;
         packet.graph.textures.push_back(depth);
 
+        rhi::RHIRenderGraphTextureDesc shadowDepth{};
+        shadowDepth.name = "ShadowDepth";
+        shadowDepth.imported = true;
+        shadowDepth.flags = rhi::RHIRenderGraphResourceFlags::Imported;
+        shadowDepth.externalHandle = shadowTexture_;
+        shadowDepth.desc.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1};
+        shadowDepth.desc.format = rhi::RHIFormat::D32_Float;
+        shadowDepth.desc.usage = rhi::RHITextureUsage::DepthStencilAttachment |
+                                 rhi::RHITextureUsage::Sampled;
+        packet.graph.textures.push_back(shadowDepth);
+
+        rhi::RHIRenderGraphPassDesc shadowPass{};
+        shadowPass.name = "ShadowMap";
+        shadowPass.type = rhi::RHIRenderGraphPassType::Raster;
+        shadowPass.reads = {
+            {"Vertices", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::VertexBuffer, rhi::RHIPipelineStage::VertexInput},
+            {"Indices", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::IndexBuffer, rhi::RHIPipelineStage::VertexInput},
+            {"SphereUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader}};
+
+        rhi::RHIRenderGraphAttachmentDesc shadowAttachment{};
+        shadowAttachment.resourceName = "ShadowDepth";
+        shadowAttachment.aspect = rhi::RHITextureAspect::Depth;
+        shadowAttachment.loadOp = rhi::RHILoadOp::Clear;
+        shadowAttachment.storeOp = rhi::RHIStoreOp::Store;
+        shadowAttachment.clearValue.depthStencil = {1.0F, 0};
+        shadowPass.depthStencilAttachment = shadowAttachment;
+        packet.graph.passes.push_back(shadowPass);
+
         rhi::RHIRenderGraphPassDesc opaque{};
         opaque.name = "OpaquePBR";
         opaque.type = rhi::RHIRenderGraphPassType::Raster;
@@ -641,7 +837,8 @@ private:
             {"Vertices", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::VertexBuffer, rhi::RHIPipelineStage::VertexInput},
             {"Indices", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::IndexBuffer, rhi::RHIPipelineStage::VertexInput},
             {"SphereUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader | rhi::RHIPipelineStage::FragmentShader},
-            {"PlaneUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader | rhi::RHIPipelineStage::FragmentShader}};
+            {"PlaneUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader | rhi::RHIPipelineStage::FragmentShader},
+            {"ShadowDepth", rhi::RHIRenderGraphResourceType::Texture, rhi::RHIResourceState::ShaderRead, rhi::RHIPipelineStage::FragmentShader}};
 
         rhi::RHIRenderGraphAttachmentDesc colorAttachment{};
         colorAttachment.resourceName = "BackBuffer";
@@ -670,10 +867,33 @@ private:
             rhi::RHIPipelineStage::BottomOfPipe});
         packet.graph.passes.push_back(presentPass);
 
-        rhi::RHIRenderPassWorkload workload{};
-        workload.passName = "OpaquePBR";
-        workload.viewport = packet.settings.viewport;
-        workload.scissor = packet.settings.scissor;
+        rhi::RHIRenderPassWorkload shadowWorkload{};
+        shadowWorkload.passName = "ShadowMap";
+        shadowWorkload.viewport = {
+            0.0F,
+            0.0F,
+            static_cast<float>(SHADOW_MAP_SIZE),
+            static_cast<float>(SHADOW_MAP_SIZE),
+            0.0F,
+            1.0F};
+        shadowWorkload.scissor = {{0, 0}, {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE}};
+
+        rhi::RHIDrawIndexedCommand shadowSphereDraw{};
+        shadowSphereDraw.pipeline = shadowPipeline_;
+        shadowSphereDraw.bindSets = {shadowSphereBindSet_};
+        shadowSphereDraw.vertexStreams = {{vertexBuffer_, 0, 0, sizeof(Vertex)}};
+        shadowSphereDraw.indexStream.buffer = indexBuffer_;
+        shadowSphereDraw.indexStream.indexType = rhi::RHIIndexType::UInt32;
+        shadowSphereDraw.indexStream.offset = sphereIndexOffset_;
+        shadowSphereDraw.indexStream.indexCount = sphereIndexCount_;
+        shadowSphereDraw.indexCount = sphereIndexCount_;
+        shadowWorkload.indexedDraws.push_back(shadowSphereDraw);
+        packet.workloads.push_back(std::move(shadowWorkload));
+
+        rhi::RHIRenderPassWorkload opaqueWorkload{};
+        opaqueWorkload.passName = "OpaquePBR";
+        opaqueWorkload.viewport = packet.settings.viewport;
+        opaqueWorkload.scissor = packet.settings.scissor;
 
         rhi::RHIDrawIndexedCommand sphereDraw{};
         sphereDraw.pipeline = pipeline_;
@@ -684,7 +904,7 @@ private:
         sphereDraw.indexStream.offset = sphereIndexOffset_;
         sphereDraw.indexStream.indexCount = sphereIndexCount_;
         sphereDraw.indexCount = sphereIndexCount_;
-        workload.indexedDraws.push_back(sphereDraw);
+        opaqueWorkload.indexedDraws.push_back(sphereDraw);
 
         rhi::RHIDrawIndexedCommand planeDraw{};
         planeDraw.pipeline = pipeline_;
@@ -696,13 +916,13 @@ private:
         planeDraw.indexStream.indexCount = planeIndexCount_;
         planeDraw.indexCount = planeIndexCount_;
         planeDraw.vertexOffsetElements = static_cast<rhi::i32>(sphereVertexCount_);
-        workload.indexedDraws.push_back(planeDraw);
-        packet.workloads.push_back(std::move(workload));
+        opaqueWorkload.indexedDraws.push_back(planeDraw);
+        packet.workloads.push_back(std::move(opaqueWorkload));
 
         rhi::RHIQueueSubmitDesc submit{};
         submit.debugName = "PBR.RenderGraphSubmit";
         submit.queue = rhi::RHIQueueType::Graphics;
-        submit.passNames = {"OpaquePBR", "Present"};
+        submit.passNames = {"ShadowMap", "OpaquePBR", "Present"};
         submit.waits.push_back({
             imageAvailable_[frameSlot_],
             0,
@@ -782,10 +1002,17 @@ private:
         }
         device_->WaitIdle();
         device_->Destroy(pipeline_);
+        device_->Destroy(shadowPipeline_);
         device_->Destroy(pipelineLayout_);
+        device_->Destroy(shadowPipelineLayout_);
         device_->Destroy(sphereBindSet_);
         device_->Destroy(planeBindSet_);
+        device_->Destroy(shadowSphereBindSet_);
         device_->Destroy(bindSetLayout_);
+        device_->Destroy(shadowBindSetLayout_);
+        device_->Destroy(shadowSampler_);
+        device_->Destroy(shadowView_);
+        device_->Destroy(shadowTexture_);
         device_->Destroy(sphereUniformBuffer_);
         device_->Destroy(planeUniformBuffer_);
         device_->Destroy(indexBuffer_);

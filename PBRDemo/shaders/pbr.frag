@@ -10,7 +10,8 @@
 //   - 漫反射：Lambert (1 - F) * (1 - metallic) * albedo / PI
 //   - 环境光：半球常数 f0 + albedo 混合（取代完整 IBL，方便 demo 跑通）
 //
-// 单方向光，无阴影、无 env map，足够展示 PBR 各项同性公式。
+// 单方向光 + 方向光 Shadow Map（3x3 PCF），无 env map。
+// 直接光受阴影影响，环境光不乘阴影可见度，避免遮挡区完全变黑。
 // =============================================================================
 
 layout(set = 0, binding = 0) uniform PBRUBO {
@@ -22,7 +23,13 @@ layout(set = 0, binding = 0) uniform PBRUBO {
     vec4 cameraPos;
     vec4 baseColor;
     vec4 materialParams;
+    mat4 lightViewProjection;
+    vec4 shadowParameters;
 } ubo;
+
+// A comparison sampler returns visibility instead of raw depth: 1 means the
+// receiver is no farther from the light than the closest stored caster.
+layout(set = 0, binding = 1) uniform sampler2DShadow shadowMap;
 
 layout(location = 0) in vec3 vWorldPos;
 layout(location = 1) in vec3 vWorldNormal;
@@ -51,6 +58,39 @@ float V_SmithGGX(float NoV, float NoL, float a) {
 vec3 F_Schlick(float VoH, vec3 f0) {
     float f = pow(clamp(1.0 - VoH, 0.0, 1.0), 5.0);
     return f0 + (vec3(1.0) - f0) * f;
+}
+
+float shadowVisibility(vec3 worldPosition, vec3 normal, vec3 lightVector) {
+    vec4 lightClip = ubo.lightViewProjection * vec4(worldPosition, 1.0);
+    if (lightClip.w <= 0.0) {
+        return 1.0;
+    }
+
+    vec3 lightNdc = lightClip.xyz / lightClip.w;
+    vec2 shadowUV = lightNdc.xy * 0.5 + 0.5;
+    if (shadowUV.x <= 0.0 || shadowUV.x >= 1.0 ||
+        shadowUV.y <= 0.0 || shadowUV.y >= 1.0 ||
+        lightNdc.z <= 0.0 || lightNdc.z >= 1.0) {
+        return 1.0;
+    }
+
+    // Grazing surfaces need more bias because one texel spans a larger depth
+    // interval. This removes acne while preserving the contact shadow.
+    float normalFactor = 1.0 - max(dot(normal, lightVector), 0.0);
+    float bias = max(
+        ubo.shadowParameters.z,
+        ubo.shadowParameters.w * normalFactor);
+
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 offset = vec2(x, y) * ubo.shadowParameters.xy;
+            visibility += texture(
+                shadowMap,
+                vec3(shadowUV + offset, lightNdc.z - bias));
+        }
+    }
+    return visibility / 9.0;
 }
 
 void main() {
@@ -83,7 +123,9 @@ void main() {
     vec3   specular = D * vis * F;
     vec3   diffuse  = (vec3(1.0) - F) * (1.0 - metallic) * albedo / PI;
 
-    vec3 directLight = (diffuse + specular) * ubo.lightColor.rgb * NoL;
+    float shadow = shadowVisibility(vWorldPos, N, L);
+    vec3 directLight =
+        (diffuse + specular) * ubo.lightColor.rgb * NoL * shadow;
 
     // 简化环境光：金属用 f0，非金属用 albedo
     vec3 ambient = mix(vec3(0.03) * albedo, f0, metallic) * ao;

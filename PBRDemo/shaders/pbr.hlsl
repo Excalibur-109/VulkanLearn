@@ -3,6 +3,7 @@
 //
 // RHI binding contract:
 //   b0         : one per-object constant buffer
+//   t1 + s1    : shadow depth texture + comparison sampler
 //   POSITION0  : float3 position
 //   NORMAL0    : float3 normal
 //   TEXCOORD0  : float2 UV
@@ -23,7 +24,12 @@ cbuffer PBRConstants : register(b0) {
     float4 cameraPosition;
     float4 baseColor;
     float4 materialParameters;
+    column_major float4x4 lightViewProjection;
+    float4 shadowParameters;
 };
+
+Texture2D<float> shadowMap : register(t1);
+SamplerComparisonState shadowSampler : register(s1);
 
 struct VertexInput {
     float3 position : POSITION0;
@@ -53,6 +59,16 @@ VertexOutput VSMain(VertexInput input) {
     return output;
 }
 
+struct ShadowVertexInput {
+    float3 position : POSITION0;
+};
+
+// The shadow pass has no pixel shader and writes only rasterized depth.
+float4 ShadowVSMain(ShadowVertexInput input) : SV_POSITION {
+    const float4 worldPosition = mul(model, float4(input.position, 1.0F));
+    return mul(lightViewProjection, worldPosition);
+}
+
 // Trowbridge-Reitz GGX normal distribution function.
 float DistributionGGX(float NoH, float alphaSquared) {
     const float denominator =
@@ -72,6 +88,46 @@ float VisibilitySmithGGX(float NoV, float NoL, float alphaSquared) {
 float3 FresnelSchlick(float VoH, float3 f0) {
     const float factor = pow(saturate(1.0F - VoH), 5.0F);
     return f0 + (1.0F.xxx - f0) * factor;
+}
+
+float ShadowVisibility(float3 worldPosition, float3 normal, float3 lightVector) {
+    const float4 lightClip = mul(
+        lightViewProjection,
+        float4(worldPosition, 1.0F));
+    if (lightClip.w <= 0.0F) {
+        return 1.0F;
+    }
+
+    const float3 lightNdc = lightClip.xyz / lightClip.w;
+    // D3D maps NDC +Y toward the top of a viewport. Texture V grows downward,
+    // while Vulkan performs the equivalent Y correction in its projection.
+    const float2 shadowUV = float2(
+        lightNdc.x * 0.5F + 0.5F,
+        -lightNdc.y * 0.5F + 0.5F);
+    if (shadowUV.x <= 0.0F || shadowUV.x >= 1.0F ||
+        shadowUV.y <= 0.0F || shadowUV.y >= 1.0F ||
+        lightNdc.z <= 0.0F || lightNdc.z >= 1.0F) {
+        return 1.0F;
+    }
+
+    const float normalFactor = 1.0F - max(dot(normal, lightVector), 0.0F);
+    const float bias = max(
+        shadowParameters.z,
+        shadowParameters.w * normalFactor);
+
+    float visibility = 0.0F;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            const float2 offset = float2(x, y) * shadowParameters.xy;
+            visibility += shadowMap.SampleCmpLevelZero(
+                shadowSampler,
+                shadowUV + offset,
+                lightNdc.z - bias);
+        }
+    }
+    return visibility / 9.0F;
 }
 
 float4 PSMain(VertexOutput input) : SV_TARGET0 {
@@ -101,8 +157,9 @@ float4 PSMain(VertexOutput input) : SV_TARGET0 {
     const float3 diffuse =
         (1.0F.xxx - fresnel) * (1.0F - metallic) * albedo / PI;
 
+    const float shadow = ShadowVisibility(input.worldPosition, N, L);
     const float3 directLight =
-        (diffuse + specular) * lightColor.rgb * NoL;
+        (diffuse + specular) * lightColor.rgb * NoL * shadow;
     const float3 ambient =
         lerp(0.03F * albedo, f0, metallic) * ambientOcclusion;
     return float4(ambient + directLight, 1.0F);

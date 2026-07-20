@@ -72,6 +72,7 @@ endfunction()
 
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.vert)
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.frag)
+rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.vert)
 
 # D3D11/D3D12 在运行时通过 D3DCompileFromFile 编译同一份 HLSL。复制到统一输出目录，
 # 让三个后端都只依赖 PBRDemoConfig.hpp 提供的 SHADER_DIRECTORY。
@@ -85,6 +86,7 @@ configure_file(
 target_sources(PBRDemo PRIVATE
     ${PBR_SHADER_OUT_DIR}/pbr.vert.spv
     ${PBR_SHADER_OUT_DIR}/pbr.frag.spv
+    ${PBR_SHADER_OUT_DIR}/shadow.vert.spv
 )
 
 # -----------------------------------------------------------------------------
