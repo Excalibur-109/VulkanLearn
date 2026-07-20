@@ -158,6 +158,25 @@ endif()
 add_library(RHI::RHI ALIAS RHI)
 
 # -----------------------------------------------------------------------------
+# Renderer：引用现有 RHI 的上层场景收集、排序和帧图构建模块
+# -----------------------------------------------------------------------------
+add_library(Renderer STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderScene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderCollector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderFrameBuilder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderScene.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderView.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderCollector.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/RenderFrameBuilder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Renderer/Renderer.hpp
+)
+target_link_libraries(Renderer PUBLIC RHI::RHI)
+target_compile_features(Renderer PUBLIC cxx_std_20)
+target_include_directories(Renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(Renderer::Renderer ALIAS Renderer)
+
+# -----------------------------------------------------------------------------
 # PBR Demo（默认开启，可用 -DRHI_BUILD_DEMOS=OFF 关闭）
 # -----------------------------------------------------------------------------
 option(RHI_BUILD_DEMOS "Build RHI usage demos (e.g. PBRDemo)" ON)
@@ -183,6 +202,13 @@ if(BUILD_TESTING AND RHI_BUILD_TESTS)
     target_link_libraries(RHIBackendGraphTests PRIVATE RHI::RHI)
     target_compile_features(RHIBackendGraphTests PRIVATE cxx_std_20)
     add_test(NAME RHIBackendGraphTests COMMAND RHIBackendGraphTests)
+
+    add_executable(RendererTests
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tests/RendererTests.cpp
+    )
+    target_link_libraries(RendererTests PRIVATE Renderer::Renderer)
+    target_compile_features(RendererTests PRIVATE cxx_std_20)
+    add_test(NAME RendererTests COMMAND RendererTests)
 endif()
 
 # -----------------------------------------------------------------------------
