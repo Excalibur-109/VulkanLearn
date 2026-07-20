@@ -5,6 +5,7 @@
 #include "Core/RHIDevice.hpp"
 #include "Core/RHIDeviceDesc.hpp"
 #include "Core/RHIDeviceFactory.hpp"
+#include "RenderGraph/RHIRenderGraph.hpp"
 
 
 

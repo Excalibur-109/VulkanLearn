@@ -25,17 +25,17 @@ void RHID3D12::Destroy(RHITexture handle) noexcept {
 
 void RHID3D12::Destroy(RHITextureView handle) noexcept {
     if (Impl::TextureViewResource* resource = getRenderResource(impl_->textureViews, handle)) {
-        resource->srv = {};
-        resource->rtv = {};
-        resource->dsv = {};
-        resource->uav = {};
+        impl_->releaseDescriptor(resource->srv);
+        impl_->releaseDescriptor(resource->rtv);
+        impl_->releaseDescriptor(resource->dsv);
+        impl_->releaseDescriptor(resource->uav);
         resource->desc = {};
     }
 }
 
 void RHID3D12::Destroy(RHISampler handle) noexcept {
     if (Impl::SamplerResource* resource = getRenderResource(impl_->samplers, handle)) {
-        resource->sampler = {};
+        impl_->releaseDescriptor(resource->sampler);
         resource->desc = {};
     }
 }
@@ -55,6 +55,11 @@ void RHID3D12::Destroy(RHIBindSetLayout handle) noexcept {
 
 void RHID3D12::Destroy(RHIBindSet handle) noexcept {
     if (Impl::BindSetResource* resource = getRenderResource(impl_->bindSets, handle)) {
+        for (Impl::ResolvedBinding& binding : resource->bindings) {
+            if (binding.ownsResourceDescriptor) {
+                impl_->releaseDescriptor(binding.resourceDescriptor);
+            }
+        }
         resource->bindings.clear();
         resource->desc = {};
     }

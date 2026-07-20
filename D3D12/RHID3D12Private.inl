@@ -616,6 +616,7 @@ struct DescriptorHeapArena {
     UINT increment = 0;
     UINT capacity = 0;
     UINT used = 0;
+    std::vector<UINT> freeIndices;
 };
 
 static D3D12_SHADER_RESOURCE_VIEW_DESC makeTextureSrvDesc(const RHITextureDesc& texture, const RHITextureViewDesc& view, RHIFormat viewFormat) {
@@ -783,6 +784,7 @@ struct RHID3D12::Impl {
         RHIShaderStage visibility = RHIShaderStage::AllGraphics;
         CpuDescriptor resourceDescriptor{};
         CpuDescriptor samplerDescriptor{};
+        bool ownsResourceDescriptor = false;
     };
 
     struct BindSetResource {
@@ -857,6 +859,15 @@ struct RHID3D12::Impl {
     DescriptorHeapArena rtvHeap{};
     DescriptorHeapArena dsvHeap{};
     DescriptorHeapArena samplerHeap{};
+    DescriptorHeapArena shaderVisibleCbvSrvUavHeap{};
+    DescriptorHeapArena shaderVisibleSamplerHeap{};
+
+    // 单队列版本在复用 command allocator 前等待 internal fence，因此这些对象可以在下一帧
+    // 开始时统一释放。后续扩展 frames-in-flight 时可把它们直接移动进 FrameContext。
+    std::vector<ComPtr<ID3D12Resource>> pendingStagingResources;
+    std::vector<RHIBuffer> pendingTransientBuffers;
+    std::vector<RHITexture> pendingTransientTextures;
+    std::vector<RHITextureView> pendingTransientTextureViews;
 
     std::vector<BufferResource> buffers;
     std::vector<TextureResource> textures;
@@ -894,14 +905,20 @@ struct RHID3D12::Impl {
         object->SetName(wideName.c_str());
     }
 
-    void createDescriptorHeap(DescriptorHeapArena& arena, D3D12_DESCRIPTOR_HEAP_TYPE type, UINT capacity) {
+    void createDescriptorHeap(
+        DescriptorHeapArena& arena,
+        D3D12_DESCRIPTOR_HEAP_TYPE type,
+        UINT capacity,
+        D3D12_DESCRIPTOR_HEAP_FLAGS flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE) {
         arena.type = type;
         arena.capacity = capacity;
         arena.used = 0;
+        arena.freeIndices.clear();
+        arena.freeIndices.reserve(capacity);
         D3D12_DESCRIPTOR_HEAP_DESC desc{};
         desc.Type = type;
         desc.NumDescriptors = capacity;
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        desc.Flags = flags;
         throwIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&arena.heap)), "CreateDescriptorHeap failed");
         arena.increment = device->GetDescriptorHandleIncrementSize(type);
     }
@@ -917,17 +934,72 @@ struct RHID3D12::Impl {
         } else if (type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
             arena = &samplerHeap;
         }
-        if (arena == nullptr || !arena->heap || arena->used >= arena->capacity) {
+        if (arena == nullptr || !arena->heap ||
+            (arena->freeIndices.empty() && arena->used >= arena->capacity)) {
             throw std::runtime_error("D3D12 descriptor heap is exhausted");
         }
 
         CpuDescriptor descriptor{};
         descriptor.type = type;
-        descriptor.index = arena->used++;
+        if (!arena->freeIndices.empty()) {
+            descriptor.index = arena->freeIndices.back();
+            arena->freeIndices.pop_back();
+        } else {
+            descriptor.index = arena->used++;
+        }
         descriptor.valid = true;
         descriptor.handle = arena->heap->GetCPUDescriptorHandleForHeapStart();
         descriptor.handle.ptr += static_cast<SIZE_T>(descriptor.index) * arena->increment;
         return descriptor;
+    }
+
+    void releaseDescriptor(CpuDescriptor& descriptor) noexcept {
+        if (!descriptor.valid) {
+            return;
+        }
+        DescriptorHeapArena* arena = nullptr;
+        if (descriptor.type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            arena = &cbvSrvUavHeap;
+        } else if (descriptor.type == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
+            arena = &rtvHeap;
+        } else if (descriptor.type == D3D12_DESCRIPTOR_HEAP_TYPE_DSV) {
+            arena = &dsvHeap;
+        } else if (descriptor.type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
+            arena = &samplerHeap;
+        }
+        if (arena != nullptr && descriptor.index < arena->capacity) {
+            arena->freeIndices.push_back(descriptor.index);
+        }
+        descriptor = {};
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE copyToShaderVisible(CpuDescriptor source) {
+        DescriptorHeapArena* arena = nullptr;
+        if (source.type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
+            arena = &shaderVisibleSamplerHeap;
+        } else {
+            arena = &shaderVisibleCbvSrvUavHeap;
+        }
+        if (!source.valid || arena == nullptr || !arena->heap ||
+            arena->used >= arena->capacity) {
+            throw std::runtime_error("D3D12 shader-visible descriptor heap is exhausted");
+        }
+
+        const UINT index = arena->used++;
+        D3D12_CPU_DESCRIPTOR_HANDLE destination =
+            arena->heap->GetCPUDescriptorHandleForHeapStart();
+        destination.ptr += static_cast<SIZE_T>(index) * arena->increment;
+        device->CopyDescriptorsSimple(1, destination, source.handle, source.type);
+
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu =
+            arena->heap->GetGPUDescriptorHandleForHeapStart();
+        gpu.ptr += static_cast<UINT64>(index) * arena->increment;
+        return gpu;
+    }
+
+    void resetShaderVisibleDescriptors() noexcept {
+        shaderVisibleCbvSrvUavHeap.used = 0;
+        shaderVisibleSamplerHeap.used = 0;
     }
 
     const RHIBindSetLayoutEntry* findLayoutEntry(const BindSetLayoutResource& layout, u32 binding) const {

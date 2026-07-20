@@ -355,6 +355,7 @@ RHIBindSet RHID3D12::CreateBindSet(const RHIBindSetDesc& desc) {
             cbvDesc.BufferLocation = buffer->resource->GetGPUVirtualAddress() + binding.buffer.offset;
             cbvDesc.SizeInBytes = alignUp<UINT>(static_cast<UINT>(rangeSize), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
             resolved.resourceDescriptor = impl_->allocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            resolved.ownsResourceDescriptor = true;
             impl_->device->CreateConstantBufferView(&cbvDesc, resolved.resourceDescriptor.handle);
         } else if (binding.type == RHIBindingType::StorageBuffer) {
             const Impl::BufferResource* buffer = getRenderResource(impl_->buffers, binding.buffer.buffer);
@@ -369,6 +370,7 @@ RHIBindSet RHID3D12::CreateBindSet(const RHIBindSetDesc& desc) {
             }
 
             resolved.resourceDescriptor = impl_->allocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            resolved.ownsResourceDescriptor = true;
             if (layoutEntry->writable) {
                 D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
                 uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;

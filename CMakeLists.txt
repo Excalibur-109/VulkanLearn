@@ -14,6 +14,8 @@ project(RHI
     LANGUAGES CXX
 )
 
+include(CTest)
+
 # -----------------------------------------------------------------------------
 # 全局编译设置
 # -----------------------------------------------------------------------------
@@ -30,6 +32,7 @@ if(MSVC)
         /W4            # 较高警告等级
         /permissive-   # 严格符合标准
         /Zc:__cplusplus
+        /utf-8         # 源码与执行字符集统一为 UTF-8，保证中文学习注释可移植解析
     )
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS NOMINMAX)
 else()
@@ -74,6 +77,7 @@ add_library(RHI STATIC)
 # 注意：RHIDevice.cpp 用 std::variant 包含三个后端实例，缺一不可
 target_sources(RHI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/RHIDefinitions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph/RHIRenderGraph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/RHIDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/RHIDeviceFactory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkan.cpp
@@ -119,14 +123,24 @@ if(RHI_BUILD_DEMOS)
 endif()
 
 # -----------------------------------------------------------------------------
-# 可选：单元测试 target 钩子
-# 取消注释以下两行即可在 build 目录里启用单元测试
+# 可选：不依赖窗口和 GPU 的 RenderGraph 编译测试
 # -----------------------------------------------------------------------------
-# option(RHI_BUILD_TESTS "Build RHI unit tests" OFF)
-# if(RHI_BUILD_TESTS)
-#     enable_testing()
-#     add_subdirectory(tests)
-# endif()
+option(RHI_BUILD_TESTS "Build RHI unit tests" ON)
+if(BUILD_TESTING AND RHI_BUILD_TESTS)
+    add_executable(RHIRenderGraphTests
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tests/RHIRenderGraphTests.cpp
+    )
+    target_link_libraries(RHIRenderGraphTests PRIVATE RHI::RHI)
+    target_compile_features(RHIRenderGraphTests PRIVATE cxx_std_20)
+    add_test(NAME RHIRenderGraphTests COMMAND RHIRenderGraphTests)
+
+    add_executable(RHIBackendGraphTests
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tests/RHIBackendGraphTests.cpp
+    )
+    target_link_libraries(RHIBackendGraphTests PRIVATE RHI::RHI)
+    target_compile_features(RHIBackendGraphTests PRIVATE cxx_std_20)
+    add_test(NAME RHIBackendGraphTests COMMAND RHIBackendGraphTests)
+endif()
 
 # -----------------------------------------------------------------------------
 # 状态输出
@@ -142,5 +156,10 @@ if(glm_FOUND)
 else()
     message(STATUS "  glm         : ${GLM_INCLUDE_DIR} (fallback)")
 endif()
-message(STATUS "  D3D backends: $<IF:$<BOOL:${WIN32}>,ON,OFF>")
+if(WIN32)
+    set(RHI_D3D_BACKENDS_STATUS "ON")
+else()
+    set(RHI_D3D_BACKENDS_STATUS "OFF")
+endif()
+message(STATUS "  D3D backends: ${RHI_D3D_BACKENDS_STATUS}")
 message(STATUS "========================================")

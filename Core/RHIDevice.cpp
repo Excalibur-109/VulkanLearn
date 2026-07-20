@@ -1,5 +1,6 @@
 ﻿#include "RHIDevice.hpp"
 
+#include "../RenderGraph/RHIRenderGraph.hpp"
 #include "../Vulkan/RHIVulkan.hpp"
 
 #if defined(_WIN32)
@@ -57,6 +58,13 @@ struct RHIDevice::Impl {
     RHIGraphicsAPI requestedApi = RHIGraphicsAPI::Unknown;
     RHIGraphicsAPI activeApi = RHIGraphicsAPI::Unknown;
     RHIImplementationVariant implementation{};
+
+    // RenderGraph 的拓扑通常连续数百帧保持不变。缓存编译结果可以跳过每帧的
+    // 名称查找、hazard 分析、拓扑排序和 barrier 规划。执行计划只保存源数组索引，
+    // clear value、viewport、draw 参数等动态数据仍从当前 RHIFramePacket 读取。
+    u64 cachedGraphHash = 0;
+    bool hasCachedGraph = false;
+    RHIRenderGraphExecutionPlan cachedGraphPlan{};
 };
 
 RHIDevice::RHIDevice(RHIGraphicsAPI requestedApi)
@@ -164,6 +172,9 @@ void RHIDevice::Shutdown() noexcept {
     visitImplementationNoexcept(impl_->implementation, [](auto& implementation) { implementation.Shutdown(); });
     impl_->implementation.emplace<std::monostate>();
     impl_->activeApi = RHIGraphicsAPI::Unknown;
+    impl_->cachedGraphHash = 0;
+    impl_->hasCachedGraph = false;
+    impl_->cachedGraphPlan = {};
 }
 
 bool RHIDevice::IsInitialized() const noexcept {
@@ -245,7 +256,27 @@ bool RHIDevice::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 }
 
 bool RHIDevice::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
-    return visitImplementation<bool>(impl_->implementation, [&](auto& implementation) { return implementation.SubmitFrame(packet, errorMessage); });
+    const u64 graphHash = HashRHIRenderGraphStructure(packet.graph, packet.workloads);
+    if (!impl_->hasCachedGraph || impl_->cachedGraphHash != graphHash) {
+        RHIRenderGraphCompileResult graph =
+            CompileRHIRenderGraph(packet.graph, packet.workloads);
+        if (!graph.Succeeded()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = graph.ErrorMessage();
+            }
+            return false;
+        }
+
+        impl_->cachedGraphHash = graphHash;
+        impl_->cachedGraphPlan = std::move(graph.plan);
+        impl_->hasCachedGraph = true;
+    }
+
+    return visitImplementation<bool>(
+        impl_->implementation,
+        [&](auto& implementation) {
+            return implementation.SubmitFrame(packet, impl_->cachedGraphPlan, errorMessage);
+        });
 }
 
 void RHIDevice::WaitIdle() const noexcept {

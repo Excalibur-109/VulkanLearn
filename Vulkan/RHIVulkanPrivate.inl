@@ -741,6 +741,9 @@ struct RHIVulkan::Impl {
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         void* mapped = nullptr;
+        RHIResourceState currentState = RHIResourceState::Common;
+        VkPipelineStageFlags currentStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkAccessFlags currentAccess = 0;
     };
 
     struct TextureResource {

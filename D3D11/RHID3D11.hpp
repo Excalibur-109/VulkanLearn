@@ -2,6 +2,8 @@
 
 #include "../RHIDefinitions.hpp"
 
+#include "../RenderGraph/RHIRenderGraph.hpp"
+
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -84,6 +86,10 @@ public:
     [[nodiscard]] bool Submit(const RHIQueueSubmitDesc& desc, std::string* errorMessage = nullptr);
     [[nodiscard]] bool Present(const RHIPresentDesc& desc, std::string* errorMessage = nullptr);
     [[nodiscard]] bool SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage = nullptr);
+    [[nodiscard]] bool SubmitFrame(
+        const RHIFramePacket& packet,
+        const RHIRenderGraphExecutionPlan& graphPlan,
+        std::string* errorMessage = nullptr);
 
     void WaitIdle() const noexcept;
 
@@ -103,7 +109,10 @@ public:
     void Destroy(RHISwapchain handle) noexcept;
 
 private:
-    [[nodiscard]] bool RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage);
+    [[nodiscard]] bool RecordAndSubmitFrame(
+        const RHIFramePacket& packet,
+        const RHIRenderGraphExecutionPlan& graphPlan,
+        std::string* errorMessage);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

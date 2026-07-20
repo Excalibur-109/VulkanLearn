@@ -208,7 +208,34 @@ bool RHID3D11::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // D3D11 的 RecordAndSubmitFrame 不需要录制 command buffer；它直接在 immediate context 上执行：
 // 先上传 buffer/texture，再按 RenderGraph pass 绑定 RTV/DSV、viewport/scissor，最后执行
 // draw/dispatch。资源状态转换在 D3D11 里大多由驱动隐式处理，所以这里没有 Vulkan 那种 barrier。
-bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHID3D11::RecordAndSubmitFrame(
+    const RHIFramePacket& packet,
+    const RHIRenderGraphExecutionPlan& graphPlan,
+    std::string* errorMessage) {
+    std::vector<RHIBuffer> transientBuffers;
+    std::vector<RHITexture> transientTextures;
+    std::vector<RHITextureView> transientTextureViews;
+    const auto releaseTransientResources = [&]() noexcept {
+        for (auto view = transientTextureViews.rbegin();
+             view != transientTextureViews.rend();
+             ++view) {
+            Destroy(*view);
+        }
+        for (auto texture = transientTextures.rbegin();
+             texture != transientTextures.rend();
+             ++texture) {
+            Destroy(*texture);
+        }
+        for (auto buffer = transientBuffers.rbegin();
+             buffer != transientBuffers.rend();
+             ++buffer) {
+            Destroy(*buffer);
+        }
+        transientTextureViews.clear();
+        transientTextures.clear();
+        transientBuffers.clear();
+    };
+
     try {
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
             if (upload.data.empty()) {
@@ -217,6 +244,11 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             Impl::BufferResource* buffer = getRenderResource(impl_->buffers, upload.destination);
             if (buffer == nullptr || !buffer->buffer) {
                 throw std::runtime_error("RHIFramePacket buffer upload destination is invalid");
+            }
+            if (upload.destinationOffset > buffer->desc.size ||
+                upload.data.size() > buffer->desc.size - upload.destinationOffset) {
+                throw std::runtime_error(
+                    "RHIFramePacket buffer upload range exceeds destination buffer size");
             }
 
             if (buffer->desc.memoryUsage == RHIMemoryUsage::CpuToGpu || buffer->desc.persistentlyMapped) {
@@ -257,17 +289,81 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             impl_->context->UpdateSubresource(texture->resource.Get(), subresource, &box, upload.data.data(), rowPitch, rowPitch * rows);
         }
 
-        std::unordered_map<std::string, RHITexture> textureResources;
-        for (const RHIRenderGraphTextureDesc& texture : packet.graph.textures) {
-            if (texture.imported && texture.externalHandle) {
-                textureResources[texture.name] = texture.externalHandle;
+        std::vector<RHIBuffer> graphBuffers(packet.graph.buffers.size());
+        std::vector<RHIBuffer> physicalGraphBuffers(
+            graphPlan.bufferAllocationCount);
+        for (u32 index = 0; index < packet.graph.buffers.size(); ++index) {
+            if (graphPlan.bufferLifetimes[index].firstPass == RHI_INVALID_INDEX) {
+                continue;
+            }
+            const RHIRenderGraphBufferDesc& graphBuffer = packet.graph.buffers[index];
+            if (graphBuffer.imported ||
+                RHIHasAny(graphBuffer.flags, RHIRenderGraphResourceFlags::Imported)) {
+                graphBuffers[index] = graphBuffer.externalHandle;
+            } else {
+                const u32 slot = graphPlan.bufferAllocationSlots[index];
+                if (!physicalGraphBuffers[slot]) {
+                    physicalGraphBuffers[slot] = CreateBuffer(graphBuffer.desc);
+                    transientBuffers.push_back(physicalGraphBuffers[slot]);
+                }
+                graphBuffers[index] = physicalGraphBuffers[slot];
             }
         }
 
-        const auto textureForName = [&](const std::string& name) -> RHITexture {
-            const auto it = textureResources.find(name);
-            return it == textureResources.end() ? RHITexture{} : it->second;
-        };
+        std::vector<RHITexture> graphTextures(packet.graph.textures.size());
+        std::vector<RHITexture> physicalGraphTextures(
+            graphPlan.textureAllocationCount);
+        for (u32 index = 0; index < packet.graph.textures.size(); ++index) {
+            if (graphPlan.textureLifetimes[index].firstPass == RHI_INVALID_INDEX) {
+                continue;
+            }
+            const RHIRenderGraphTextureDesc& graphTexture = packet.graph.textures[index];
+            if (graphTexture.imported ||
+                RHIHasAny(graphTexture.flags, RHIRenderGraphResourceFlags::Imported)) {
+                graphTextures[index] = graphTexture.externalHandle;
+                continue;
+            }
+
+            const u32 slot = graphPlan.textureAllocationSlots[index];
+            if (physicalGraphTextures[slot]) {
+                graphTextures[index] = physicalGraphTextures[slot];
+                continue;
+            }
+
+            physicalGraphTextures[slot] = CreateTexture(graphTexture.desc);
+            graphTextures[index] = physicalGraphTextures[slot];
+            transientTextures.push_back(physicalGraphTextures[slot]);
+            RHITextureViewDesc viewDesc{};
+            viewDesc.debugName = graphTexture.name + ".RenderGraphView";
+            viewDesc.texture = graphTextures[index];
+            viewDesc.format = graphTexture.desc.format;
+            viewDesc.mipLevelCount = graphTexture.desc.mipLevels;
+            viewDesc.arrayLayerCount = graphTexture.desc.arrayLayers;
+            if (graphTexture.desc.dimension == RHITextureDimension::Texture1D) {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 1
+                                         ? RHITextureViewDimension::View1DArray
+                                         : RHITextureViewDimension::View1D;
+            } else if (graphTexture.desc.dimension == RHITextureDimension::Texture3D) {
+                viewDesc.dimension = RHITextureViewDimension::View3D;
+            } else if (RHIHasAny(
+                           graphTexture.desc.flags,
+                           RHITextureCreateFlags::CubeCompatible)) {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 6
+                                         ? RHITextureViewDimension::CubeArray
+                                         : RHITextureViewDimension::Cube;
+            } else {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 1
+                                         ? RHITextureViewDimension::View2DArray
+                                         : RHITextureViewDimension::View2D;
+            }
+            if (isDepthFormat(graphTexture.desc.format)) {
+                viewDesc.aspect = RHITextureAspect::Depth;
+                if (hasStencilFormat(graphTexture.desc.format)) {
+                    viewDesc.aspect |= RHITextureAspect::Stencil;
+                }
+            }
+            transientTextureViews.push_back(CreateTextureView(viewDesc));
+        }
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
             for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
@@ -280,13 +376,6 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
                 }
             }
             return {};
-        };
-
-        const auto findWorkload = [&](const std::string& passName) -> const RHIRenderPassWorkload* {
-            const auto it = std::find_if(packet.workloads.begin(), packet.workloads.end(), [&](const RHIRenderPassWorkload& workload) {
-                return workload.passName == passName;
-            });
-            return it == packet.workloads.end() ? nullptr : &*it;
         };
 
         const auto bindDrawResources = [&](const std::vector<RHIBindSet>& bindSets, bool compute) {
@@ -358,18 +447,118 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             impl_->context->Dispatch(dispatch.groupCountX, dispatch.groupCountY, dispatch.groupCountZ);
         };
 
-        for (const RHIRenderGraphPassDesc& pass : packet.graph.passes) {
-            // RenderGraph pass 负责声明附件；workload 负责声明 draw/dispatch。这里把二者合并成
-            // D3D11 output-merger 绑定和实际绘制命令。
-            const RHIRenderPassWorkload* workload = findWorkload(pass.name);
-            if (workload == nullptr) {
+        for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
+            const RHIRenderGraphPassDesc& sourcePass =
+                packet.graph.passes[compiledPass.sourcePassIndex];
+            for (const RHIRenderGraphTransition& transition : compiledPass.transitions) {
+                if (transition.resource.IsBuffer()) {
+                    Impl::BufferResource* buffer = getRenderResource(
+                        impl_->buffers,
+                        graphBuffers[transition.resource.index]);
+                    if (buffer == nullptr || !buffer->buffer) {
+                        throw std::runtime_error(
+                            "RenderGraph buffer transition has an invalid D3D11 resource");
+                    }
+                    buffer->currentState = transition.after;
+                } else {
+                    Impl::TextureResource* texture = getRenderResource(
+                        impl_->textures,
+                        graphTextures[transition.resource.index]);
+                    if (texture == nullptr || !texture->resource) {
+                        throw std::runtime_error(
+                            "RenderGraph texture transition has an invalid D3D11 resource");
+                    }
+                    texture->currentState = transition.after;
+                }
+            }
+
+            const RHIRenderPassWorkload* workload =
+                compiledPass.workloadIndex == RHI_INVALID_INDEX
+                    ? nullptr
+                    : &packet.workloads[compiledPass.workloadIndex];
+            if (workload == nullptr && compiledPass.colorAttachments.empty() &&
+                !compiledPass.depthStencilAttachment.has_value()) {
                 continue;
             }
 
+            if (workload != nullptr) {
+                if (!workload->barriers.globals.empty() ||
+                    !workload->barriers.textures.empty() ||
+                    !workload->barriers.buffers.empty()) {
+                    throw std::runtime_error(
+                        "Explicit workload barriers are not supported; declare RenderGraph reads/writes instead");
+                }
+                if (!workload->textureCopies.empty() ||
+                    !workload->bufferToTextureCopies.empty() ||
+                    !workload->textureToBufferCopies.empty() ||
+                    !workload->textureBlits.empty() ||
+                    !workload->mipmapGenerations.empty()) {
+                    throw std::runtime_error(
+                        "D3D11 texture copy/blit/mipmap workloads are not implemented yet");
+                }
+                if (!workload->queryResets.empty() ||
+                    !workload->timestampWrites.empty() ||
+                    !workload->queryResolves.empty()) {
+                    throw std::runtime_error(
+                        "D3D11 RenderGraph query workloads are not implemented yet");
+                }
+                if (!workload->indirectDraws.empty() ||
+                    !workload->indexedIndirectDraws.empty() ||
+                    !workload->indirectDispatches.empty()) {
+                    throw std::runtime_error(
+                        "D3D11 RenderGraph indirect workloads are not implemented yet");
+                }
+
+                for (const RHIBufferCopyDesc& copy : workload->bufferCopies) {
+                    const Impl::BufferResource* source =
+                        getRenderResource(impl_->buffers, copy.source);
+                    const Impl::BufferResource* destination =
+                        getRenderResource(impl_->buffers, copy.destination);
+                    if (source == nullptr || destination == nullptr ||
+                        !source->buffer || !destination->buffer) {
+                        throw std::runtime_error(
+                            "D3D11 RenderGraph buffer copy resource is invalid");
+                    }
+                    if (copy.size == 0 ||
+                        copy.sourceOffset > source->desc.size ||
+                        copy.size > source->desc.size - copy.sourceOffset ||
+                        copy.destinationOffset > destination->desc.size ||
+                        copy.size >
+                            destination->desc.size - copy.destinationOffset) {
+                        throw std::runtime_error(
+                            "D3D11 RenderGraph buffer copy range is invalid");
+                    }
+                    D3D11_BOX sourceBox{};
+                    sourceBox.left = static_cast<UINT>(copy.sourceOffset);
+                    sourceBox.right = static_cast<UINT>(copy.sourceOffset + copy.size);
+                    sourceBox.top = 0;
+                    sourceBox.bottom = 1;
+                    sourceBox.front = 0;
+                    sourceBox.back = 1;
+                    impl_->context->CopySubresourceRegion(
+                        destination->buffer.Get(),
+                        0,
+                        static_cast<UINT>(copy.destinationOffset),
+                        0,
+                        0,
+                        source->buffer.Get(),
+                        0,
+                        &sourceBox);
+                }
+                if (sourcePass.type == RHIRenderGraphPassType::Copy) {
+                    continue;
+                }
+            }
+
             std::vector<ID3D11RenderTargetView*> rtvs;
-            rtvs.reserve(pass.colorAttachments.size());
-            for (const RHIRenderGraphAttachmentDesc& attachment : pass.colorAttachments) {
-                const RHITextureView viewHandle = findViewForTexture(textureForName(attachment.resourceName), RHITextureAspect::Color);
+            rtvs.reserve(compiledPass.colorAttachments.size());
+            for (const RHICompiledRenderGraphAttachment& compiledAttachment :
+                 compiledPass.colorAttachments) {
+                const RHIRenderGraphAttachmentDesc& attachment =
+                    sourcePass.colorAttachments[compiledAttachment.attachmentIndex];
+                const RHITextureView viewHandle = findViewForTexture(
+                    graphTextures[compiledAttachment.textureIndex],
+                    RHITextureAspect::Color);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || !view->rtv) {
                     throw std::runtime_error("RenderGraph color attachment has no D3D11 RTV");
@@ -388,9 +577,14 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             }
 
             ID3D11DepthStencilView* dsv = nullptr;
-            if (pass.depthStencilAttachment.has_value()) {
-                const RHIRenderGraphAttachmentDesc& attachment = *pass.depthStencilAttachment;
-                const RHITextureView viewHandle = findViewForTexture(textureForName(attachment.resourceName), RHITextureAspect::Depth);
+            if (compiledPass.depthStencilAttachment.has_value()) {
+                const RHICompiledRenderGraphAttachment& compiledAttachment =
+                    *compiledPass.depthStencilAttachment;
+                const RHIRenderGraphAttachmentDesc& attachment =
+                    *sourcePass.depthStencilAttachment;
+                const RHITextureView viewHandle = findViewForTexture(
+                    graphTextures[compiledAttachment.textureIndex],
+                    RHITextureAspect::Depth);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || !view->dsv) {
                     throw std::runtime_error("RenderGraph depth attachment has no D3D11 DSV");
@@ -409,9 +603,11 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
                 impl_->context->OMSetRenderTargets(static_cast<UINT>(rtvs.size()), rtvs.empty() ? nullptr : rtvs.data(), dsv);
             }
 
-            const RHIViewport viewport = workload->viewport.width == 0.0F || workload->viewport.height == 0.0F
-                ? packet.settings.viewport
-                : workload->viewport;
+            const RHIViewport viewport = workload == nullptr ||
+                                                 workload->viewport.width == 0.0F ||
+                                                 workload->viewport.height == 0.0F
+                                             ? packet.settings.viewport
+                                             : workload->viewport;
             D3D11_VIEWPORT d3dViewport{};
             d3dViewport.TopLeftX = viewport.x;
             d3dViewport.TopLeftY = viewport.y;
@@ -421,9 +617,11 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             d3dViewport.MaxDepth = viewport.maxDepth;
             impl_->context->RSSetViewports(1, &d3dViewport);
 
-            const RHIRect2D scissor = workload->scissor.extent.width == 0 || workload->scissor.extent.height == 0
-                ? packet.settings.scissor
-                : workload->scissor;
+            const RHIRect2D scissor = workload == nullptr ||
+                                              workload->scissor.extent.width == 0 ||
+                                              workload->scissor.extent.height == 0
+                                          ? packet.settings.scissor
+                                          : workload->scissor;
             D3D11_RECT d3dScissor{};
             d3dScissor.left = scissor.offset.x;
             d3dScissor.top = scissor.offset.y;
@@ -431,28 +629,33 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
             d3dScissor.bottom = scissor.offset.y + static_cast<LONG>(scissor.extent.height);
             impl_->context->RSSetScissorRects(1, &d3dScissor);
 
-            for (const RHIDrawCommand& draw : workload->draws) {
-                recordDraw(draw);
-            }
-            for (const RHIDrawIndexedCommand& draw : workload->indexedDraws) {
-                recordIndexedDraw(draw);
-            }
-            for (const RHIDispatchCommand& dispatch : workload->dispatches) {
-                recordDispatch(dispatch);
+            if (workload != nullptr) {
+                for (const RHIDrawCommand& draw : workload->draws) {
+                    recordDraw(draw);
+                }
+                for (const RHIDrawIndexedCommand& draw : workload->indexedDraws) {
+                    recordIndexedDraw(draw);
+                }
+                for (const RHIDispatchCommand& dispatch : workload->dispatches) {
+                    recordDispatch(dispatch);
+                }
             }
         }
 
         for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
             if (!Submit(submitDesc, errorMessage)) {
+                releaseTransientResources();
                 return false;
             }
         }
 
+        releaseTransientResources();
         if (packet.present.has_value()) {
             return Present(*packet.present, errorMessage);
         }
         return true;
     } catch (const std::exception& error) {
+        releaseTransientResources();
         if (errorMessage != nullptr) {
             *errorMessage = error.what();
         }
@@ -461,10 +664,31 @@ bool RHID3D11::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* e
 }
 
 bool RHID3D11::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
-    // 和 Vulkan 后端保持同一入口：有 workload 就由 renderer 执行帧包；没有 workload 时只处理
-    // 外部传入的 Submit/Present 描述。
-    if (!packet.workloads.empty()) {
-        return RecordAndSubmitFrame(packet, errorMessage);
+    RHIRenderGraphCompileResult graph =
+        CompileRHIRenderGraph(packet.graph, packet.workloads);
+    if (!graph.Succeeded()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = graph.ErrorMessage();
+        }
+        return false;
+    }
+    return SubmitFrame(packet, graph.plan, errorMessage);
+}
+
+bool RHID3D11::SubmitFrame(
+    const RHIFramePacket& packet,
+    const RHIRenderGraphExecutionPlan& graphPlan,
+    std::string* errorMessage) {
+    if (!ValidateRHIRenderGraphSubmissions(
+            packet.graph,
+            graphPlan,
+            packet.submissions,
+            errorMessage)) {
+        return false;
+    }
+    if (!graphPlan.passes.empty() || !packet.uploads.buffers.empty() ||
+        !packet.uploads.textures.empty()) {
+        return RecordAndSubmitFrame(packet, graphPlan, errorMessage);
     }
     for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
         if (!Submit(submitDesc, errorMessage)) {

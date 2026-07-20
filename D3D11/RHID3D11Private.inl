@@ -687,6 +687,7 @@ struct RHID3D11::Impl {
     struct BufferResource {
         RHIBufferDesc desc{};
         ComPtr<ID3D11Buffer> buffer;
+        RHIResourceState currentState = RHIResourceState::Common;
     };
 
     struct TextureResource {

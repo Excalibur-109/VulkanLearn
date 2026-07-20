@@ -4,9 +4,36 @@
 
 namespace rhi {
 
-bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+bool RHIVulkan::RecordAndSubmitFrame(
+    const RHIFramePacket& packet,
+    const RHIRenderGraphExecutionPlan& graphPlan,
+    std::string* errorMessage) {
     Impl::FrameContext* frame = nullptr;
     bool frameSubmitted = false;
+    std::vector<RHIBuffer> transientBuffers;
+    std::vector<RHITexture> transientTextures;
+    std::vector<RHITextureView> transientTextureViews;
+
+    const auto releaseTransientResources = [&]() noexcept {
+        for (auto view = transientTextureViews.rbegin();
+             view != transientTextureViews.rend();
+             ++view) {
+            Destroy(*view);
+        }
+        for (auto texture = transientTextures.rbegin();
+             texture != transientTextures.rend();
+             ++texture) {
+            Destroy(*texture);
+        }
+        for (auto buffer = transientBuffers.rbegin();
+             buffer != transientBuffers.rend();
+             ++buffer) {
+            Destroy(*buffer);
+        }
+        transientTextureViews.clear();
+        transientTextures.clear();
+        transientBuffers.clear();
+    };
 
     try {
         if (!IsInitialized() || impl_->frameContexts.empty()) {
@@ -30,6 +57,8 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             if (RHIHasAny(usage, RHIBufferUsage::Uniform))  access |= VK_ACCESS_UNIFORM_READ_BIT;
             if (RHIHasAny(usage, RHIBufferUsage::Storage))  access |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             if (RHIHasAny(usage, RHIBufferUsage::Indirect)) access |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            if (RHIHasAny(usage, RHIBufferUsage::TransferSource))      access |= VK_ACCESS_TRANSFER_READ_BIT;
+            if (RHIHasAny(usage, RHIBufferUsage::TransferDestination)) access |= VK_ACCESS_TRANSFER_WRITE_BIT;
             return access == 0 ? VK_ACCESS_MEMORY_READ_BIT : access;
         };
 
@@ -47,10 +76,17 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             if (RHIHasAny(usage, RHIBufferUsage::Indirect)) {
                 stages |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
             }
+            if (RHIHasAny(
+                    usage,
+                    RHIBufferUsage::TransferSource |
+                        RHIBufferUsage::TransferDestination)) {
+                stages |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
             return stages == 0 ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : stages;
         };
 
         std::vector<VkBufferMemoryBarrier> uploadBarriers;
+        std::vector<RHIBuffer> uploadedBuffers;
         VkPipelineStageFlags uploadDestinationStages = 0;
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
             if (upload.data.empty()) {
@@ -60,6 +96,12 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             Impl::BufferResource* destination = getRenderResource(impl_->buffers, upload.destination);
             if (destination == nullptr || destination->buffer == VK_NULL_HANDLE) {
                 throw std::runtime_error("RHIFramePacket uploads contain an invalid destination buffer");
+            }
+            if (upload.destinationOffset > destination->desc.size ||
+                upload.data.size() >
+                    destination->desc.size - upload.destinationOffset) {
+                throw std::runtime_error(
+                    "RHIFramePacket buffer upload range exceeds destination buffer size");
             }
 
             Impl::StagingResource staging{};
@@ -115,6 +157,7 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             barrier.offset = upload.destinationOffset;
             barrier.size = upload.data.size();
             uploadBarriers.push_back(barrier);
+            uploadedBuffers.push_back(upload.destination);
             uploadDestinationStages |= bufferDstStages(destination->desc.usage);
         }
 
@@ -130,20 +173,97 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 uploadBarriers.data(),
                 0,
                 nullptr);
-        }
 
-        std::unordered_map<std::string, RHITexture> textureResources;
-        textureResources.reserve(packet.graph.textures.size());
-        for (const RHIRenderGraphTextureDesc& texture : packet.graph.textures) {
-            if (texture.imported && texture.externalHandle) {
-                textureResources[texture.name] = texture.externalHandle;
+            // 上面的 barrier 已经让 transfer 写入对 buffer 的声明用途可见。同步更新
+            // 追踪状态，后续 RenderGraph transition 才会使用真实的 source stage/access，
+            // 而不是误以为资源仍停留在 TopOfPipe/None。
+            for (const RHIBuffer handle : uploadedBuffers) {
+                Impl::BufferResource* buffer =
+                    getRenderResource(impl_->buffers, handle);
+                if (buffer != nullptr) {
+                    buffer->currentState = RHIResourceState::Common;
+                    buffer->currentStages = uploadDestinationStages;
+                    buffer->currentAccess = bufferDstAccess(buffer->desc.usage);
+                }
             }
         }
 
-        const auto textureForName = [&](const std::string& name) -> RHITexture {
-            const auto it = textureResources.find(name);
-            return it == textureResources.end() ? RHITexture{} : it->second;
-        };
+        std::vector<RHIBuffer> graphBuffers(packet.graph.buffers.size());
+        std::vector<RHIBuffer> physicalGraphBuffers(
+            graphPlan.bufferAllocationCount);
+        for (u32 index = 0; index < packet.graph.buffers.size(); ++index) {
+            if (graphPlan.bufferLifetimes[index].firstPass == RHI_INVALID_INDEX) {
+                continue;
+            }
+            const RHIRenderGraphBufferDesc& graphBuffer = packet.graph.buffers[index];
+            if (graphBuffer.imported ||
+                RHIHasAny(graphBuffer.flags, RHIRenderGraphResourceFlags::Imported)) {
+                graphBuffers[index] = graphBuffer.externalHandle;
+            } else {
+                const u32 slot = graphPlan.bufferAllocationSlots[index];
+                if (!physicalGraphBuffers[slot]) {
+                    physicalGraphBuffers[slot] = CreateBuffer(graphBuffer.desc);
+                    transientBuffers.push_back(physicalGraphBuffers[slot]);
+                }
+                graphBuffers[index] = physicalGraphBuffers[slot];
+            }
+        }
+
+        std::vector<RHITexture> graphTextures(packet.graph.textures.size());
+        std::vector<RHITexture> physicalGraphTextures(
+            graphPlan.textureAllocationCount);
+        for (u32 index = 0; index < packet.graph.textures.size(); ++index) {
+            if (graphPlan.textureLifetimes[index].firstPass == RHI_INVALID_INDEX) {
+                continue;
+            }
+            const RHIRenderGraphTextureDesc& graphTexture = packet.graph.textures[index];
+            if (graphTexture.imported ||
+                RHIHasAny(graphTexture.flags, RHIRenderGraphResourceFlags::Imported)) {
+                graphTextures[index] = graphTexture.externalHandle;
+                continue;
+            }
+
+            const u32 slot = graphPlan.textureAllocationSlots[index];
+            if (physicalGraphTextures[slot]) {
+                graphTextures[index] = physicalGraphTextures[slot];
+                continue;
+            }
+
+            physicalGraphTextures[slot] = CreateTexture(graphTexture.desc);
+            graphTextures[index] = physicalGraphTextures[slot];
+            transientTextures.push_back(physicalGraphTextures[slot]);
+
+            RHITextureViewDesc viewDesc{};
+            viewDesc.debugName = graphTexture.name + ".RenderGraphView";
+            viewDesc.texture = graphTextures[index];
+            viewDesc.format = graphTexture.desc.format;
+            viewDesc.mipLevelCount = graphTexture.desc.mipLevels;
+            viewDesc.arrayLayerCount = graphTexture.desc.arrayLayers;
+            if (graphTexture.desc.dimension == RHITextureDimension::Texture1D) {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 1
+                                         ? RHITextureViewDimension::View1DArray
+                                         : RHITextureViewDimension::View1D;
+            } else if (graphTexture.desc.dimension == RHITextureDimension::Texture3D) {
+                viewDesc.dimension = RHITextureViewDimension::View3D;
+            } else if (RHIHasAny(
+                           graphTexture.desc.flags,
+                           RHITextureCreateFlags::CubeCompatible)) {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 6
+                                         ? RHITextureViewDimension::CubeArray
+                                         : RHITextureViewDimension::Cube;
+            } else {
+                viewDesc.dimension = graphTexture.desc.arrayLayers > 1
+                                         ? RHITextureViewDimension::View2DArray
+                                         : RHITextureViewDimension::View2D;
+            }
+            if (isDepthFormat(graphTexture.desc.format)) {
+                viewDesc.aspect = RHITextureAspect::Depth;
+                if (hasStencilFormat(graphTexture.desc.format)) {
+                    viewDesc.aspect |= RHITextureAspect::Stencil;
+                }
+            }
+            transientTextureViews.push_back(CreateTextureView(viewDesc));
+        }
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
             for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
@@ -162,7 +282,10 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             RHITexture handle,
             RHIResourceState after,
             RHIPipelineStage requestedStages = RHIPipelineStage::AllCommands,
-            RHIAccessFlags requestedAccess = RHIAccessFlags::None) {
+            RHIAccessFlags requestedAccess = RHIAccessFlags::None,
+            bool forceBarrier = false,
+            bool discardContents = false,
+            bool aliasingBarrier = false) {
             // RenderGraph 只描述 pass 读写需要的 RHIResourceState；Vulkan 需要实际 image layout
             // 和 access mask，所以这里根据当前状态生成 VkImageMemoryBarrier。
             Impl::TextureResource* texture = getRenderResource(impl_->textures, handle);
@@ -178,7 +301,7 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 requestedAccess == RHIAccessFlags::None
                     ? accessFromResourceState(after)
                     : toVkAccessFlags(requestedAccess);
-            if (texture->currentState == after &&
+            if (!forceBarrier && texture->currentState == after &&
                 texture->currentStages == destinationStages &&
                 texture->currentAccess == destinationAccess) {
                 return;
@@ -186,9 +309,15 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
             VkImageMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.srcAccessMask = texture->currentAccess;
+            barrier.srcAccessMask = discardContents && !aliasingBarrier
+                                        ? 0
+                                        : texture->currentAccess;
             barrier.dstAccessMask = destinationAccess;
-            barrier.oldLayout = toVkImageLayout(texture->currentState);
+            // 普通首次使用可从 UNDEFINED 开始；物理槽 alias 时仍需保留上一逻辑
+            // 资源的真实 layout 作为同步起点，确保旧写入完成后再复用同一 VkImage。
+            barrier.oldLayout = discardContents && !aliasingBarrier
+                                    ? VK_IMAGE_LAYOUT_UNDEFINED
+                                    : toVkImageLayout(texture->currentState);
             barrier.newLayout = toVkImageLayout(after);
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -201,7 +330,9 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
             vkCmdPipelineBarrier(
                 commandBuffer,
-                texture->currentStages,
+                discardContents && !aliasingBarrier
+                    ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                    : texture->currentStages,
                 destinationStages,
                 0,
                 0,
@@ -215,11 +346,51 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             texture->currentAccess = destinationAccess;
         };
 
-        const auto findWorkload = [&](const std::string& passName) -> const RHIRenderPassWorkload* {
-            const auto it = std::find_if(packet.workloads.begin(), packet.workloads.end(), [&](const RHIRenderPassWorkload& workload) {
-                return workload.passName == passName;
-            });
-            return it == packet.workloads.end() ? nullptr : &*it;
+        const auto transitionBuffer = [&] (
+            RHIBuffer handle,
+            const RHIRenderGraphTransition& transition) {
+            Impl::BufferResource* buffer = getRenderResource(impl_->buffers, handle);
+            if (buffer == nullptr || buffer->buffer == VK_NULL_HANDLE) {
+                throw std::runtime_error("RenderGraph buffer transition has an invalid handle");
+            }
+
+            const VkPipelineStageFlags destinationStages =
+                transition.destinationStages == RHIPipelineStage::AllCommands
+                    ? stageFromResourceState(transition.after)
+                    : toVkPipelineStages(transition.destinationStages);
+            const VkAccessFlags destinationAccess =
+                transition.destinationAccess == RHIAccessFlags::None
+                    ? accessFromResourceState(transition.after)
+                    : toVkAccessFlags(transition.destinationAccess);
+
+            VkBufferMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier.srcAccessMask = transition.discardContents &&
+                                            !transition.aliasingBarrier
+                                        ? 0
+                                        : buffer->currentAccess;
+            barrier.dstAccessMask = destinationAccess;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = buffer->buffer;
+            barrier.offset = 0;
+            barrier.size = VK_WHOLE_SIZE;
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                transition.discardContents && !transition.aliasingBarrier
+                    ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                    : buffer->currentStages,
+                destinationStages,
+                0,
+                0,
+                nullptr,
+                1,
+                &barrier,
+                0,
+                nullptr);
+            buffer->currentState = transition.after;
+            buffer->currentStages = destinationStages;
+            buffer->currentAccess = destinationAccess;
         };
 
         const auto vkClearColor = [](const RHIClearColor& color) {
@@ -238,31 +409,150 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             return value;
         };
 
-        for (const RHIRenderGraphPassDesc& pass : packet.graph.passes) {
-            // pass 的 reads/writes 先变成 layout transition，再根据 workload 录制具体 draw。
-            // 这样“资源生命周期/状态”和“画什么”保持分离，便于之后扩展自动依赖分析。
-            for (const RHIRenderGraphResourceRef& read : pass.reads) {
-                if (read.type == RHIRenderGraphResourceType::Texture || read.type == RHIRenderGraphResourceType::SwapchainImage) {
-                    transitionTexture(textureForName(read.name), read.state, read.stages, read.access);
-                }
-            }
-            for (const RHIRenderGraphResourceRef& write : pass.writes) {
-                if (write.type == RHIRenderGraphResourceType::Texture || write.type == RHIRenderGraphResourceType::SwapchainImage) {
-                    transitionTexture(textureForName(write.name), write.state, write.stages, write.access);
+        for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
+            const RHIRenderGraphPassDesc& sourcePass =
+                packet.graph.passes[compiledPass.sourcePassIndex];
+            for (const RHIRenderGraphTransition& transition : compiledPass.transitions) {
+                if (transition.resource.IsBuffer()) {
+                    transitionBuffer(
+                        graphBuffers[transition.resource.index],
+                        transition);
+                } else {
+                    transitionTexture(
+                        graphTextures[transition.resource.index],
+                        transition.after,
+                        transition.destinationStages,
+                        transition.destinationAccess,
+                        true,
+                        transition.discardContents,
+                        transition.aliasingBarrier);
                 }
             }
 
-            const RHIRenderPassWorkload* workload = findWorkload(pass.name);
-            if (workload == nullptr || (pass.colorAttachments.empty() && !pass.depthStencilAttachment.has_value())) {
+            const RHIRenderPassWorkload* workload =
+                compiledPass.workloadIndex == RHI_INVALID_INDEX
+                    ? nullptr
+                    : &packet.workloads[compiledPass.workloadIndex];
+            const bool hasAttachments = !compiledPass.colorAttachments.empty() ||
+                                        compiledPass.depthStencilAttachment.has_value();
+            if (workload == nullptr && !hasAttachments) {
+                continue;
+            }
+
+            if (workload != nullptr) {
+                if (!workload->barriers.globals.empty() ||
+                    !workload->barriers.textures.empty() ||
+                    !workload->barriers.buffers.empty()) {
+                    throw std::runtime_error(
+                        "Explicit workload barriers are not supported; declare RenderGraph reads/writes instead");
+                }
+                if (!workload->textureCopies.empty() ||
+                    !workload->bufferToTextureCopies.empty() ||
+                    !workload->textureToBufferCopies.empty() ||
+                    !workload->textureBlits.empty() ||
+                    !workload->mipmapGenerations.empty()) {
+                    throw std::runtime_error(
+                        "Vulkan texture copy/blit/mipmap workloads are not implemented yet");
+                }
+                if (!workload->queryResets.empty() ||
+                    !workload->timestampWrites.empty() ||
+                    !workload->queryResolves.empty()) {
+                    throw std::runtime_error(
+                        "Vulkan RenderGraph query workloads are not implemented yet");
+                }
+                if (!workload->indirectDraws.empty() ||
+                    !workload->indexedIndirectDraws.empty() ||
+                    !workload->indirectDispatches.empty()) {
+                    throw std::runtime_error(
+                        "Vulkan RenderGraph indirect workloads are not implemented yet");
+                }
+
+                for (const RHIBufferCopyDesc& copy : workload->bufferCopies) {
+                    const Impl::BufferResource* source =
+                        getRenderResource(impl_->buffers, copy.source);
+                    const Impl::BufferResource* destination =
+                        getRenderResource(impl_->buffers, copy.destination);
+                    if (source == nullptr || destination == nullptr ||
+                        source->buffer == VK_NULL_HANDLE ||
+                        destination->buffer == VK_NULL_HANDLE) {
+                        throw std::runtime_error(
+                            "Vulkan RenderGraph buffer copy resource is invalid");
+                    }
+                    if (copy.size == 0 ||
+                        copy.sourceOffset > source->desc.size ||
+                        copy.size > source->desc.size - copy.sourceOffset ||
+                        copy.destinationOffset > destination->desc.size ||
+                        copy.size >
+                            destination->desc.size - copy.destinationOffset) {
+                        throw std::runtime_error(
+                            "Vulkan RenderGraph buffer copy range is invalid");
+                    }
+                    const VkBufferCopy region{
+                        copy.sourceOffset,
+                        copy.destinationOffset,
+                        copy.size};
+                    vkCmdCopyBuffer(
+                        commandBuffer,
+                        source->buffer,
+                        destination->buffer,
+                        1,
+                        &region);
+                }
+            }
+
+            if (!hasAttachments) {
+                for (const RHIDispatchCommand& dispatch : workload->dispatches) {
+                    const Impl::PipelineResource* pipeline =
+                        getRenderResource(impl_->pipelines, dispatch.pipeline);
+                    if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE ||
+                        pipeline->bindPoint != VK_PIPELINE_BIND_POINT_COMPUTE) {
+                        throw std::runtime_error("RHIDispatchCommand pipeline is invalid");
+                    }
+                    vkCmdBindPipeline(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_COMPUTE,
+                        pipeline->pipeline);
+
+                    std::vector<VkDescriptorSet> descriptorSets;
+                    descriptorSets.reserve(dispatch.bindSets.size());
+                    for (RHIBindSet bindSetHandle : dispatch.bindSets) {
+                        const Impl::BindSetResource* bindSet =
+                            getRenderResource(impl_->bindSets, bindSetHandle);
+                        if (bindSet == nullptr || bindSet->set == VK_NULL_HANDLE) {
+                            throw std::runtime_error(
+                                "RHIDispatchCommand bind set is invalid");
+                        }
+                        descriptorSets.push_back(bindSet->set);
+                    }
+                    if (!descriptorSets.empty()) {
+                        vkCmdBindDescriptorSets(
+                            commandBuffer,
+                            VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline->layout,
+                            0,
+                            static_cast<u32>(descriptorSets.size()),
+                            descriptorSets.data(),
+                            0,
+                            nullptr);
+                    }
+                    vkCmdDispatch(
+                        commandBuffer,
+                        dispatch.groupCountX,
+                        dispatch.groupCountY,
+                        dispatch.groupCountZ);
+                }
                 continue;
             }
 
             std::vector<VkRenderingAttachmentInfo> colorAttachments;
             std::vector<VkClearValue> colorClearValues;
-            colorAttachments.reserve(pass.colorAttachments.size());
-            colorClearValues.reserve(pass.colorAttachments.size());
-            for (const RHIRenderGraphAttachmentDesc& attachment : pass.colorAttachments) {
-                const RHITexture texture = textureForName(attachment.resourceName);
+            colorAttachments.reserve(compiledPass.colorAttachments.size());
+            colorClearValues.reserve(compiledPass.colorAttachments.size());
+            for (const RHICompiledRenderGraphAttachment& compiledAttachment :
+                 compiledPass.colorAttachments) {
+                const RHIRenderGraphAttachmentDesc& attachment =
+                    sourcePass.colorAttachments[compiledAttachment.attachmentIndex];
+                const RHITexture texture = graphTextures[compiledAttachment.textureIndex];
                 const RHITextureView viewHandle = findViewForTexture(texture, RHITextureAspect::Color);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || view->view == VK_NULL_HANDLE) {
@@ -282,9 +572,12 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 
             VkRenderingAttachmentInfo depthAttachment{};
             VkClearValue depthClear{};
-            if (pass.depthStencilAttachment.has_value()) {
-                const RHIRenderGraphAttachmentDesc& attachment = *pass.depthStencilAttachment;
-                const RHITexture texture = textureForName(attachment.resourceName);
+            if (compiledPass.depthStencilAttachment.has_value()) {
+                const RHICompiledRenderGraphAttachment& compiledAttachment =
+                    *compiledPass.depthStencilAttachment;
+                const RHIRenderGraphAttachmentDesc& attachment =
+                    *sourcePass.depthStencilAttachment;
+                const RHITexture texture = graphTextures[compiledAttachment.textureIndex];
                 const RHITextureView viewHandle = findViewForTexture(texture, RHITextureAspect::Depth);
                 const Impl::TextureViewResource* view = getRenderResource(impl_->textureViews, viewHandle);
                 if (view == nullptr || view->view == VK_NULL_HANDLE) {
@@ -300,9 +593,11 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                 depthAttachment.clearValue = depthClear;
             }
 
-            RHIRect2D renderArea = workload->scissor.extent.width == 0 || workload->scissor.extent.height == 0
-                ? packet.settings.scissor
-                : workload->scissor;
+            RHIRect2D renderArea = workload == nullptr ||
+                                           workload->scissor.extent.width == 0 ||
+                                           workload->scissor.extent.height == 0
+                                       ? packet.settings.scissor
+                                       : workload->scissor;
             VkRenderingInfo renderingInfo{};
             renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             renderingInfo.renderArea.offset = {renderArea.offset.x, renderArea.offset.y};
@@ -310,13 +605,17 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
             renderingInfo.layerCount = 1;
             renderingInfo.colorAttachmentCount = static_cast<u32>(colorAttachments.size());
             renderingInfo.pColorAttachments = colorAttachments.data();
-            renderingInfo.pDepthAttachment = pass.depthStencilAttachment.has_value() ? &depthAttachment : nullptr;
+            renderingInfo.pDepthAttachment = compiledPass.depthStencilAttachment.has_value()
+                                                 ? &depthAttachment
+                                                 : nullptr;
 
             vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
-            RHIViewport viewport = workload->viewport.width == 0.0F || workload->viewport.height == 0.0F
-                ? packet.settings.viewport
-                : workload->viewport;
+            RHIViewport viewport = workload == nullptr ||
+                                           workload->viewport.width == 0.0F ||
+                                           workload->viewport.height == 0.0F
+                                       ? packet.settings.viewport
+                                       : workload->viewport;
             VkViewport vkViewport{};
             vkViewport.x = viewport.x;
             vkViewport.y = viewport.y;
@@ -386,8 +685,67 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
                     draw.firstInstance);
             };
 
-            for (const RHIDrawIndexedCommand& draw : workload->indexedDraws) {
-                recordDraw(draw);
+            if (workload != nullptr) {
+                for (const RHIDrawCommand& draw : workload->draws) {
+                    const Impl::PipelineResource* pipeline =
+                        getRenderResource(impl_->pipelines, draw.pipeline);
+                    if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE ||
+                        pipeline->bindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS) {
+                        throw std::runtime_error("RHIDrawCommand pipeline is invalid");
+                    }
+                    vkCmdBindPipeline(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline->pipeline);
+
+                    std::vector<VkDescriptorSet> descriptorSets;
+                    descriptorSets.reserve(draw.bindSets.size());
+                    for (RHIBindSet bindSetHandle : draw.bindSets) {
+                        const Impl::BindSetResource* bindSet =
+                            getRenderResource(impl_->bindSets, bindSetHandle);
+                        if (bindSet == nullptr || bindSet->set == VK_NULL_HANDLE) {
+                            throw std::runtime_error("RHIDrawCommand bind set is invalid");
+                        }
+                        descriptorSets.push_back(bindSet->set);
+                    }
+                    if (!descriptorSets.empty()) {
+                        vkCmdBindDescriptorSets(
+                            commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipeline->layout,
+                            0,
+                            static_cast<u32>(descriptorSets.size()),
+                            descriptorSets.data(),
+                            0,
+                            nullptr);
+                    }
+                    for (const RHIVertexStream& stream : draw.vertexStreams) {
+                        const Impl::BufferResource* vertexBuffer =
+                            getRenderResource(impl_->buffers, stream.buffer);
+                        if (vertexBuffer == nullptr ||
+                            vertexBuffer->buffer == VK_NULL_HANDLE) {
+                            throw std::runtime_error(
+                                "RHIDrawCommand vertex buffer is invalid");
+                        }
+                        const VkBuffer buffer = vertexBuffer->buffer;
+                        const VkDeviceSize offset = static_cast<VkDeviceSize>(stream.offset);
+                        vkCmdBindVertexBuffers(
+                            commandBuffer,
+                            stream.binding,
+                            1,
+                            &buffer,
+                            &offset);
+                    }
+                    vkCmdDraw(
+                        commandBuffer,
+                        draw.vertexCount,
+                        draw.instanceCount,
+                        draw.firstVertex,
+                        draw.firstInstance);
+                }
+                for (const RHIDrawIndexedCommand& draw : workload->indexedDraws) {
+                    recordDraw(draw);
+                }
             }
 
             vkCmdEndRendering(commandBuffer);
@@ -472,12 +830,14 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
         impl_->lastSubmissionSerial = frameCompletionValue;
         impl_->nextFrameContext =
             (impl_->nextFrameContext + 1) % static_cast<u32>(impl_->frameContexts.size());
+        releaseTransientResources();
 
         if (packet.present.has_value()) {
             return Present(*packet.present, errorMessage);
         }
         return true;
     } catch (const std::exception& error) {
+        releaseTransientResources();
         if (frame != nullptr && !frameSubmitted) {
             impl_->releaseStagingResources(*frame);
             frame->prepared = false;
@@ -490,10 +850,31 @@ bool RHIVulkan::RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* 
 }
 
 bool RHIVulkan::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
-    // RHIFramePacket 有 workload 时走“录制并提交”的路径；没有 workload 时只执行用户提供的
-    // RHIQueueSubmitDesc/RHIPresentDesc，方便外部系统自己管理 command buffer。
-    if (!packet.workloads.empty()) {
-        return RecordAndSubmitFrame(packet, errorMessage);
+    RHIRenderGraphCompileResult graph =
+        CompileRHIRenderGraph(packet.graph, packet.workloads);
+    if (!graph.Succeeded()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = graph.ErrorMessage();
+        }
+        return false;
+    }
+    return SubmitFrame(packet, graph.plan, errorMessage);
+}
+
+bool RHIVulkan::SubmitFrame(
+    const RHIFramePacket& packet,
+    const RHIRenderGraphExecutionPlan& graphPlan,
+    std::string* errorMessage) {
+    if (!ValidateRHIRenderGraphSubmissions(
+            packet.graph,
+            graphPlan,
+            packet.submissions,
+            errorMessage)) {
+        return false;
+    }
+    if (!graphPlan.passes.empty() || !packet.uploads.buffers.empty() ||
+        !packet.uploads.textures.empty()) {
+        return RecordAndSubmitFrame(packet, graphPlan, errorMessage);
     }
 
     for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {

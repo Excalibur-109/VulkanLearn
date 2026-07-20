@@ -2084,6 +2084,7 @@ struct RHIRenderGraphPassDesc {
     std::string name; ///< pass 名称，需和 RHIRenderPassWorkload::passName 对应。
     RHIRenderGraphPassType type = RHIRenderGraphPassType::Raster; ///< pass 类型。
     RHIQueueType queue = RHIQueueType::Graphics; ///< pass 希望运行在哪类队列。
+    std::vector<std::string> dependsOnPasses; ///< 仅用于无法从资源读写推导的显式先决 pass；通常应优先声明资源依赖。
     std::vector<RHIRenderGraphResourceRef> reads; ///< pass 读取的资源及访问状态。
     std::vector<RHIRenderGraphResourceRef> writes; ///< pass 写入的资源及访问状态。
     std::vector<RHIRenderGraphAttachmentDesc> colorAttachments; ///< color attachments。

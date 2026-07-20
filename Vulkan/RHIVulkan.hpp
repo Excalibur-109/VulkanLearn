@@ -2,6 +2,8 @@
 
 #include "../RHIDefinitions.hpp"
 
+#include "../RenderGraph/RHIRenderGraph.hpp"
+
 #include <vulkan/vulkan.h>
 
 #include <functional>
@@ -152,6 +154,12 @@ public:
     /// 提交一帧的同步和 Present 描述。RenderGraph 自动录制会在后续扩展。
     [[nodiscard]] bool SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage = nullptr);
 
+    /// 执行公共层已经验证和拓扑排序的 RenderGraph 计划。
+    [[nodiscard]] bool SubmitFrame(
+        const RHIFramePacket& packet,
+        const RHIRenderGraphExecutionPlan& graphPlan,
+        std::string* errorMessage = nullptr);
+
     /// 等待 device idle，通常只在 resize、退出或资源大清理时使用。
     void WaitIdle() const noexcept;
 
@@ -173,7 +181,10 @@ public:
 
 private:
     /// 根据 RHIFramePacket 录制并提交一帧命令；当前覆盖示例所需的上传、动态渲染和 indexed draw。
-    [[nodiscard]] bool RecordAndSubmitFrame(const RHIFramePacket& packet, std::string* errorMessage);
+    [[nodiscard]] bool RecordAndSubmitFrame(
+        const RHIFramePacket& packet,
+        const RHIRenderGraphExecutionPlan& graphPlan,
+        std::string* errorMessage);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

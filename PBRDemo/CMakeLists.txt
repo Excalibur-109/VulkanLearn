@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 # -----------------------------------------------------------------------------
 # PBR Demo: 一个 plane + 一个 UV sphere 的简化 PBR 渲染示例
-#   - 直接用 Vulkan API（不经过 RHI）展示底层用法
+#   - 窗口 surface 由 Win32/Vulkan 平台层创建，所有资源和绘制都经过 RHI + RenderGraph
 #   - shader 在 build 时用 glslangValidator 编译为 SPIR-V
 # -----------------------------------------------------------------------------
 project(PBRDemo LANGUAGES CXX)
@@ -67,8 +67,7 @@ target_compile_definitions(PBRDemo PRIVATE
 # -----------------------------------------------------------------------------
 target_link_libraries(PBRDemo
     PRIVATE
-        Vulkan::Vulkan
-        glm::glm
+        RHI::RHI
 )
 
 if(VULKAN_INCLUDE_DIRS)
@@ -78,8 +77,6 @@ endif()
 if(MSVC)
     target_compile_options(PBRDemo PRIVATE
         /W4 /permissive- /Zc:__cplusplus
-        /source-charset:utf-8
-        /execution-charset:utf-8
     )
     target_compile_definitions(PBRDemo PRIVATE
         _CRT_SECURE_NO_WARNINGS NOMINMAX

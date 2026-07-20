@@ -96,6 +96,16 @@ bool RHID3D12::Initialize(const RHID3D12Desc& desc, std::string* errorMessage) {
         impl_->createDescriptorHeap(impl_->rtvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 512);
         impl_->createDescriptorHeap(impl_->dsvHeap, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256);
         impl_->createDescriptorHeap(impl_->samplerHeap, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 512);
+        impl_->createDescriptorHeap(
+            impl_->shaderVisibleCbvSrvUavHeap,
+            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            4096,
+            D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+        impl_->createDescriptorHeap(
+            impl_->shaderVisibleSamplerHeap,
+            D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+            512,
+            D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
         impl_->caps = makeCapabilities(impl_->adapter.Get(), impl_->featureLevel);
         if (!supportsRequiredFeatures(impl_->caps, desc.backend.requiredFeatures)) {
@@ -140,6 +150,12 @@ void RHID3D12::Shutdown() noexcept {
     impl_->rtvHeap = {};
     impl_->dsvHeap = {};
     impl_->samplerHeap = {};
+    impl_->shaderVisibleCbvSrvUavHeap = {};
+    impl_->shaderVisibleSamplerHeap = {};
+    impl_->pendingStagingResources.clear();
+    impl_->pendingTransientTextureViews.clear();
+    impl_->pendingTransientTextures.clear();
+    impl_->pendingTransientBuffers.clear();
     impl_->commandList.Reset();
     impl_->commandAllocator.Reset();
     impl_->graphicsQueue.Reset();
