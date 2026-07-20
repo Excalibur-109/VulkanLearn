@@ -1,4 +1,6 @@
 ﻿/.history
 /build*
-/.vscode
+/.vscode/*
+!/.vscode/settings.json
+!/.vscode/c_cpp_properties.json
 /simple_engine/.history

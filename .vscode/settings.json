@@ -1,0 +1,34 @@
+{
+    "cmake.buildDirectory": "${workspaceFolder}/build_rhi",
+    "cmake.configureOnOpen": true,
+    "cmake.generator": "Visual Studio 17 2022",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe",
+    "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+    "C_Cpp.default.windowsSdkVersion": "10.0.22621.0",
+    "C_Cpp.default.cppStandard": "c++20",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/third_party/glm-1.0.1",
+        "C:/vcpkg/installed/x64-windows/include",
+        "C:/VulkanSDK/1.3.290.0/Include"
+    ],
+    "C_Cpp.default.defines": [
+        "_WIN32",
+        "WIN32",
+        "_WINDOWS",
+        "NOMINMAX",
+        "_CRT_SECURE_NO_WARNINGS"
+    ],
+    "C_Cpp.default.compilerArgs": [
+        "/permissive-",
+        "/Zc:__cplusplus",
+        "/utf-8"
+    ],
+    "C_Cpp.intelliSenseCachePath": "${workspaceFolder}/build_rhi/.vscode-ipch",
+    "files.associations": {
+        "*.inl": "cpp"
+    },
+    "files.encoding": "utf8"
+}

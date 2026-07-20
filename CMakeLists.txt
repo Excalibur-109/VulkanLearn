@@ -73,8 +73,47 @@ find_package(Vulkan REQUIRED)
 # -----------------------------------------------------------------------------
 add_library(RHI STATIC)
 
-# 显式列出所有 .cpp；.inl 通过对应 .cpp 的 #include 引入，无需独立列
-# 注意：RHIDevice.cpp 用 std::variant 包含三个后端实例，缺一不可
+# .inl 只由对应 .cpp 按固定顺序 include，不单独编译；但仍把它们登记为 target 的
+# HEADER_FILE_ONLY 源文件。这样 CMake Tools 能把 RHI 的 C++20、宏和 include path
+# 提供给 VSCode IntelliSense，直接打开 .inl 时不会退回到错误的默认解析环境。
+set(RHI_HEADER_AND_INLINE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/RHI.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/RHIDefinitions.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/RHIDevice.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/RHIDeviceDesc.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/RHIDeviceFactory.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph/RHIRenderGraph.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkan.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanPrivate.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanCore.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanResources.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanPipelines.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanSyncSwapchain.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanFrame.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkanDestroy.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Private.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Core.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Resources.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Pipelines.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11SyncSwapchain.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Frame.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11Destroy.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Private.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Core.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Resources.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Pipelines.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12SyncSwapchain.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Frame.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12Destroy.inl
+)
+set_source_files_properties(
+    ${RHI_HEADER_AND_INLINE_FILES}
+    PROPERTIES HEADER_FILE_ONLY TRUE
+)
+
+# 显式列出所有 .cpp。RHIDevice.cpp 用 std::variant 包含三个后端实例，缺一不可。
 target_sources(RHI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/RHIDefinitions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph/RHIRenderGraph.cpp
@@ -83,7 +122,11 @@ target_sources(RHI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Vulkan/RHIVulkan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/D3D11/RHID3D11.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/D3D12/RHID3D12.cpp
+    ${RHI_HEADER_AND_INLINE_FILES}
 )
+
+# 在 Visual Studio/CMake Tools 中保持和磁盘一致的目录结构，便于定位后端分片。
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${RHI_HEADER_AND_INLINE_FILES})
 
 # PUBLIC 头文件目录：让上层能直接 #include "RHI.hpp" / "RHI/Core/..." 等
 target_include_directories(RHI
