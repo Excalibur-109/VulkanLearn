@@ -15,6 +15,18 @@
 #include <limits>
 #include <type_traits>
 
+// DirectXMath 使用强制内联让短小的寄存器运算进入调用方热循环。本库只在经过基准确认的
+// 热路径使用该标记，普通函数仍交给编译器自行判断，避免无节制内联扩大指令缓存压力。
+#if !defined(MATH_FORCE_INLINE)
+#if defined(_MSC_VER)
+#define MATH_FORCE_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define MATH_FORCE_INLINE inline __attribute__((always_inline))
+#else
+#define MATH_FORCE_INLINE inline
+#endif
+#endif
+
 namespace math {
 
 // Concepts 把模板允许的数值类别写在接口上，使错误在调用点暴露，而不是进入函数体后才报错。

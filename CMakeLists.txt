@@ -4,6 +4,9 @@ project(MathLibrary VERSION 1.0.0 LANGUAGES CXX)
 
 include(CTest)
 
+option(MATH_BUILD_BENCHMARKS "Build the standalone Math performance benchmarks" OFF)
+option(MATH_ENABLE_SIMD "Enable architecture-specific Math SIMD paths" ON)
+
 add_library(Math INTERFACE)
 target_sources(Math INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/Math.hpp
@@ -20,6 +23,9 @@ target_sources(Math INTERFACE
 )
 target_include_directories(Math INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(Math INTERFACE cxx_std_20)
+if(NOT MATH_ENABLE_SIMD)
+    target_compile_definitions(Math INTERFACE MATH_DISABLE_SIMD=1)
+endif()
 add_library(Math::Math ALIAS Math)
 
 if(MSVC)
@@ -35,4 +41,11 @@ if(BUILD_TESTING)
     )
     target_link_libraries(MathTests PRIVATE Math::Math)
     add_test(NAME MathTests COMMAND MathTests)
+endif()
+
+if(MATH_BUILD_BENCHMARKS)
+    add_executable(MathBenchmarks
+        ${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MathBenchmarks.cpp
+    )
+    target_link_libraries(MathBenchmarks PRIVATE Math::Math)
 endif()

@@ -198,6 +198,10 @@ struct Vector<T, 2> {
         return index == 0 ? x : y;
     }
 
+    // 颜色分量是 x/y 的只读别名；按值返回不会改变 Vector 的紧凑内存布局。
+    constexpr T r() const noexcept { return x; }
+    constexpr T g() const noexcept { return y; }
+
     template <std::size_t... Indices>
         requires(sizeof...(Indices) >= 2 && sizeof...(Indices) <= 4 &&
                  ((Indices < ComponentCount) && ...))
@@ -263,6 +267,11 @@ struct Vector<T, 3> {
         }
         return index == 1 ? y : z;
     }
+
+    // float3 常用于 RGB 颜色，因此提供对应的单分量读取接口。
+    constexpr T r() const noexcept { return x; }
+    constexpr T g() const noexcept { return y; }
+    constexpr T b() const noexcept { return z; }
 
     template <std::size_t... Indices>
         requires(sizeof...(Indices) >= 2 && sizeof...(Indices) <= 4 &&
@@ -337,6 +346,12 @@ struct Vector<T, 4> {
         }
         return index == 2 ? z : w;
     }
+
+    // RGBA 与 XYZW 共享同一份数据；这些函数只提供命名别名，不增加任何成员。
+    constexpr T r() const noexcept { return x; }
+    constexpr T g() const noexcept { return y; }
+    constexpr T b() const noexcept { return z; }
+    constexpr T a() const noexcept { return w; }
 
     template <std::size_t... Indices>
         requires(sizeof...(Indices) >= 2 && sizeof...(Indices) <= 4 &&
@@ -577,6 +592,26 @@ constexpr auto Dot(const Vector<L, N>& lhs, const Vector<R, N>& rhs) noexcept {
     return output;
 }
 
+// 高频 float 点积直接展开。DirectXMath 的 SIMD 接口同样为固定维度提供专门实现；这里的
+// 标量展开能让 MSVC 合并乘加并消除动态 operator[] 分支，同时保持 float3 的 12 字节布局。
+MATH_FORCE_INLINE constexpr float Dot(
+    const Vector<float, 2>& lhs,
+    const Vector<float, 2>& rhs) noexcept {
+    return lhs.x * rhs.x + lhs.y * rhs.y;
+}
+
+MATH_FORCE_INLINE constexpr float Dot(
+    const Vector<float, 3>& lhs,
+    const Vector<float, 3>& rhs) noexcept {
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+MATH_FORCE_INLINE constexpr float Dot(
+    const Vector<float, 4>& lhs,
+    const Vector<float, 4>& rhs) noexcept {
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
+}
+
 template <ArithmeticScalar L, ArithmeticScalar R>
 constexpr auto Cross(const Vector<L, 3>& lhs, const Vector<R, 3>& rhs) noexcept {
     // 叉积得到同时垂直于 lhs/rhs 的向量，方向遵循右手定则，长度等于平行四边形面积。
@@ -590,6 +625,15 @@ constexpr auto Cross(const Vector<L, 3>& lhs, const Vector<R, 3>& rhs) noexcept 
             static_cast<Result>(lhs.y) * static_cast<Result>(rhs.x));
 }
 
+MATH_FORCE_INLINE constexpr Vector<float, 3> Cross(
+    const Vector<float, 3>& lhs,
+    const Vector<float, 3>& rhs) noexcept {
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x};
+}
+
 template <ArithmeticScalar T, std::size_t N>
 constexpr auto LengthSquared(const Vector<T, N>& value) noexcept {
     return Dot(value, value);
@@ -599,6 +643,10 @@ template <ArithmeticScalar T, std::size_t N>
 inline detail::FloatingResult<T> Length(const Vector<T, N>& value) noexcept {
     using Result = detail::FloatingResult<T>;
     return std::sqrt(static_cast<Result>(LengthSquared(value)));
+}
+
+MATH_FORCE_INLINE float Length(const Vector<float, 3>& value) noexcept {
+    return std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
 }
 
 template <ArithmeticScalar T, std::size_t N>
@@ -620,6 +668,19 @@ inline Vector<detail::FloatingResult<T>, N> Normalize(
     return Vector<Result, N>(value) / length;
 }
 
+MATH_FORCE_INLINE Vector<float, 3> Normalize(const Vector<float, 3>& value) noexcept {
+    const float lengthSquared = value.x * value.x + value.y * value.y + value.z * value.z;
+    if (lengthSquared <= std::numeric_limits<float>::epsilon() *
+                             std::numeric_limits<float>::epsilon()) {
+        return Vector<float, 3>(0.0F);
+    }
+    const float inverseLength = 1.0F / std::sqrt(lengthSquared);
+    return {
+        value.x * inverseLength,
+        value.y * inverseLength,
+        value.z * inverseLength};
+}
+
 template <FloatingScalar T, std::size_t N>
 inline Vector<T, N> NormalizeSafe(
     const Vector<T, N>& value,
@@ -628,6 +689,25 @@ inline Vector<T, N> NormalizeSafe(
     // 渲染中法线/光线不能变成零向量，调用者可用 fallback 指定退化时的稳定方向。
     const T lengthSquared = LengthSquared(value);
     return lengthSquared <= epsilon * epsilon ? fallback : value / std::sqrt(lengthSquared);
+}
+
+/**
+ * float3 是法线、方向和位置计算最常见的类型。直接展开三个分量可避免通用 Dot、除法运算符
+ * 和动态 operator[] 没有被 MSVC 内联时产生的函数调用；计算公式与通用版本保持一致。
+ */
+MATH_FORCE_INLINE Vector<float, 3> NormalizeSafe(
+    const Vector<float, 3>& value,
+    const Vector<float, 3>& fallback,
+    float epsilon = std::numeric_limits<float>::epsilon() * 8.0F) noexcept {
+    const float lengthSquared = value.x * value.x + value.y * value.y + value.z * value.z;
+    if (lengthSquared <= epsilon * epsilon) {
+        return fallback;
+    }
+    const float inverseLength = 1.0F / std::sqrt(lengthSquared);
+    return {
+        value.x * inverseLength,
+        value.y * inverseLength,
+        value.z * inverseLength};
 }
 
 template <ArithmeticScalar T, std::size_t N>

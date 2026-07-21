@@ -96,8 +96,13 @@ void TestVectorAndSwizzle() {
     static_assert(std::is_same_v<decltype(math::float2{}.gr()), math::float2>);
     static_assert(std::is_same_v<decltype(math::float3{}.bgr()), math::float3>);
     static_assert(std::is_same_v<decltype(math::float4{}.ragr()), math::float4>);
+    static_assert(std::is_same_v<decltype(math::float4{}.r()), float>);
 
     const math::float4 value(1.0F, 2.0F, 3.0F, 4.0F);
+    Check(value.r() == 1.0F, "r component accessor failed");
+    Check(value.g() == 2.0F, "g component accessor failed");
+    Check(value.b() == 3.0F, "b component accessor failed");
+    Check(value.a() == 4.0F, "a component accessor failed");
     Check(value.xy() == math::float2(1.0F, 2.0F), "xy swizzle failed");
     Check(value.zyx() == math::float3(3.0F, 2.0F, 1.0F), "zyx swizzle failed");
     Check(value.xyzz() == math::float4(1.0F, 2.0F, 3.0F, 3.0F), "xyzz swizzle failed");
@@ -113,11 +118,13 @@ void TestVectorAndSwizzle() {
         "Generic swizzle failed");
 
     const math::float3 rgb(1.0F, 2.0F, 3.0F);
+    Check(rgb.b() == 3.0F, "float3 b component accessor failed");
     Check(rgb.br() == math::float2(3.0F, 1.0F), "float3 br swizzle failed");
     Check(rgb.gbr() == math::float3(2.0F, 3.0F, 1.0F), "float3 gbr swizzle failed");
     Check(rgb.bgrb() == math::float4(3.0F, 2.0F, 1.0F, 3.0F), "float3 bgrb swizzle failed");
 
     const math::float2 rg(1.0F, 2.0F);
+    Check(rg.g() == 2.0F, "float2 g component accessor failed");
     Check(rg.gr() == math::float2(2.0F, 1.0F), "float2 gr swizzle failed");
     Check(rg.rgg() == math::float3(1.0F, 2.0F, 2.0F), "float2 rgg swizzle failed");
     Check(rg.grrg() == math::float4(2.0F, 1.0F, 1.0F, 2.0F), "float2 grrg swizzle failed");
@@ -164,6 +171,18 @@ void TestVectorAndSwizzle() {
 }
 
 void TestMatrixArithmeticAndInverse() {
+    constexpr math::float4x4 compileTimeMatrix(
+        1.0F, 2.0F, 3.0F, 4.0F,
+        5.0F, 6.0F, 7.0F, 8.0F,
+        9.0F, 10.0F, 11.0F, 12.0F,
+        13.0F, 14.0F, 15.0F, 16.0F);
+    constexpr math::float4 compileTimeVector =
+        compileTimeMatrix * math::float4(1.0F, 0.0F, 0.0F, 1.0F);
+    constexpr math::float4x4 compileTimeProduct =
+        compileTimeMatrix * math::float4x4::Identity();
+    static_assert(compileTimeVector == math::float4(5.0F, 13.0F, 21.0F, 29.0F));
+    static_assert(compileTimeProduct == compileTimeMatrix);
+
     const math::float2x3 lhs(
         1.0F, 2.0F, 3.0F,
         4.0F, 5.0F, 6.0F);
@@ -202,6 +221,72 @@ void TestMatrixArithmeticAndInverse() {
         0.0F, 0.0F, 3.0F, 0.0F,
         0.0F, 0.0F, 0.0F, 4.0F);
     Check(Near(math::Determinant(determinant4), 24.0F), "4x4 determinant failed");
+
+    const math::float4x4 affine =
+        math::TranslationMatrix(math::float3(3.0F, -2.0F, 5.0F)) *
+        math::RotationYMatrix(0.73F) *
+        math::ScaleMatrix(math::float3(1.5F, 0.75F, 2.25F));
+    const std::optional<math::float4x4> affineInverse = math::Inverse(affine);
+    Check(affineInverse.has_value(), "Affine 4x4 inversion failed");
+    Check(
+        Near(affine * *affineInverse, math::float4x4::Identity(), 1.0e-4F) &&
+            Near(*affineInverse * affine, math::float4x4::Identity(), 1.0e-4F),
+        "Affine 4x4 inverse is incorrect");
+
+    const math::float4x4 singularAffine =
+        math::TranslationMatrix(math::float3(1.0F, 2.0F, 3.0F)) *
+        math::ScaleMatrix(math::float3(1.0F, 0.0F, 2.0F));
+    Check(!math::Inverse(singularAffine).has_value(), "Singular affine matrix produced an inverse");
+
+    const math::float4x4 generalMatrix(
+        4.0F, 7.0F, 2.0F, 3.0F,
+        0.0F, 5.0F, 0.0F, 1.0F,
+        0.0F, 0.0F, 4.0F, 0.0F,
+        2.0F, 0.0F, 1.0F, 3.0F);
+    const std::optional<math::float4x4> generalInverse = math::Inverse(generalMatrix);
+    Check(generalInverse.has_value(), "General 4x4 inversion failed");
+    Check(
+        Near(generalMatrix * *generalInverse, math::float4x4::Identity(), 1.0e-4F),
+        "General 4x4 inverse is incorrect");
+
+    for (int index = 0; index < 24; ++index) {
+        const float parameter = static_cast<float>(index + 1);
+        const math::float4x4 model =
+            math::TranslationMatrix(math::float3(
+                parameter * 0.13F,
+                -parameter * 0.07F,
+                -1.0F - parameter * 0.11F)) *
+            math::RotationZMatrix(parameter * 0.031F) *
+            math::RotationYMatrix(parameter * -0.047F) *
+            math::ScaleMatrix(math::float3(
+                0.75F + parameter * 0.01F,
+                1.10F + parameter * 0.005F,
+                0.90F + parameter * 0.008F));
+        const math::float4x4 projective =
+            math::PerspectiveRH_ZO(
+                math::Radians(50.0F + parameter * 0.5F),
+                1.25F + parameter * 0.01F,
+                0.05F,
+                100.0F + parameter) *
+            model;
+
+        math::float4x4 optimizedInverse{};
+        math::float4x4 referenceInverse{};
+        const bool optimizedSucceeded = math::TryInverse(projective, &optimizedInverse);
+        const bool referenceSucceeded =
+            math::TryInverse<float, 4>(projective, &referenceInverse);
+        Check(
+            optimizedSucceeded == referenceSucceeded,
+            "Optimized and reference inverses disagree on invertibility");
+        Check(optimizedSucceeded, "Generated projective matrix was reported singular");
+        Check(
+            Near(optimizedInverse, referenceInverse, 2.0e-3F),
+            "Optimized 4x4 inverse disagrees with Gauss-Jordan reference");
+        Check(
+            Near(projective * optimizedInverse, math::float4x4::Identity(), 2.0e-3F) &&
+                Near(optimizedInverse * projective, math::float4x4::Identity(), 2.0e-3F),
+            "Optimized projective inverse failed identity verification");
+    }
 
     const math::double3x3 converted = math::MatrixCast<double>(matrix);
     Check(Near(converted[2][1], 6.0), "MatrixCast failed");
@@ -270,6 +355,7 @@ void TestQuaternion() {
 
     const math::floatQuaternion halfway =
         math::Slerp(math::floatQuaternion::Identity(), rotation, 0.5F);
+    Check(Near(math::Length(halfway), 1.0F, 1.0e-5F), "Quaternion Slerp lost unit length");
     const math::float3 halfwayVector = math::Rotate(halfway, math::float3(1.0F, 0.0F, 0.0F));
     const float sqrtHalf = std::sqrt(0.5F);
     Check(
@@ -319,6 +405,13 @@ void TestBezierCurves() {
                     controls[0], controls[1], controls[2], controls[3], amount),
                 1.0e-5F),
             "De Casteljau and cubic Bezier disagree");
+        Check(
+            Near(
+                math::Bezier(controls, amount),
+                math::CubicBezier(
+                    controls[0], controls[1], controls[2], controls[3], amount),
+                1.0e-5F),
+            "Fixed-size Bezier and cubic Bezier disagree");
     }
 
     Check(

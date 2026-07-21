@@ -34,6 +34,52 @@ constexpr Value CurveLerp(const Value& start, const Value& end, T amount) noexce
     return start + (end - start) * amount;
 }
 
+template <FloatingScalar T>
+MATH_FORCE_INLINE constexpr Vector<T, 2> CurveLerp(
+    const Vector<T, 2>& start,
+    const Vector<T, 2>& end,
+    T amount) noexcept {
+    return {
+        start.x + (end.x - start.x) * amount,
+        start.y + (end.y - start.y) * amount};
+}
+
+template <FloatingScalar T>
+MATH_FORCE_INLINE constexpr Vector<T, 3> CurveLerp(
+    const Vector<T, 3>& start,
+    const Vector<T, 3>& end,
+    T amount) noexcept {
+    return {
+        start.x + (end.x - start.x) * amount,
+        start.y + (end.y - start.y) * amount,
+        start.z + (end.z - start.z) * amount};
+}
+
+template <FloatingScalar T>
+MATH_FORCE_INLINE constexpr Vector<T, 4> CurveLerp(
+    const Vector<T, 4>& start,
+    const Vector<T, 4>& end,
+    T amount) noexcept {
+    return {
+        start.x + (end.x - start.x) * amount,
+        start.y + (end.y - start.y) * amount,
+        start.z + (end.z - start.z) * amount,
+        start.w + (end.w - start.w) * amount};
+}
+
+template <typename Value, FloatingScalar T>
+MATH_FORCE_INLINE constexpr Value EvaluateBezierLevel(
+    Value* level,
+    std::size_t count,
+    T amount) noexcept {
+    for (std::size_t activeCount = count; activeCount > 1; --activeCount) {
+        for (std::size_t index = 0; index + 1 < activeCount; ++index) {
+            level[index] = CurveLerp(level[index], level[index + 1], amount);
+        }
+    }
+    return level[0];
+}
+
 template <ArithmeticScalar T>
 constexpr T CurveDistance(T lhs, T rhs) noexcept {
     return Abs(lhs - rhs);
@@ -176,13 +222,29 @@ inline Value Bezier(std::span<const Value> controlPoints, T amount) {
         return Value{};
     }
 
-    std::vector<Value> level(controlPoints.begin(), controlPoints.end());
-    for (std::size_t activeCount = level.size(); activeCount > 1; --activeCount) {
-        for (std::size_t index = 0; index + 1 < activeCount; ++index) {
-            level[index] = detail::CurveLerp(level[index], level[index + 1], amount);
+    // 游戏曲线通常只有 2 到 6 个控制点。小缓冲放在栈上，避免每次求值都进入堆分配器；
+    // 极高阶曲线仍回退到 vector，因而不会限制原接口支持的控制点数量。
+    constexpr std::size_t stackCapacity = 8;
+    if (controlPoints.size() <= stackCapacity) {
+        std::array<Value, stackCapacity> level{};
+        for (std::size_t index = 0; index < controlPoints.size(); ++index) {
+            level[index] = controlPoints[index];
         }
+        return detail::EvaluateBezierLevel(level.data(), controlPoints.size(), amount);
     }
-    return level[0];
+
+    std::vector<Value> level(controlPoints.begin(), controlPoints.end());
+    return detail::EvaluateBezierLevel(level.data(), level.size(), amount);
+}
+
+template <typename Value, std::size_t Count, FloatingScalar T>
+constexpr Value Bezier(const std::array<Value, Count>& controlPoints, T amount) noexcept {
+    if constexpr (Count == 0) {
+        return Value{};
+    } else {
+        std::array<Value, Count> level = controlPoints;
+        return detail::EvaluateBezierLevel(level.data(), level.size(), amount);
+    }
 }
 
 /// 第 degree 阶 Bernstein 基函数：C(degree,index)t^index(1-t)^(degree-index)。
@@ -567,18 +629,18 @@ inline T EaseInOutPower(T amount, T exponent) noexcept {
                          static_cast<T>(0.5);
 }
 
-#define MATH_DEFINE_POWER_EASE(NAME, EXPONENT)                                    \
-    template <FloatingScalar T>                                                   \
-    inline T EaseIn##NAME(T amount) noexcept {                                    \
-        return EaseInPower(amount, static_cast<T>(EXPONENT));                     \
-    }                                                                              \
-    template <FloatingScalar T>                                                   \
-    inline T EaseOut##NAME(T amount) noexcept {                                   \
-        return EaseOutPower(amount, static_cast<T>(EXPONENT));                    \
-    }                                                                              \
-    template <FloatingScalar T>                                                   \
-    inline T EaseInOut##NAME(T amount) noexcept {                                 \
-        return EaseInOutPower(amount, static_cast<T>(EXPONENT));                  \
+#define MATH_DEFINE_POWER_EASE(NAME, EXPONENT)                                                          \
+    template <FloatingScalar T>                                                                         \
+    inline T EaseIn##NAME(T amount) noexcept {                                                          \
+        return EaseInPower(amount, static_cast<T>(EXPONENT));                                           \
+    }                                                                                                   \
+    template <FloatingScalar T>                                                                         \
+    inline T EaseOut##NAME(T amount) noexcept {                                                         \
+        return EaseOutPower(amount, static_cast<T>(EXPONENT));                                          \
+    }                                                                                                   \
+    template <FloatingScalar T>                                                                         \
+    inline T EaseInOut##NAME(T amount) noexcept {                                                       \
+        return EaseInOutPower(amount, static_cast<T>(EXPONENT));                                        \
     }
 
 MATH_DEFINE_POWER_EASE(Quadratic, 2)

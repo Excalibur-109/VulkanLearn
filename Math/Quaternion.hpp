@@ -69,18 +69,22 @@ constexpr Quaternion<T> operator+(
 }
 
 template <FloatingScalar T>
-constexpr Quaternion<T> operator*(const Quaternion<T>& value, T scalar) noexcept {
+MATH_FORCE_INLINE constexpr Quaternion<T> operator*(
+    const Quaternion<T>& value,
+    T scalar) noexcept {
     return {value.x * scalar, value.y * scalar, value.z * scalar, value.w * scalar};
 }
 
 template <FloatingScalar T>
-constexpr Quaternion<T> operator/(const Quaternion<T>& value, T scalar) noexcept {
+MATH_FORCE_INLINE constexpr Quaternion<T> operator/(
+    const Quaternion<T>& value,
+    T scalar) noexcept {
     return {value.x / scalar, value.y / scalar, value.z / scalar, value.w / scalar};
 }
 
 /** Hamilton product：lhs * rhs 表示先应用 rhs 旋转，再应用 lhs 旋转。 */
 template <FloatingScalar T>
-constexpr Quaternion<T> operator*(
+MATH_FORCE_INLINE constexpr Quaternion<T> operator*(
     const Quaternion<T>& lhs,
     const Quaternion<T>& rhs) noexcept {
     return {
@@ -91,12 +95,14 @@ constexpr Quaternion<T> operator*(
 }
 
 template <FloatingScalar T>
-constexpr T Dot(const Quaternion<T>& lhs, const Quaternion<T>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr T Dot(
+    const Quaternion<T>& lhs,
+    const Quaternion<T>& rhs) noexcept {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
 }
 
 template <FloatingScalar T>
-inline T Length(const Quaternion<T>& value) noexcept {
+MATH_FORCE_INLINE T Length(const Quaternion<T>& value) noexcept {
     return std::sqrt(Dot(value, value));
 }
 
@@ -107,7 +113,7 @@ constexpr Quaternion<T> Conjugate(const Quaternion<T>& value) noexcept {
 }
 
 template <FloatingScalar T>
-inline Quaternion<T> Normalize(const Quaternion<T>& value) noexcept {
+MATH_FORCE_INLINE Quaternion<T> Normalize(const Quaternion<T>& value) noexcept {
     const T length = Length(value);
     return length <= std::numeric_limits<T>::epsilon()
                ? Quaternion<T>::Identity()
@@ -143,13 +149,24 @@ inline Quaternion<T> QuaternionFromEulerXYZ(const Vector<T, 3>& radians) noexcep
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> Rotate(
+MATH_FORCE_INLINE constexpr Vector<T, 3> Rotate(
     const Quaternion<T>& rotation,
     const Vector<T, 3>& vector) noexcept {
-    // 对单位四元数展开 q * (v,0) * conjugate(q)，避免创建两个临时四元数。
-    const Vector<T, 3> imaginary(rotation.x, rotation.y, rotation.z);
-    const Vector<T, 3> twiceCross = static_cast<T>(2) * Cross(imaginary, vector);
-    return vector + rotation.w * twiceCross + Cross(imaginary, twiceCross);
+    // DirectXMath 同样展开 q*v*q^-1。把两次叉积直接写成标量，避免多个 Vector 运算符
+    // 在编译器拒绝内联时形成调用链；单位四元数的数学结果与原实现完全相同。
+    const T twiceCrossX = static_cast<T>(2) *
+                          (rotation.y * vector.z - rotation.z * vector.y);
+    const T twiceCrossY = static_cast<T>(2) *
+                          (rotation.z * vector.x - rotation.x * vector.z);
+    const T twiceCrossZ = static_cast<T>(2) *
+                          (rotation.x * vector.y - rotation.y * vector.x);
+    return {
+        vector.x + rotation.w * twiceCrossX +
+            (rotation.y * twiceCrossZ - rotation.z * twiceCrossY),
+        vector.y + rotation.w * twiceCrossY +
+            (rotation.z * twiceCrossX - rotation.x * twiceCrossZ),
+        vector.z + rotation.w * twiceCrossZ +
+            (rotation.x * twiceCrossY - rotation.y * twiceCrossX)};
 }
 
 template <FloatingScalar T>
@@ -228,7 +245,7 @@ inline Quaternion<T> Nlerp(
 }
 
 template <FloatingScalar T>
-inline Quaternion<T> Slerp(
+MATH_FORCE_INLINE Quaternion<T> Slerp(
     const Quaternion<T>& start,
     const Quaternion<T>& end,
     T amount) noexcept {
@@ -243,11 +260,20 @@ inline Quaternion<T> Slerp(
         return Nlerp(start, adjustedEnd, amount);
     }
 
-    const T angle = std::acos(Clamp(cosine, static_cast<T>(-1), static_cast<T>(1)));
-    const T sine = std::sin(angle);
+    cosine = Clamp(cosine, static_cast<T>(-1), static_cast<T>(1));
+    const T sine = std::sqrt(Max(
+        static_cast<T>(0),
+        static_cast<T>(1) - cosine * cosine));
+    const T angle = std::atan2(sine, cosine);
     const T startWeight = std::sin((static_cast<T>(1) - amount) * angle) / sine;
     const T endWeight = std::sin(amount * angle) / sine;
-    return Normalize(start * startWeight + adjustedEnd * endWeight);
+    // 单位四元数的球面插值结果理论上仍为单位四元数。与 DirectXMath 相同，这里不再追加
+    // Normalize，从热路径移除一次 sqrt 和除法；非单位输入应先由调用方显式 Normalize。
+    return {
+        start.x * startWeight + adjustedEnd.x * endWeight,
+        start.y * startWeight + adjustedEnd.y * endWeight,
+        start.z * startWeight + adjustedEnd.z * endWeight,
+        start.w * startWeight + adjustedEnd.w * endWeight};
 }
 
 template <FloatingScalar T>
