@@ -16,7 +16,6 @@ if(DEFINED ENV{VULKAN_SDK} AND EXISTS "$ENV{VULKAN_SDK}/Include/vulkan/vulkan.h"
     message(STATUS "PBRDemo: using VULKAN_SDK headers at $ENV{VULKAN_SDK}/Include")
     set(VULKAN_INCLUDE_DIRS $ENV{VULKAN_SDK}/Include)
 endif()
-find_package(glm   REQUIRED)
 find_program(GLSLANG_VALIDATOR
     NAMES glslangValidator
     HINTS $ENV{VULKAN_SDK}/bin

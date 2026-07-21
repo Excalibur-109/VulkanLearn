@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <glm/glm.hpp>
+#include "Math.hpp"
 
 /// 固定宽度无符号 8 位整数。
 namespace rhi {
@@ -1668,13 +1668,13 @@ struct RHIIndexStream {
 
 /// 轴对齐包围盒，用于视锥裁剪、光源裁剪和加速结构构建。
 struct RHIBoundingBox {
-    glm::vec3 min{0.0F}; ///< 最小点。
-    glm::vec3 max{0.0F}; ///< 最大点。
+    float3 min{0.0F}; ///< 最小点。
+    float3 max{0.0F}; ///< 最大点。
 };
 
 /// 包围球，用于更便宜的粗裁剪或 LOD 选择。
 struct RHIBoundingSphere {
-    glm::vec3 center{0.0F}; ///< 球心。
+    float3 center{0.0F}; ///< 球心。
     float radius = 0.0F; ///< 半径。
 };
 
@@ -1722,7 +1722,7 @@ enum class RHIMaterialParameterType : u8 {
 struct RHIMaterialParameter {
     std::string name; ///< 参数名，例如 roughness、metallic、baseColorFactor。
     RHIMaterialParameterType type = RHIMaterialParameterType::Float4; ///< 参数类型。
-    glm::vec4 value{0.0F}; ///< 参数值，标量使用 x，bool 使用 x 是否非 0。
+    float4 value{0.0F}; ///< 参数值，标量使用 x，bool 使用 x 是否非 0。
 };
 
 /// 材质描述，表示“用哪个 pipeline + 哪些资源参数绘制”。
@@ -1911,22 +1911,22 @@ struct RHIPresentDesc {
 
 /// 物体变换数据，保留上一帧矩阵可用于 motion vector/TAA。
 struct RHITransformData {
-    glm::mat4 localToWorld{1.0F}; ///< 当前帧本地到世界矩阵。
-    glm::mat4 previousLocalToWorld{1.0F}; ///< 上一帧本地到世界矩阵。
+    float4x4 localToWorld{1.0F}; ///< 当前帧本地到世界矩阵。
+    float4x4 previousLocalToWorld{1.0F}; ///< 上一帧本地到世界矩阵。
 };
 
 /// 相机数据。投影矩阵的坐标系差异应由创建矩阵或后端适配层统一处理。
 struct RHICameraData {
-    glm::mat4 view{1.0F}; ///< 世界到视图矩阵。
-    glm::mat4 projection{1.0F}; ///< 投影矩阵。
-    glm::mat4 viewProjection{1.0F}; ///< projection * view，供 shader 直接使用。
-    glm::mat4 previousViewProjection{1.0F}; ///< 上一帧 viewProjection，用于 motion vector/TAA。
-    glm::vec3 position{0.0F}; ///< 世界空间相机位置。
+    float4x4 view{1.0F}; ///< 世界到视图矩阵。
+    float4x4 projection{1.0F}; ///< 投影矩阵。
+    float4x4 viewProjection{1.0F}; ///< projection * view，供 shader 直接使用。
+    float4x4 previousViewProjection{1.0F}; ///< 上一帧 viewProjection，用于 motion vector/TAA。
+    float3 position{0.0F}; ///< 世界空间相机位置。
     float nearPlane = 0.1F; ///< 近裁剪面距离。
     float farPlane = 1000.0F; ///< 远裁剪面距离。
     float verticalFovRadians = 1.0471975512F; ///< 垂直视场角，单位弧度，默认约 60 度。
-    glm::vec2 jitter{0.0F}; ///< 当前帧投影抖动，TAA/TSR 常用。
-    glm::vec2 previousJitter{0.0F}; ///< 上一帧投影抖动。
+    float2 jitter{0.0F}; ///< 当前帧投影抖动，TAA/TSR 常用。
+    float2 previousJitter{0.0F}; ///< 上一帧投影抖动。
 };
 
 /// 光源类型。
@@ -1939,11 +1939,11 @@ enum class RHILightType : u8 {
 /// CPU 侧光源描述，后续可打包进 uniform/storage buffer。
 struct RHILightData {
     RHILightType type = RHILightType::Directional; ///< 光源类型。
-    glm::vec3 color{1.0F}; ///< 线性空间颜色。
+    float3 color{1.0F}; ///< 线性空间颜色。
     float intensity = 1.0F; ///< 光强，具体物理单位由渲染器约定。
-    glm::vec3 direction{0.0F, -1.0F, 0.0F}; ///< 方向光/聚光灯方向。
+    float3 direction{0.0F, -1.0F, 0.0F}; ///< 方向光/聚光灯方向。
     float range = 10.0F; ///< 点光/聚光影响半径。
-    glm::vec3 position{0.0F}; ///< 点光/聚光世界位置。
+    float3 position{0.0F}; ///< 点光/聚光世界位置。
     float innerConeRadians = 0.0F; ///< 聚光内锥角，单位弧度。
     float outerConeRadians = 0.7853981634F; ///< 聚光外锥角，默认约 45 度。
 };
@@ -1976,7 +1976,7 @@ struct RHIRenderObjectDesc {
 
 /// 场景环境参数，供 sky、IBL、曝光和后处理使用。
 struct RHISceneEnvironmentDesc {
-    glm::vec3 ambientColor{0.03F}; ///< 简单环境光颜色。
+    float3 ambientColor{0.03F}; ///< 简单环境光颜色。
     float exposure = 1.0F; ///< 曝光倍率。
     RHITextureView skyTexture{}; ///< 可选天空贴图。
     RHITextureView irradianceTexture{}; ///< 可选漫反射 IBL。

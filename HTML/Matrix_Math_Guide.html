@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="从数学原理到当前 C++ Math 实现的矩阵完整学习文档">
+    <title>Matrix | 数学原理与引擎实现</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #58635e;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --coral: #c6533f;
+            --blue: #246a8d;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.72;
+            letter-spacing: 0;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+        .masthead {
+            color: #f5fbf8;
+            background: var(--nav);
+            border-bottom: 4px solid var(--green);
+        }
+
+        .masthead-inner {
+            width: min(1440px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .masthead-inner > div:first-child { min-width: 0; }
+
+        .eyebrow {
+            margin: 0 0 6px;
+            color: #8fd5b8;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin-bottom: 11px; font-size: 19px; }
+        h4 { margin-bottom: 8px; font-size: 16px; }
+
+        .subtitle { margin: 0; color: #c6d5ce; max-width: 760px; overflow-wrap: anywhere; }
+
+        .doc-switch {
+            flex: 0 0 auto;
+            display: flex;
+            border: 1px solid #476057;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .doc-switch a {
+            color: #dce9e3;
+            padding: 8px 13px;
+            text-decoration: none;
+            border-right: 1px solid #476057;
+            font-size: 14px;
+        }
+
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #ffffff; background: var(--green); }
+
+        .layout {
+            width: min(1440px, 100%);
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 270px minmax(0, 1fr);
+            gap: 0;
+        }
+
+        .toc {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: auto;
+            padding: 30px 24px 50px;
+            background: var(--surface);
+            border-right: 1px solid var(--line);
+        }
+
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { list-style: none; margin: 0; padding: 0; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 9px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--green); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        main > section { max-width: 1040px; margin: 0 auto; padding: 0 0 56px; scroll-margin-top: 24px; }
+        main > section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+
+        .lead { color: #34403b; font-size: 18px; max-width: 850px; }
+
+        .convention-grid,
+        .two-column,
+        .three-column {
+            display: grid;
+            gap: 18px;
+            margin: 22px 0;
+        }
+
+        .convention-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+        .fact {
+            padding: 16px;
+            background: var(--surface);
+            border-top: 3px solid var(--green);
+            border-radius: var(--radius);
+        }
+
+        .fact strong { display: block; margin-bottom: 4px; }
+        .fact p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .formula {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow-x: auto;
+            color: #12241d;
+            background: var(--green-soft);
+            border-left: 4px solid var(--green);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+        }
+
+        .formula .label { color: var(--green); font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; font-weight: 700; }
+
+        .derivation {
+            --derivation-accent: var(--green);
+            margin: 22px 0;
+            overflow: hidden;
+            background: #fbfcfb;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--derivation-accent);
+            border-radius: var(--radius);
+        }
+
+        .derivation-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 16px;
+            background: var(--green-soft);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .derivation-kind {
+            color: var(--derivation-accent);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .derivation-condition {
+            display: grid;
+            grid-template-columns: 72px minmax(0, 1fr);
+            gap: 12px;
+            padding: 11px 16px;
+            color: var(--muted);
+            background: #f6f8f6;
+            border-bottom: 1px solid var(--line);
+            font-size: 14px;
+        }
+
+        .derivation-condition strong { color: var(--ink); }
+
+        .derivation-row {
+            display: grid;
+            grid-template-columns: 32px minmax(260px, 1fr) minmax(180px, 0.72fr);
+            gap: 14px;
+            align-items: center;
+            padding: 14px 16px;
+        }
+
+        .derivation-row + .derivation-row { border-top: 1px solid var(--line); }
+
+        .derivation-index {
+            width: 27px;
+            height: 27px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--derivation-accent);
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .derivation-expression {
+            min-width: 0;
+            color: #12241d;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.55;
+        }
+
+        .derivation-reason {
+            padding-left: 14px;
+            color: var(--muted);
+            border-left: 2px solid #cbd9d1;
+            font-size: 14px;
+            line-height: 1.55;
+        }
+
+        .equation {
+            display: grid;
+            grid-template-columns: minmax(72px, max-content) 22px minmax(0, 1fr);
+            align-items: baseline;
+            column-gap: 6px;
+        }
+
+        .equation + .equation { margin-top: 5px; }
+        .equation .lhs { text-align: right; }
+        .equation .relation { text-align: center; }
+
+        .math-expression {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fraction {
+            display: inline-grid;
+            grid-template-rows: auto auto;
+            vertical-align: middle;
+            text-align: center;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+
+        .fraction .numerator { padding: 0 4px 2px; border-bottom: 1px solid currentColor; }
+        .fraction .denominator { padding: 2px 4px 0; }
+
+        .matrix.compact-matrix {
+            gap: 3px 11px;
+            padding: 7px 13px;
+            font-size: 16px;
+        }
+
+        .derivation-result {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            color: #0f3427;
+            background: var(--green-soft);
+            border-top: 1px solid var(--line);
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 19px;
+            font-weight: 700;
+        }
+
+        .therefore {
+            color: var(--derivation-accent);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .step-list { counter-reset: math-step; list-style: none; padding: 0; }
+        .step-list > li { counter-increment: math-step; position: relative; padding: 0 0 22px 48px; margin: 0; }
+        .step-list > li::before {
+            content: counter(math-step);
+            position: absolute;
+            top: 1px;
+            left: 0;
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--green);
+            border-radius: 50%;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .note, .warning {
+            margin: 20px 0;
+            padding: 15px 18px;
+            border-left: 4px solid var(--blue);
+            background: #edf5f9;
+        }
+
+        .warning { border-left-color: var(--coral); background: #fbefec; }
+        .note strong, .warning strong { display: block; margin-bottom: 3px; }
+
+        code {
+            padding: 1px 5px;
+            color: #174c39;
+            background: #edf3ef;
+            border-radius: 3px;
+            font-family: Consolas, "Cascadia Code", monospace;
+            font-size: 0.92em;
+        }
+
+        pre.code {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow: auto;
+            color: var(--code-ink);
+            background: var(--code);
+            border-radius: var(--radius);
+            line-height: 1.58;
+            tab-size: 4;
+        }
+
+        pre.code code { padding: 0; color: inherit; background: transparent; font-size: 14px; }
+        .comment { color: #91b6a5; }
+        .keyword { color: #7cc7e8; }
+        .type { color: #f1c675; }
+
+        .matrix-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin: 22px 0;
+            overflow-x: auto;
+            padding: 6px;
+        }
+
+        .matrix {
+            display: grid;
+            gap: 7px 14px;
+            position: relative;
+            padding: 12px 17px;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 17px;
+            white-space: nowrap;
+        }
+
+        .matrix::before, .matrix::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            border-top: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .matrix::before { left: 0; border-left: 2px solid var(--ink); }
+        .matrix::after { right: 0; border-right: 2px solid var(--ink); }
+        .m2 { grid-template-columns: repeat(2, auto); }
+        .m3 { grid-template-columns: repeat(3, auto); }
+        .m4 { grid-template-columns: repeat(4, auto); }
+        .operator { font: 20px Cambria, serif; }
+
+        .matrix-display {
+            white-space: normal;
+        }
+
+        .formula-matrix {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .formula-system {
+            display: grid;
+            gap: 16px;
+        }
+
+        .matrix-equation {
+            width: max-content;
+            max-width: 100%;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .matrix-name {
+            min-width: max-content;
+            font-weight: 700;
+        }
+
+        .matrix-caption {
+            color: var(--muted);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+            line-height: 1.55;
+            text-align: center;
+        }
+
+        .matrix.block-matrix {
+            gap: 8px 16px;
+            font-style: italic;
+        }
+
+        .matrix.augmented-matrix > span:first-child {
+            padding-right: 14px;
+            border-right: 1px solid currentColor;
+        }
+
+        figure.diagram {
+            margin: 24px 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: #fbfcfb;
+        }
+
+        figure.diagram canvas { display: block; width: 100%; height: 340px; }
+        figure.diagram figcaption { padding: 11px 15px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+
+        .control-row {
+            display: grid;
+            grid-template-columns: 120px minmax(180px, 420px) 80px;
+            align-items: center;
+            gap: 14px;
+            margin: 14px 0 4px;
+        }
+
+        input[type="range"] { width: 100%; accent-color: var(--green); }
+        output { font-variant-numeric: tabular-nums; color: var(--green); font-weight: 700; }
+
+        table { width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 11px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+        th { color: #ffffff; background: #26352f; }
+        tbody tr:nth-child(even) { background: var(--surface); }
+
+        .footer-nav {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding-top: 28px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        @media (max-width: 1050px) {
+            .layout { grid-template-columns: 220px minmax(0, 1fr); }
+            .convention-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 760px) {
+            .masthead-inner { display: block; padding-top: 22px; }
+            h1 { max-width: 100%; font-size: 28px; overflow-wrap: anywhere; }
+            .doc-switch { margin-top: 20px; width: fit-content; }
+            .layout { display: block; }
+            .toc { position: static; width: 100%; height: auto; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+            .toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+            main { padding: 34px 20px 64px; }
+            main > section { padding-bottom: 42px; }
+            main > section + section { padding-top: 40px; }
+            .two-column, .three-column, .convention-grid { grid-template-columns: 1fr; }
+            .control-row { grid-template-columns: 90px minmax(0, 1fr) 60px; }
+            figure.diagram canvas { height: 280px; }
+            .derivation-condition { grid-template-columns: 1fr; gap: 3px; }
+            .derivation-row { grid-template-columns: 29px minmax(0, 1fr); gap: 10px; padding: 13px 12px; }
+            .derivation-expression { font-size: 16px; overflow-x: auto; }
+            .derivation-reason { grid-column: 2; padding: 6px 0 0; border-top: 1px dashed #cbd9d1; border-left: 0; }
+            .equation { grid-template-columns: minmax(52px, max-content) 18px minmax(90px, 1fr); column-gap: 4px; }
+            .matrix.compact-matrix { font-size: 15px; }
+            .formula-matrix { gap: 7px; }
+            .formula-matrix.named-matrix {
+                display: grid;
+                grid-template-columns: auto auto;
+                align-items: center;
+                justify-content: center;
+            }
+            .formula-matrix.named-matrix > .matrix { grid-column: 1 / -1; justify-self: center; }
+            .matrix-equation { gap: 7px; font-size: 16px; }
+            .matrix-display .matrix { gap: 5px 9px; padding: 9px 14px; font-size: 15px; }
+            .matrix.block-matrix { gap: 6px 12px; }
+            .footer-nav { display: block; }
+            .footer-nav a { display: block; margin-top: 10px; }
+        }
+
+        @media print {
+            .masthead { color: #000000; background: #ffffff; border-bottom: 2px solid #000000; }
+            .subtitle, .eyebrow { color: #333333; }
+            .doc-switch, .toc, .control-row { display: none; }
+            .layout { display: block; }
+            main { padding: 24px; }
+            main > section { break-inside: avoid; }
+            pre.code { white-space: pre-wrap; }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div>
+                <p class="eyebrow">Math Library Study Notes</p>
+                <h1>Matrix 数学原理与引擎实现</h1>
+                <p class="subtitle">从线性映射、齐次坐标和投影推导，到当前 C++ 模板、4x4 SIMD 与逆矩阵快速路径。</p>
+            </div>
+            <nav class="doc-switch" aria-label="数学文档切换">
+                <a href="Matrix_Math_Guide.html" aria-current="page">Matrix</a>
+                <a href="Quaternion_Math_Guide.html">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
+                <a href="Curves_Math_Guide.html">Curves</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="toc">
+            <strong>目录</strong>
+            <ol>
+                <li><a href="#convention">0. 实现约定</a></li>
+                <li><a href="#meaning">1. 矩阵是什么</a></li>
+                <li><a href="#multiply">2. 乘法推导</a></li>
+                <li><a href="#determinant">3. 行列式</a></li>
+                <li><a href="#inverse">4. 逆矩阵</a></li>
+                <li><a href="#affine">5. 仿射变换</a></li>
+                <li><a href="#view">6. 观察矩阵</a></li>
+                <li><a href="#projection">7. 投影矩阵</a></li>
+                <li><a href="#normal">8. 法线矩阵</a></li>
+                <li><a href="#simd">9. SIMD 原理</a></li>
+                <li><a href="#mapping">10. API 对照</a></li>
+                <li><a href="#checklist">11. 检查清单</a></li>
+            </ol>
+        </aside>
+
+        <main>
+            <section id="convention">
+                <h2>0. 先固定所有约定</h2>
+                <p class="lead">矩阵公式本身没有 API 立场；真正制造混乱的是存储顺序、向量放左还是放右、坐标系手性和深度范围。本文统一采用当前 Math 库的左手坐标约定。</p>
+
+                <div class="convention-grid">
+                    <div class="fact"><strong>存储</strong><p>行主序，<code>matrix[row][column]</code></p></div>
+                    <div class="fact"><strong>向量</strong><p>列向量右乘：<code>p' = M * p</code></p></div>
+                    <div class="fact"><strong>组合</strong><p><code>A * B</code> 表示先应用 B，再应用 A</p></div>
+                    <div class="fact"><strong>主坐标系</strong><p>左手系：+X 向右、+Y 向上、+Z 向前</p></div>
+                </div>
+
+                <div class="note">
+                    <strong>存储不等于数学语义</strong>
+                    行主序只说明 16 个数如何排在内存里；列向量右乘才决定平移位于最后一列、组合顺序如何阅读。向 HLSL/GLSL 上传时，还要单独匹配 shader 的矩阵布局声明。
+                </div>
+
+                <div class="matrix-row" aria-label="4x4 矩阵与列向量相乘">
+                    <div class="matrix m4">
+                        <span>m₀₀</span><span>m₀₁</span><span>m₀₂</span><span>m₀₃</span>
+                        <span>m₁₀</span><span>m₁₁</span><span>m₁₂</span><span>m₁₃</span>
+                        <span>m₂₀</span><span>m₂₁</span><span>m₂₂</span><span>m₂₃</span>
+                        <span>m₃₀</span><span>m₃₁</span><span>m₃₂</span><span>m₃₃</span>
+                    </div>
+                    <span class="operator">×</span>
+                    <div class="matrix m2"><span>x</span><span></span><span>y</span><span></span><span>z</span><span></span><span>w</span><span></span></div>
+                </div>
+            </section>
+
+            <section id="meaning">
+                <h2>1. 矩阵是什么</h2>
+                <p>矩阵可以先理解为一个<strong>线性映射</strong>：它接收一个向量，输出另一个向量，并保持加法与数乘。</p>
+                <div class="formula"><span class="label">线性条件</span>
+T(u + v) = T(u) + T(v)
+T(kv) = kT(v)</div>
+
+                <h3>1.1 每一列是基向量变换后的结果</h3>
+                <p>设二维标准基为 e₁=(1,0)、e₂=(0,1)。如果一个变换把 e₁ 变为 (a,c)，把 e₂ 变为 (b,d)，矩阵就是：</p>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M</span>
+                        <span class="operator">=</span>
+                        <span class="matrix m2" aria-label="a b; c d">
+                            <span>a</span><span>b</span>
+                            <span>c</span><span>d</span>
+                        </span>
+                    </div>
+                    <div class="matrix-caption">第 0 列 T(e₁)=(a,c)，第 1 列 T(e₂)=(b,d)</div>
+                </div>
+                <p>任意向量 v = x e₁ + y e₂，根据线性条件：</p>
+                <div class="formula">T(v) = xT(e₁) + yT(e₂)
+     = x(a,c) + y(b,d)
+     = (ax + by, cx + dy)</div>
+                <p>这正是矩阵乘列向量。因此看一个变换矩阵时，前三列可以理解为变换后的 X/Y/Z 基轴，最后一列在齐次矩阵中保存平移。</p>
+
+                <figure class="diagram">
+                    <canvas id="basisCanvas" aria-label="二维基向量经过矩阵变换的图解"></canvas>
+                    <figcaption>灰色为标准基；绿色和橙色为矩阵两列代表的新基。网格随基向量一起发生线性变换。</figcaption>
+                </figure>
+
+                <h3>1.2 为什么平移不是线性变换</h3>
+                <p>平移 T(v)=v+t 不满足 T(0)=0，所以普通 3×3 线性矩阵不能表达三维平移。解决办法是增加齐次分量 w：</p>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-caption">点使用 pₕ=(x,y,z,1)，方向使用 vₕ=(x,y,z,0)</div>
+                    <div class="matrix-equation" aria-label="齐次矩阵变换一个点">
+                        <span class="matrix m2 block-matrix"><span>R</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix"><span>p</span><span>1</span></span>
+                        <span class="operator">=</span>
+                        <span class="matrix"><span>Rp+t</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation" aria-label="齐次矩阵变换一个方向">
+                        <span class="matrix m2 block-matrix"><span>R</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix"><span>v</span><span>0</span></span>
+                        <span class="operator">=</span>
+                        <span class="matrix"><span>Rv</span><span>0</span></span>
+                    </div>
+                </div>
+                <p>同一个 4×4 矩阵因 w 不同自然区分点和方向，这就是 <code>TransformPoint</code> 与 <code>TransformVector</code> 的数学根源。</p>
+            </section>
+
+            <section id="multiply">
+                <h2>2. 矩阵乘法如何得到</h2>
+
+                <h3>2.1 矩阵乘向量：行与列做点积</h3>
+                <p>输出第 i 个分量，是矩阵第 i 行与输入列向量的点积：</p>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">逐行推导</span>
+                        <strong>从线性映射得到输出分量</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>已知</strong>
+                        <span>M 是 R×C 矩阵，x 是 C 维列向量，y=Mx。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">yᵢ</span><span class="relation">=</span><span>rowᵢ(M) · x</span>
+                        </div>
+                        <div class="derivation-reason">第 i 个输出只由 M 的第 i 行计算，它与 x 做点积。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">yᵢ</span><span class="relation">=</span><span>Σ<sub>j=0</sub><sup>C-1</sup> Mᵢⱼxⱼ</span>
+                        </div>
+                        <div class="derivation-reason">把点积展开：对应位置相乘，再把 C 项累加。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">y₀</span><span class="relation">=</span><span>m₀₀x₀ + m₀₁x₁ + ... + m<sub>0,C-1</sub>x<sub>C-1</sub></span>
+                        </div>
+                        <div class="derivation-reason">令 i=0，便得到输出向量第一个分量的实际计算式。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">维度检查</span>
+                        <span>(R×C)(C×1) = R×1</span>
+                    </div>
+                </div>
+
+                <ol class="step-list">
+                    <li><strong>取输出行。</strong>要求第 0 个输出，就取矩阵第 0 行。</li>
+                    <li><strong>对应分量相乘。</strong><code>row[j] * vector[j]</code>。</li>
+                    <li><strong>累加。</strong>得到该输出坐标。</li>
+                    <li><strong>对每一行重复。</strong>R×C 矩阵乘 C 维向量，得到 R 维向量。</li>
+                </ol>
+
+                <div class="two-column">
+                    <div>
+                        <h3>数字算例</h3>
+                        <div class="matrix-row" aria-label="二阶矩阵乘二维向量的数字算例">
+                            <span class="matrix m2 compact-matrix"><span>2</span><span>1</span><span>0</span><span>3</span></span>
+                            <span class="operator">×</span>
+                            <span class="matrix compact-matrix"><span>3</span><span>4</span></span>
+                            <span class="operator">=</span>
+                            <span class="matrix compact-matrix"><span>2×3 + 1×4</span><span>0×3 + 3×4</span></span>
+                            <span class="operator">=</span>
+                            <span class="matrix compact-matrix"><span>10</span><span>12</span></span>
+                        </div>
+                    </div>
+                    <div>
+                        <h3>几何解释</h3>
+                        <p>也可以按列阅读：结果等于输入各分量对矩阵各列的线性组合，即 <code>3·column0 + 4·column1</code>。</p>
+                    </div>
+                </div>
+
+                <h3>2.2 矩阵乘矩阵：组合两个线性映射</h3>
+                <p>设 C=A·B。为了让 C 作用于向量时等价于先 B 后 A：</p>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">组合推导</span>
+                        <strong>乘积矩阵的第 (i,j) 个元素</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>目标</strong>
+                        <span>令 C=A·B，使 C 作用于任意向量 v 时都等价于先执行 B、再执行 A。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">Cv</span><span class="relation">=</span><span>A(Bv)</span>
+                        </div>
+                        <div class="derivation-reason">矩阵乘法必须保持两个线性映射的函数组合结果。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">Cᵢⱼ</span><span class="relation">=</span><span>rowᵢ(A) · columnⱼ(B)</span>
+                        </div>
+                        <div class="derivation-reason">B 的第 j 列是基向量 eⱼ 经过 B 后的结果；再由 A 的第 i 行取出第 i 个分量。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">Cᵢⱼ</span><span class="relation">=</span><span>Σₖ AᵢₖBₖⱼ</span>
+                        </div>
+                        <div class="derivation-reason">展开行列点积；k 同时遍历 A 的列和 B 的行。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">结论</span>
+                        <span>第 i 行 × 第 j 列 → C 的第 (i,j) 个元素</span>
+                    </div>
+                </div>
+
+                <div class="warning">
+                    <strong>乘法不交换</strong>
+                    通常 A·B ≠ B·A。例如“先绕原点旋转再平移”和“先平移再绕原点旋转”会得到不同位置。
+                </div>
+
+                <pre class="code"><code><span class="type">float4x4</span> world =
+    TranslationMatrix(position) *
+    Matrix4x4FromQuaternion(rotation) *
+    ScaleMatrix(scale);
+
+<span class="comment">// 列向量从右向左执行：先 Scale，再 Rotation，最后 Translation。</span>
+<span class="type">float3</span> worldPoint = TransformPoint(world, localPoint);</code></pre>
+
+                <h3>2.3 为什么矩阵乘法满足结合律</h3>
+                <p>矩阵代表函数组合，而函数组合满足结合律：</p>
+                <div class="formula">(A·B)·C·v = A·(B·(C·v)) = A·B·(C·v)
+所以 (A·B)·C = A·(B·C)</div>
+                <p>结合律允许引擎预先计算 <code>viewProjection = projection * view</code>，随后每个对象只需再与 world 组合。</p>
+            </section>
+
+            <section id="determinant">
+                <h2>3. 行列式：缩放、方向与可逆性</h2>
+                <p>行列式把一个方阵映射为标量。几何上，|det(M)| 是面积或体积的缩放倍数；符号表示定向是否翻转。</p>
+
+                <div class="three-column">
+                    <div class="fact"><strong>det = 2</strong><p>面积/体积扩大 2 倍</p></div>
+                    <div class="fact"><strong>det = -1</strong><p>体积不变，但方向翻转</p></div>
+                    <div class="fact"><strong>det = 0</strong><p>空间被压扁，信息丢失，不可逆</p></div>
+                </div>
+
+                <h3>3.1 二阶行列式为什么是 ad-bc</h3>
+                <p>二维矩阵的两列 u=(a,c)、v=(b,d) 张成平行四边形，其有向面积为：</p>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span>det</span>
+                        <span class="matrix m2"><span>a</span><span>b</span><span>c</span><span>d</span></span>
+                        <span class="operator">=</span>
+                        <span>ad-bc</span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span>det</span>
+                        <span class="matrix m2"><span>2</span><span>1</span><span>0</span><span>3</span></span>
+                        <span class="operator">=</span>
+                        <span>2×3-1×0=6</span>
+                    </div>
+                    <div class="matrix-caption">第二行是数值回代：该变换把有向面积放大 6 倍。</div>
+                </div>
+
+                <h3>3.2 三阶行列式</h3>
+                <p>三维中 det([a b c]) = a·(b×c)，即一个向量与另外两个向量叉积的点积，得到平行六面体有向体积。</p>
+                <div class="formula">det(M) =
+m₀₀(m₁₁m₂₂ - m₁₂m₂₁)
+- m₀₁(m₁₀m₂₂ - m₁₂m₂₀)
++ m₀₂(m₁₀m₂₁ - m₁₁m₂₀)</div>
+
+                <h3>3.3 余子式与 4×4 Laplace 展开</h3>
+                <ol class="step-list">
+                    <li>删除元素 mᵢⱼ 所在的第 i 行、第 j 列，得到子矩阵。</li>
+                    <li>子矩阵的行列式叫 minor，记为 Mᵢⱼ。</li>
+                    <li>乘棋盘符号 (-1)<sup>i+j</sup> 得到 cofactor Cᵢⱼ。</li>
+                    <li>沿任意一行展开：det(A)=Σⱼ aᵢⱼCᵢⱼ。</li>
+                </ol>
+                <div class="formula">第一行的符号： +  -  +  -
+
+det(A) = a₀₀M₀₀ - a₀₁M₀₁ + a₀₂M₀₂ - a₀₃M₀₃</div>
+            </section>
+
+            <section id="inverse">
+                <h2>4. 逆矩阵：把变换撤销</h2>
+                <p>若存在 A⁻¹ 使 A⁻¹A=AA⁻¹=I，则 A 可逆。它代表原变换的反函数。</p>
+
+                <h3>4.1 二阶逆矩阵完整推导</h3>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">完整推导</span>
+                        <strong>构造一个与 A 相乘后只剩单位矩阵的矩阵</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>已知</strong>
+                        <span>A=[[a,b],[c,d]]；要求 A⁻¹ 满足 AA⁻¹=A⁻¹A=I。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">Δ</span><span class="relation">=</span><span>det(A)=ad-bc</span>
+                        </div>
+                        <div class="derivation-reason">Δ 是 A 的有向面积缩放倍数；Δ=0 表示空间被压扁，无法还原。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression math-expression">
+                            <span>B =</span>
+                            <span class="matrix m2 compact-matrix"><span>d</span><span>-b</span><span>-c</span><span>a</span></span>
+                        </div>
+                        <div class="derivation-reason">交换主对角线 a、d，并让副对角线 b、c 变号，得到伴随矩阵 B。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression math-expression">
+                            <span>AB = BA =</span>
+                            <span class="matrix m2 compact-matrix"><span>ad-bc</span><span>-ab+ab</span><span>cd-dc</span><span>ad-bc</span></span>
+                            <span>= ΔI</span>
+                        </div>
+                        <div class="derivation-reason">直接展开乘法，非对角项互相抵消，对角项都等于 Δ。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">A(<span class="fraction"><span class="numerator">1</span><span class="denominator">Δ</span></span>B)</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">1</span><span class="denominator">Δ</span></span>(AB)=I</span>
+                        </div>
+                        <div class="derivation-reason">当且仅当 Δ≠0 时可以同除以 Δ，从 ΔI 恢复为 I。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">结论</span>
+                        <span class="math-expression">A⁻¹ = <span class="fraction"><span class="numerator">1</span><span class="denominator">ad-bc</span></span><span class="matrix m2 compact-matrix"><span>d</span><span>-b</span><span>-c</span><span>a</span></span></span>
+                    </div>
+                </div>
+
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">数字验证</span>
+                        <strong>A=[[2,1],[0,3]]</strong>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">det(A)</span><span class="relation">=</span><span>2×3-1×0=6</span>
+                        </div>
+                        <div class="derivation-reason">行列式不为 0，因此逆矩阵存在。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression math-expression">
+                            <span>A⁻¹ = <span class="fraction"><span class="numerator">1</span><span class="denominator">6</span></span></span>
+                            <span class="matrix m2 compact-matrix"><span>3</span><span>-1</span><span>0</span><span>2</span></span>
+                            <span>=</span>
+                            <span class="matrix m2 compact-matrix"><span>1/2</span><span>-1/6</span><span>0</span><span>1/3</span></span>
+                        </div>
+                        <div class="derivation-reason">按公式交换、变号，再把每个元素除以 det(A)=6。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">回代检查</span>
+                        <span class="math-expression">A·A⁻¹ = <span class="matrix m2 compact-matrix"><span>1</span><span>0</span><span>0</span><span>1</span></span> = I</span>
+                    </div>
+                </div>
+
+                <h3>4.2 Gauss-Jordan 消元</h3>
+                <p>通用 <code>TryInverse&lt;T,N&gt;</code> 把 A 与 I 并排，通过初等行变换把左边变成 I，右边就成为 A⁻¹。</p>
+                <div class="formula matrix-display formula-matrix">
+                    <span class="matrix m2 block-matrix augmented-matrix"><span>A</span><span>I</span></span>
+                    <span class="operator">── 行变换 ──▶</span>
+                    <span class="matrix m2 block-matrix augmented-matrix"><span>I</span><span>A⁻¹</span></span>
+                </div>
+                <ol class="step-list">
+                    <li>当前列选择绝对值最大的主元，减少除以很小数造成的误差。</li>
+                    <li>交换主元行到当前对角位置。</li>
+                    <li>整行除以主元，让主元变成 1。</li>
+                    <li>用当前行消掉同列其他元素。</li>
+                    <li>每一列重复；若最大主元仍接近 0，则矩阵奇异。</li>
+                </ol>
+
+                <h3>4.3 伴随矩阵方法</h3>
+                <div class="formula">A⁻¹ = adj(A) / det(A)
+adj(A) = cofactor(A)ᵀ</div>
+                <p>4×4 SIMD 快速路径不是逐行消元，而是并行计算余子式。当前实现把四行装入 SSE 寄存器，用三维叉积和点积构造伴随矩阵：</p>
+                <div class="formula">令四行拆为 (a,x), (b,y), (c,z), (d,w)，其中 a,b,c,d 为 float3：
+
+s = a × b          t = c × d
+u = ay - bx        v = cw - dz
+det = s·v + t·u
+
+r₀ = b × v + ty    r₁ = v × a - tx
+r₂ = d × u + sw    r₃ = u × c - sz
+
+最后乘 1/det，并把四个“逆矩阵列”转置为行主序存储。</div>
+                <div class="note">
+                    <strong>为何 SIMD 仍是同一个数学答案</strong>
+                    SSE 只是在 128 位寄存器里同时计算四个 float。叉积、点积、余子式和 1/det 的公式没有改变；改变的是独立乘加的调度方式。
+                </div>
+            </section>
+
+            <section id="affine">
+                <h2>5. 仿射变换矩阵</h2>
+
+                <h3>5.1 平移、缩放与旋转</h3>
+                <div class="two-column">
+                    <div>
+                        <h4>平移</h4>
+                        <div class="formula matrix-display formula-matrix named-matrix">
+                            <span class="matrix-name">T(t)</span>
+                            <span class="operator">=</span>
+                            <span class="matrix m4" aria-label="四乘四平移矩阵">
+                                <span>1</span><span>0</span><span>0</span><span>t<sub>x</sub></span>
+                                <span>0</span><span>1</span><span>0</span><span>t<sub>y</sub></span>
+                                <span>0</span><span>0</span><span>1</span><span>t<sub>z</sub></span>
+                                <span>0</span><span>0</span><span>0</span><span>1</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <h4>缩放</h4>
+                        <div class="formula matrix-display formula-matrix named-matrix">
+                            <span class="matrix-name">S(s)</span>
+                            <span class="operator">=</span>
+                            <span class="matrix m4" aria-label="四乘四缩放矩阵">
+                                <span>s<sub>x</sub></span><span>0</span><span>0</span><span>0</span>
+                                <span>0</span><span>s<sub>y</sub></span><span>0</span><span>0</span>
+                                <span>0</span><span>0</span><span>s<sub>z</sub></span><span>0</span>
+                                <span>0</span><span>0</span><span>0</span><span>1</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <p>绕 X 轴旋转时，X 坐标保持不变，YZ 平面按二维旋转：</p>
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">R<sub>x</sub>(θ)</span>
+                    <span class="operator">=</span>
+                    <span class="matrix m4" aria-label="绕 X 轴旋转的四乘四矩阵">
+                        <span>1</span><span>0</span><span>0</span><span>0</span>
+                        <span>0</span><span>cosθ</span><span>-sinθ</span><span>0</span>
+                        <span>0</span><span>sinθ</span><span>cosθ</span><span>0</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
+
+                <h3>5.2 Rodrigues 任意轴旋转</h3>
+                <p>把向量 v 分解为沿单位轴 n 的平行分量和垂直分量。垂直分量在平面内旋转：</p>
+                <div class="formula">v∥ = n(n·v)
+v⊥ = v - v∥
+
+R(v) = v cosθ + (n×v) sinθ + n(n·v)(1-cosθ)</div>
+                <p>把 v 的系数整理成矩阵，就得到 <code>RotationAxisMatrix</code>。</p>
+
+                <h3>5.3 仿射逆为什么更简单</h3>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M</span><span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>L</span><span>t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M⁻¹</span><span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>L⁻¹</span><span>-L⁻¹t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-caption">L 是左上 3×3 线性部分，t 是三维平移列。</div>
+                </div>
+                <p>验证上式：</p>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix m2 block-matrix"><span>L</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix m2 block-matrix"><span>L⁻¹</span><span>-L⁻¹t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>LL⁻¹</span><span>-LL⁻¹t+t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>I</span><span>0</span><span>0</span><span>1</span></span>
+                        <span class="operator">= I₄</span>
+                    </div>
+                </div>
+                <p>因此标量回退会先检查最后一行是否为 (0,0,0,1)，若是，只求左上 3×3 的逆。</p>
+            </section>
+
+            <section id="view">
+                <h2>6. 观察矩阵如何构造</h2>
+                <p>相机在世界里有位置和朝向。View 矩阵不是“把相机放进世界”，而是它的逆：把整个世界变换到相机局部空间。</p>
+
+                <h3>6.1 左手 LookAt</h3>
+                <ol class="step-list">
+                    <li><strong>前向。</strong><code>forward = normalize(target - eye)</code>，相机观察方向。</li>
+                    <li><strong>右向。</strong><code>right = normalize(cross(worldUp, forward))</code>。叉积顺序决定得到的是 +X，而不是 -X。</li>
+                    <li><strong>真实上向。</strong><code>up = cross(forward, right)</code>，重新构造与 right、forward 正交的 +Y。</li>
+                    <li><strong>逆平移。</strong>每个轴与 <code>-eye</code> 点积，把相机位置移到原点。</li>
+                </ol>
+
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">View<sub>LH</sub></span>
+                    <span class="operator">=</span>
+                    <span class="matrix m4" aria-label="左手观察矩阵">
+                        <span>r<sub>x</sub></span><span>r<sub>y</sub></span><span>r<sub>z</sub></span><span>-r·eye</span>
+                        <span>u<sub>x</sub></span><span>u<sub>y</sub></span><span>u<sub>z</sub></span><span>-u·eye</span>
+                        <span>f<sub>x</sub></span><span>f<sub>y</sub></span><span>f<sub>z</sub></span><span>-f·eye</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
+
+                <figure class="diagram">
+                    <canvas id="viewCanvas" aria-label="世界坐标变换到相机坐标图解"></canvas>
+                    <figcaption>观察矩阵把相机眼点移动到原点，并把相机 right/up/forward 基投影到标准坐标轴；左手相机空间中的 forward 就是 +Z。</figcaption>
+                </figure>
+
+                <div class="warning">
+                    <strong>worldUp 与 forward 平行</strong>
+                    两者叉积接近零时无法确定 right。当前实现使用 <code>NormalizeSafe</code> 提供回退方向，但实际相机系统还应限制俯仰角或选择替代 up。
+                </div>
+            </section>
+
+            <section id="projection">
+                <h2>7. 投影矩阵的原理</h2>
+
+                <h3>7.1 透视来自相似三角形</h3>
+                <p>左手相机看向 +Z，所以相机前方的点满足 z&gt;0。点 (x,y,z) 投到距离相机为 n 的近平面，根据相似三角形：</p>
+                <div class="formula">xₙ / n = x / z  →  xₙ = n·x/z
+yₙ / n = y / z  →  yₙ = n·y/z</div>
+                <p>除以 z 不是线性的，不能直接写入普通矩阵。齐次坐标先让裁剪空间 w=z，之后 GPU 做 perspective divide：</p>
+                <div class="formula">clip = P · viewPosition
+ndc = clip.xyz / clip.w
+
+clip.x = xScale·x
+clip.y = yScale·y
+clip.w = z
+→ ndc.x = xScale·x/z</div>
+
+                <h3>7.2 FOV 如何决定缩放</h3>
+                <div class="formula">yScale = 1 / tan(fovY/2)
+xScale = yScale / aspect</div>
+
+                <div class="control-row">
+                    <label for="fovRange">垂直 FOV</label>
+                    <input id="fovRange" type="range" min="25" max="110" value="60" step="1">
+                    <output id="fovValue" for="fovRange">60°</output>
+                </div>
+                <figure class="diagram">
+                    <canvas id="projectionCanvas" aria-label="透视投影视锥图解"></canvas>
+                    <figcaption>调整 FOV 可观察近平面宽度和投影视线变化。FOV 越大，yScale 越小，画面容纳范围越广。</figcaption>
+                </figure>
+
+                <h3>7.3 深度映射如何求系数</h3>
+                <p>透视除法后深度形如 A + B/z。以 LH、ZO 深度 [0,1] 为例，要求 z=n 映射 0，z=f 映射 1：</p>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">联立求解</span>
+                        <strong>由近、远平面的目标深度确定 A 与 B</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>约定</strong>
+                        <span>左手相机看向 +Z；0&lt;n&lt;f；近平面 z=n 映射 0，远平面 z=f 映射 1。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">ndc.z</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">Az+B</span><span class="denominator">z</span></span></span>
+                        </div>
+                        <div class="derivation-reason">投影矩阵先生成 clip.z=Az+B、clip.w=z，再由 GPU 做透视除法。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression">
+                            <div class="equation"><span class="lhs">0</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">An+B</span><span class="denominator">n</span></span></span></div>
+                            <div class="equation"><span class="lhs">B</span><span class="relation">=</span><span>-An</span></div>
+                        </div>
+                        <div class="derivation-reason">代入近平面 z=n；分母 n 非零，所以分子 An+B 必须为 0。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">1</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">Af+B</span><span class="denominator">f</span></span> ⇒ Af+B=f</span>
+                        </div>
+                        <div class="derivation-reason">代入远平面 z=f，并把等式两边乘以 f。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression">
+                            <div class="equation"><span class="lhs">Af-An</span><span class="relation">=</span><span>f</span></div>
+                            <div class="equation"><span class="lhs">A(f-n)</span><span class="relation">=</span><span>f</span></div>
+                        </div>
+                        <div class="derivation-reason">把 B=-An 代入远平面方程，然后提取公因子 A。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">5</span>
+                        <div class="derivation-expression">
+                            <div class="equation"><span class="lhs">A</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">f</span><span class="denominator">f-n</span></span></span></div>
+                            <div class="equation"><span class="lhs">B=-An</span><span class="relation">=</span><span>-<span class="fraction"><span class="numerator">fn</span><span class="denominator">f-n</span></span></span></div>
+                        </div>
+                        <div class="derivation-reason">先解出 A，再回代近平面关系求 B。由于 f-n&gt;0，所以 A 为正、B 为负。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">结果</span>
+                        <span>clip.z = <span class="fraction"><span class="numerator">f</span><span class="denominator">f-n</span></span>z - <span class="fraction"><span class="numerator">fn</span><span class="denominator">f-n</span></span>，clip.w=z</span>
+                    </div>
+                </div>
+                <p>这说明深度不是线性分布，精度大量集中在近平面附近；near 设得过小会严重损失远处深度精度。</p>
+
+                <table>
+                    <thead><tr><th>函数</th><th>手性</th><th>NDC 深度</th><th>附加处理</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>PerspectiveLH_ZO</code></td><td>左手</td><td>[0,1]</td><td>本文主路径，+Z 向前</td></tr>
+                        <tr><td><code>OrthographicLH_ZO</code></td><td>左手</td><td>[0,1]</td><td>左手正交投影</td></tr>
+                        <tr><td><code>PerspectiveRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>保留用于右手系对照</td></tr>
+                        <tr><td><code>PerspectiveRH_NO</code></td><td>右手</td><td>[-1,1]</td><td>传统 OpenGL</td></tr>
+                        <tr><td><code>PerspectiveVulkanRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>现有 Vulkan 右手辅助函数</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>7.4 正交投影</h3>
+                <p>正交投影没有除以 z，只把指定长方体线性映射到 NDC。以 x∈[l,r] 映射到 [-1,1] 为例：</p>
+                <div class="formula">x_ndc = ax + b
+
+al + b = -1
+ar + b =  1
+
+a = 2/(r-l)
+b = -(r+l)/(r-l)</div>
+                <p>y、z 同理解方程，因此正交矩阵适合 UI、编辑器网格、阴影方向光和无透视效果的工程视图。</p>
+            </section>
+
+            <section id="normal">
+                <h2>8. 为什么法线要乘逆转置</h2>
+                <p>切线 t 与法线 n 满足 n·t=0。顶点经过线性变换 M 后，切线变为 Mt。希望新法线 n' 仍垂直：</p>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">约束推导</span>
+                        <strong>让变换后的法线仍垂直于变换后的切线</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>前提</strong>
+                        <span>nᵀt=0，t'=Mt，并且 M 可逆；待求法线变换 n'=Nn。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">n'ᵀt'</span><span class="relation">=</span><span>0</span>
+                        </div>
+                        <div class="derivation-reason">这是变换后必须继续满足的垂直约束。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">n'ᵀMt</span><span class="relation">=</span><span>0</span>
+                        </div>
+                        <div class="derivation-reason">把已知的切线变换 t'=Mt 代入。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">n'ᵀM</span><span class="relation">=</span><span>nᵀ</span>
+                        </div>
+                        <div class="derivation-reason">这样左式便还原成 nᵀt=0，对原切平面内任意 t 都成立。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">n'ᵀ</span><span class="relation">=</span><span>nᵀM⁻¹</span>
+                        </div>
+                        <div class="derivation-reason">等式右侧同乘 M⁻¹，利用 MM⁻¹=I 消去 M。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">5</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">n'</span><span class="relation">=</span><span>(M⁻¹)ᵀn</span>
+                        </div>
+                        <div class="derivation-reason">两边转置，并使用 (AB)ᵀ=BᵀAᵀ。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">Normal Matrix</span>
+                        <span>N=(M⁻¹)ᵀ；计算后仍需归一化 n'</span>
+                    </div>
+                </div>
+                <p>因此 <code>NormalMatrix</code> 提取 localToWorld 左上 3×3，求逆再转置。只有纯旋转或均匀缩放时，直接乘原矩阵后归一化才碰巧正确。</p>
+
+                <div class="warning">
+                    <strong>平移不影响法线</strong>
+                    法线是方向，齐次 w=0；Normal Matrix 只需要 3×3 线性部分。若矩阵奇异，例如某轴缩放为 0，则法线逆矩阵不存在。
+                </div>
+            </section>
+
+            <section id="simd">
+                <h2>9. 当前 SIMD 乘法为什么快</h2>
+                <p>普通通用模板通过动态索引循环访问 4×4 元素，MSVC 不一定展开。优化路径模仿 DirectXMath：一个矩阵行放进一个 128 位 SSE 寄存器。</p>
+                <p>寄存器 lane、intrinsic、数据布局、运行时分派与基准测试的系统讲解见 <a href="SIMD_Usage_Guide.html">SIMD 详细使用手册</a>。</p>
+
+                <h3>9.1 矩阵乘矩阵</h3>
+                <div class="formula">输出第 i 行 =
+lhsᵢ.x · rhsRow₀ +
+lhsᵢ.y · rhsRow₁ +
+lhsᵢ.z · rhsRow₂ +
+lhsᵢ.w · rhsRow₃</div>
+                <ol class="step-list">
+                    <li>一次加载 RHS 四行，每行四个 float。</li>
+                    <li>广播 LHS 当前行的 x/y/z/w。</li>
+                    <li>四次并行乘法与三次并行加法得到完整输出行。</li>
+                    <li>对 LHS 四行重复，RHS 寄存器可以复用。</li>
+                </ol>
+
+                <h3>9.2 为什么使用 loadu</h3>
+                <p><code>float4</code> 保持 16 字节大小但自然对齐仍可能是 4 字节。<code>_mm_loadu_ps</code> 不要求地址 16 字节对齐，因此不会改变顶点结构、序列化或常量数据布局。</p>
+
+                <h3>9.3 常量求值和跨平台回退</h3>
+                <pre class="code"><code><span class="keyword">constexpr</span> <span class="type">float4x4</span> result = lhs * rhs;
+<span class="comment">// std::is_constant_evaluated() 为 true：走展开标量公式。</span>
+
+<span class="comment">// CMake：关闭架构相关 SIMD，验证纯标量路径。</span>
+cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
+
+                <div class="note">
+                    <strong>存储类型与计算类型分离</strong>
+                    这是适合引擎的折中：外部仍使用紧凑 <code>float3/float4/float4x4</code>，热点进入函数后才加载到 SIMD 寄存器。
+                </div>
+            </section>
+
+            <section id="mapping">
+                <h2>10. 数学概念与当前 API 对照</h2>
+                <table>
+                    <thead><tr><th>数学任务</th><th>当前 API</th><th>关键前置条件</th></tr></thead>
+                    <tbody>
+                        <tr><td>单位矩阵</td><td><code>float4x4::Identity()</code></td><td>方阵</td></tr>
+                        <tr><td>矩阵转置</td><td><code>Transpose(matrix)</code></td><td>交换行列</td></tr>
+                        <tr><td>行列式</td><td><code>Determinant(matrix)</code></td><td>方阵</td></tr>
+                        <tr><td>安全求逆</td><td><code>TryInverse(matrix, &out)</code></td><td>行列式/主元不能接近 0</td></tr>
+                        <tr><td>可选求逆</td><td><code>Inverse(matrix)</code></td><td>失败返回 <code>std::nullopt</code></td></tr>
+                        <tr><td>对象矩阵</td><td><code>TRSMatrix(t, q, s)</code></td><td>执行顺序 S→R→T</td></tr>
+                        <tr><td>相机观察</td><td><code>LookAtLH</code></td><td>左手系，+Z 向前</td></tr>
+                        <tr><td>透视投影</td><td><code>PerspectiveLH_ZO</code></td><td>左手系，NDC.z∈[0,1]</td></tr>
+                        <tr><td>正交投影</td><td><code>OrthographicLH_ZO</code></td><td>左手系，NDC.z∈[0,1]</td></tr>
+                        <tr><td>点变换</td><td><code>TransformPoint</code></td><td>w=1，投影后除 w</td></tr>
+                        <tr><td>方向变换</td><td><code>TransformVector</code></td><td>w=0，不受平移影响</td></tr>
+                        <tr><td>法线变换</td><td><code>NormalMatrix</code></td><td>逆转置，矩阵不能奇异</td></tr>
+                    </tbody>
+                </table>
+
+                <pre class="code"><code><span class="keyword">#include</span> <span class="type">"Math.hpp"</span>
+
+<span class="type">float4x4</span> world = TRSMatrix(position, rotation, scale);
+<span class="type">float4x4</span> view = LookAtLH(eye, target, up);
+<span class="type">float4x4</span> projection = PerspectiveLH_ZO(
+    Radians(60.0F), width / height, 0.1F, 1000.0F);
+
+<span class="type">float4x4</span> worldViewProjection = projection * view * world;
+<span class="type">float4</span> clip = worldViewProjection * <span class="type">float4</span>(localPosition, 1.0F);
+<span class="type">float3</span> ndc = clip.xyz() / clip.w;</code></pre>
+
+                <div class="note">
+                    <strong>Vulkan 的 Y 翻转与左右手无关</strong>
+                    Vulkan 路径若沿用本文的视口方向约定，可在 <code>PerspectiveLH_ZO</code> 结果上执行 <code>projection[1][1] = -projection[1][1]</code>。这只翻转裁剪空间 Y，不会把左手坐标系改成右手坐标系。
+                </div>
+            </section>
+
+            <section id="checklist">
+                <h2>11. 推导与调试检查清单</h2>
+                <div class="two-column">
+                    <div>
+                        <h3>公式检查</h3>
+                        <ul>
+                            <li>先写清向量在左还是右。</li>
+                            <li>确认矩阵元素是 <code>[row][column]</code>。</li>
+                            <li>组合矩阵从实际执行顺序的反方向阅读。</li>
+                            <li>确认使用左手系：+X 向右、+Y 向上、+Z 向前。</li>
+                            <li>检查 NDC 深度是 ZO 还是 NO。</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3>数值检查</h3>
+                        <ul>
+                            <li>用 <code>M * Inverse(M) ≈ I</code> 验证求逆。</li>
+                            <li>不要用精确相等比较一般浮点结果。</li>
+                            <li>近平面不要无限接近 0。</li>
+                            <li>非均匀缩放后的法线必须使用逆转置。</li>
+                            <li>奇异矩阵应返回失败，不应继续传播 NaN。</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>建议手算练习</h3>
+                <ol>
+                    <li>手算二维矩阵 <code>[[2,1],[0,3]]</code> 的行列式、逆矩阵，并验证乘积。</li>
+                    <li>构造“缩放 2 倍、绕 Z 旋转 90°、平移 (3,1)”的二维齐次矩阵。</li>
+                    <li>从相似三角形重新推导 <code>yScale=1/tan(fov/2)</code>。</li>
+                    <li>证明纯旋转矩阵满足 R⁻¹=Rᵀ。</li>
+                    <li>用 n'=(M⁻¹)ᵀn 验证非均匀缩放后法线仍垂直切线。</li>
+                </ol>
+            </section>
+
+            <nav class="footer-nav" aria-label="文档尾部导航">
+                <a href="#convention">返回顶部</a>
+                <a href="Quaternion_Math_Guide.html">下一篇：Quaternion 数学原理与引擎实现</a>
+            </nav>
+        </main>
+    </div>
+
+    <script>
+        "use strict";
+
+        const colors = {
+            ink: "#18201d",
+            muted: "#7c8983",
+            line: "#d9dfdb",
+            green: "#147a56",
+            coral: "#c6533f",
+            blue: "#246a8d",
+            paper: "#ffffff"
+        };
+
+        function prepareCanvas(canvas) {
+            const ratio = Math.max(1, window.devicePixelRatio || 1);
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.round(rect.width * ratio);
+            canvas.height = Math.round(rect.height * ratio);
+            const context = canvas.getContext("2d");
+            context.setTransform(ratio, 0, 0, ratio, 0, 0);
+            context.lineCap = "round";
+            context.lineJoin = "round";
+            return { context, width: rect.width, height: rect.height };
+        }
+
+        function arrow(context, fromX, fromY, toX, toY, color, label) {
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            context.strokeStyle = color;
+            context.fillStyle = color;
+            context.lineWidth = 2.5;
+            context.beginPath();
+            context.moveTo(fromX, fromY);
+            context.lineTo(toX, toY);
+            context.stroke();
+            context.beginPath();
+            context.moveTo(toX, toY);
+            context.lineTo(toX - 10 * Math.cos(angle - Math.PI / 6), toY - 10 * Math.sin(angle - Math.PI / 6));
+            context.lineTo(toX - 10 * Math.cos(angle + Math.PI / 6), toY - 10 * Math.sin(angle + Math.PI / 6));
+            context.closePath();
+            context.fill();
+            if (label) {
+                context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+                context.fillText(label, toX + 7, toY - 7);
+            }
+        }
+
+        function drawBasis() {
+            const canvas = document.getElementById("basisCanvas");
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const originX = width * 0.48;
+            const originY = height * 0.58;
+            const scale = Math.min(width, height) * 0.12;
+            const c0 = { x: 1.45, y: -0.45 };
+            const c1 = { x: 0.55, y: -1.2 };
+
+            context.strokeStyle = colors.line;
+            context.lineWidth = 1;
+            for (let i = -4; i <= 4; i += 1) {
+                context.beginPath();
+                context.moveTo(originX + (c0.x * -4 + c1.x * i) * scale, originY + (c0.y * -4 + c1.y * i) * scale);
+                context.lineTo(originX + (c0.x * 4 + c1.x * i) * scale, originY + (c0.y * 4 + c1.y * i) * scale);
+                context.stroke();
+                context.beginPath();
+                context.moveTo(originX + (c1.x * -4 + c0.x * i) * scale, originY + (c1.y * -4 + c0.y * i) * scale);
+                context.lineTo(originX + (c1.x * 4 + c0.x * i) * scale, originY + (c1.y * 4 + c0.y * i) * scale);
+                context.stroke();
+            }
+
+            arrow(context, originX, originY, originX + scale, originY, colors.muted, "e₁");
+            arrow(context, originX, originY, originX, originY - scale, colors.muted, "e₂");
+            arrow(context, originX, originY, originX + c0.x * scale, originY + c0.y * scale, colors.green, "T(e₁) = column 0");
+            arrow(context, originX, originY, originX + c1.x * scale, originY + c1.y * scale, colors.coral, "T(e₂) = column 1");
+        }
+
+        function drawView() {
+            const canvas = document.getElementById("viewCanvas");
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const eye = { x: width * 0.68, y: height * 0.36 };
+            const target = { x: width * 0.34, y: height * 0.64 };
+
+            context.strokeStyle = colors.line;
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(30, height - 40);
+            context.lineTo(width - 30, height - 40);
+            context.stroke();
+            arrow(context, 70, height - 40, 150, height - 40, colors.muted, "world X");
+            arrow(context, 70, height - 40, 70, height - 120, colors.muted, "world Y");
+
+            context.fillStyle = colors.coral;
+            context.beginPath();
+            context.arc(target.x, target.y, 8, 0, Math.PI * 2);
+            context.fill();
+            context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+            context.fillText("target", target.x + 12, target.y + 22);
+
+            context.save();
+            context.translate(eye.x, eye.y);
+            const angle = Math.atan2(target.y - eye.y, target.x - eye.x);
+            context.rotate(angle);
+            context.fillStyle = colors.ink;
+            context.beginPath();
+            context.moveTo(18, 0);
+            context.lineTo(-12, -11);
+            context.lineTo(-12, 11);
+            context.closePath();
+            context.fill();
+            context.restore();
+
+            arrow(context, eye.x, eye.y, target.x, target.y, colors.green, "forward (+Z)");
+            const dx = target.x - eye.x;
+            const dy = target.y - eye.y;
+            const length = Math.hypot(dx, dy);
+            const rx = -dy / length;
+            const ry = dx / length;
+            arrow(context, eye.x, eye.y, eye.x + rx * 80, eye.y + ry * 80, colors.blue, "right");
+
+            context.setLineDash([6, 6]);
+            context.strokeStyle = colors.coral;
+            context.beginPath();
+            context.moveTo(eye.x, eye.y);
+            context.lineTo(width * 0.24, height * 0.25);
+            context.stroke();
+            context.setLineDash([]);
+            context.fillStyle = colors.coral;
+            context.fillText("View = inverse(camera world transform)", width * 0.08, height * 0.2);
+        }
+
+        function drawProjection() {
+            const canvas = document.getElementById("projectionCanvas");
+            const range = document.getElementById("fovRange");
+            const output = document.getElementById("fovValue");
+            const fov = Number(range.value);
+            output.value = `${fov}°`;
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+
+            const eyeX = width * 0.16;
+            const eyeY = height * 0.5;
+            const nearX = width * 0.38;
+            const farX = width * 0.9;
+            const halfAngle = fov * Math.PI / 360;
+            const nearHalf = Math.tan(halfAngle) * (nearX - eyeX) * 0.55;
+            const farHalf = Math.tan(halfAngle) * (farX - eyeX) * 0.55;
+
+            context.fillStyle = "#e7f4ee";
+            context.beginPath();
+            context.moveTo(eyeX, eyeY);
+            context.lineTo(farX, eyeY - farHalf);
+            context.lineTo(farX, eyeY + farHalf);
+            context.closePath();
+            context.fill();
+
+            context.strokeStyle = colors.green;
+            context.lineWidth = 2;
+            context.beginPath();
+            context.moveTo(eyeX, eyeY);
+            context.lineTo(farX, eyeY - farHalf);
+            context.moveTo(eyeX, eyeY);
+            context.lineTo(farX, eyeY + farHalf);
+            context.stroke();
+
+            context.strokeStyle = colors.coral;
+            context.lineWidth = 3;
+            context.beginPath();
+            context.moveTo(nearX, eyeY - nearHalf);
+            context.lineTo(nearX, eyeY + nearHalf);
+            context.stroke();
+            context.strokeStyle = colors.blue;
+            context.beginPath();
+            context.moveTo(farX, eyeY - farHalf);
+            context.lineTo(farX, eyeY + farHalf);
+            context.stroke();
+
+            context.fillStyle = colors.ink;
+            context.beginPath();
+            context.arc(eyeX, eyeY, 6, 0, Math.PI * 2);
+            context.fill();
+            context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+            context.fillText("eye", eyeX - 10, eyeY - 15);
+            context.fillStyle = colors.coral;
+            context.fillText("near", nearX - 15, Math.max(20, eyeY - nearHalf - 10));
+            context.fillStyle = colors.blue;
+            context.fillText("far", farX - 25, Math.max(20, eyeY - farHalf - 10));
+            context.fillStyle = colors.green;
+            context.fillText(`yScale = ${(1 / Math.tan(halfAngle)).toFixed(3)}`, width * 0.5, height - 24);
+            arrow(context, eyeX + 18, eyeY, nearX - 12, eyeY, colors.green, "+Z / camera forward");
+        }
+
+        function drawAll() {
+            drawBasis();
+            drawView();
+            drawProjection();
+        }
+
+        document.getElementById("fovRange").addEventListener("input", drawProjection);
+        window.addEventListener("resize", drawAll);
+        drawAll();
+
+        const initialSection =
+            window.location.hash.slice(1) || new URLSearchParams(window.location.search).get("section");
+        const initialTarget = document.getElementById(initialSection);
+        if (initialTarget) {
+            window.setTimeout(() => initialTarget.scrollIntoView({ block: "start" }), 120);
+        }
+    </script>
+</body>
+</html>

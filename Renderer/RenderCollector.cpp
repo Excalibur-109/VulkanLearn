@@ -28,14 +28,16 @@ bool IsValidSphere(const rhi::RHIBoundingSphere& sphere) noexcept {
            std::isfinite(sphere.center.z);
 }
 
-glm::vec3 BoundsCenter(const rhi::RHIRenderObjectDesc& object) noexcept {
+float3 BoundsCenter(const rhi::RHIRenderObjectDesc& object) noexcept {
     if (IsValidSphere(object.worldBoundsSphere)) {
         return object.worldBoundsSphere.center;
     }
     if (IsValidBox(object.worldBounds)) {
         return (object.worldBounds.min + object.worldBounds.max) * 0.5F;
     }
-    return glm::vec3(object.transform.localToWorld[3]);
+    // Math 使用行主序加列向量右乘，平移位于最后一列。
+    const float4x4& localToWorld = object.transform.localToWorld;
+    return {localToWorld[0][3], localToWorld[1][3], localToWorld[2][3]};
 }
 
 bool IsOutsideFrustum(
@@ -133,11 +135,11 @@ RenderView RenderCollector::Collect(
             continue;
         }
 
-        const glm::vec3 center = BoundsCenter(object);
-        const glm::vec3 cameraToObject = center - camera.position;
+        const float3 center = BoundsCenter(object);
+        const float3 cameraToObject = center - camera.position;
         RenderDrawItem item{};
         item.object = slot.handle;
-        item.cameraDistanceSquared = glm::dot(cameraToObject, cameraToObject);
+        item.cameraDistanceSquared = Dot(cameraToObject, cameraToObject);
         item.sortingKey = object.sortingKey;
         item.pipelineKey = material->pipeline.value;
         item.materialKey = object.material.value;

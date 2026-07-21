@@ -43,27 +43,36 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
+# Math: header-only vector/matrix/geometry library shared by RHI and applications
+# -----------------------------------------------------------------------------
+option(MATH_BUILD_BENCHMARKS "Build the standalone Math performance benchmarks" OFF)
+option(MATH_ENABLE_SIMD "Enable architecture-specific Math SIMD paths" ON)
+
+add_library(Math INTERFACE)
+target_sources(Math INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Math.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Scalar.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Vector.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Functions.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Curves.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Color.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Matrix.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Quaternion.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Random.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Math/Rendering.hpp
+)
+target_include_directories(Math INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(Math INTERFACE cxx_std_20)
+if(NOT MATH_ENABLE_SIMD)
+    target_compile_definitions(Math INTERFACE MATH_DISABLE_SIMD=1)
+endif()
+add_library(Math::Math ALIAS Math)
+
+# -----------------------------------------------------------------------------
 # 第三方依赖
 # -----------------------------------------------------------------------------
 find_package(Threads REQUIRED)
-
-# glm - 头文件库，RHIDefinitions.hpp 使用了 glm/glm.hpp
-find_package(glm QUIET)
-if(NOT glm_FOUND)
-    # 退化路径：未安装 glm 的 find 包时，尝试用常见位置
-    find_path(GLM_INCLUDE_DIR glm/glm.hpp
-        HINTS
-            ${GLM_ROOT}
-            $ENV{GLM_ROOT}
-            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glm-1.0.1
-            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glm
-        PATH_SUFFIXES glm include
-        REQUIRED)
-    add_library(glm_iface INTERFACE)
-    add_library(glm::glm ALIAS glm_iface)
-    target_include_directories(glm_iface INTERFACE ${GLM_INCLUDE_DIR})
-    message(STATUS "glm: using fallback include at ${GLM_INCLUDE_DIR}")
-endif()
 
 # Vulkan SDK
 find_package(Vulkan REQUIRED)
@@ -137,7 +146,7 @@ target_include_directories(RHI
 # 链接公共依赖
 target_link_libraries(RHI
     PUBLIC
-        glm::glm
+        Math::Math
         Vulkan::Vulkan
         Threads::Threads
 )
@@ -156,6 +165,22 @@ endif()
 
 # 库别名 RHI::RHI，调用方可以直接 target_link_libraries(... RHI::RHI)
 add_library(RHI::RHI ALIAS RHI)
+
+if(BUILD_TESTING)
+    add_executable(MathTests
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tests/MathTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tests/NamespaceOptOutTests.cpp
+    )
+    target_link_libraries(MathTests PRIVATE Math::Math)
+    add_test(NAME MathTests COMMAND MathTests)
+endif()
+
+if(MATH_BUILD_BENCHMARKS)
+    add_executable(MathBenchmarks
+        ${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MathBenchmarks.cpp
+    )
+    target_link_libraries(MathBenchmarks PRIVATE Math::Math)
+endif()
 
 # -----------------------------------------------------------------------------
 # Renderer：引用现有 RHI 的上层场景收集、排序和帧图构建模块
@@ -220,11 +245,7 @@ message(STATUS "  Build type  : ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ std     : ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Platform    : ${CMAKE_SYSTEM_NAME}")
 message(STATUS "  Vulkan      : ${Vulkan_VERSION} (${VULKAN_LIBRARY})")
-if(glm_FOUND)
-    message(STATUS "  glm         : (found via find_package)")
-else()
-    message(STATUS "  glm         : ${GLM_INCLUDE_DIR} (fallback)")
-endif()
+message(STATUS "  Math SIMD   : ${MATH_ENABLE_SIMD}")
 if(WIN32)
     set(RHI_D3D_BACKENDS_STATUS "ON")
 else()

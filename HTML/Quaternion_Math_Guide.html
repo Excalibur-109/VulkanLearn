@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="从轴角、Hamilton 积到 Slerp 与矩阵转换的四元数完整学习文档">
+    <title>Quaternion | 数学原理与引擎实现</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #59645f;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --coral: #c6533f;
+            --blue: #246a8d;
+            --gold: #9a6b12;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.72;
+            letter-spacing: 0;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+        .masthead { color: #f5fbf8; background: var(--nav); border-bottom: 4px solid var(--coral); }
+        .masthead-inner {
+            width: min(1440px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .masthead-inner > div:first-child { min-width: 0; }
+
+        .eyebrow { margin: 0 0 6px; color: #f1ad9f; font-size: 13px; font-weight: 700; text-transform: uppercase; }
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin-bottom: 11px; font-size: 19px; }
+        h4 { margin-bottom: 8px; font-size: 16px; }
+        .subtitle { margin: 0; color: #c6d5ce; max-width: 780px; overflow-wrap: anywhere; }
+
+        .doc-switch { flex: 0 0 auto; display: flex; border: 1px solid #56645f; border-radius: var(--radius); overflow: hidden; }
+        .doc-switch a { color: #dce9e3; padding: 8px 13px; text-decoration: none; border-right: 1px solid #56645f; font-size: 14px; }
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #ffffff; background: var(--coral); }
+
+        .layout { width: min(1440px, 100%); margin: 0 auto; display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+        .toc {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: auto;
+            padding: 30px 24px 50px;
+            background: var(--surface);
+            border-right: 1px solid var(--line);
+        }
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { list-style: none; margin: 0; padding: 0; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 9px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--coral); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        main > section { max-width: 1040px; margin: 0 auto; padding: 0 0 56px; scroll-margin-top: 24px; }
+        main > section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+        .lead { color: #34403b; font-size: 18px; max-width: 870px; }
+
+        .two-column, .three-column, .four-column { display: grid; gap: 18px; margin: 22px 0; }
+        .two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .four-column { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+        .fact { padding: 16px; background: var(--surface); border-top: 3px solid var(--coral); border-radius: var(--radius); }
+        .fact:nth-child(even) { border-top-color: var(--green); }
+        .fact strong { display: block; margin-bottom: 4px; }
+        .fact p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .formula {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow-x: auto;
+            color: #2c1712;
+            background: #fbefec;
+            border-left: 4px solid var(--coral);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+        }
+        .formula.alt { color: #12241d; background: var(--green-soft); border-left-color: var(--green); }
+        .formula .label { color: var(--coral); font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; font-weight: 700; }
+
+        .derivation {
+            --derivation-accent: var(--coral);
+            margin: 22px 0;
+            overflow: hidden;
+            background: #fffdfc;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--derivation-accent);
+            border-radius: var(--radius);
+        }
+
+        .derivation-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 16px;
+            background: #fbefec;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .derivation-kind {
+            color: var(--derivation-accent);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .derivation-condition {
+            display: grid;
+            grid-template-columns: 72px minmax(0, 1fr);
+            gap: 12px;
+            padding: 11px 16px;
+            color: var(--muted);
+            background: #faf8f7;
+            border-bottom: 1px solid var(--line);
+            font-size: 14px;
+        }
+
+        .derivation-condition strong { color: var(--ink); }
+
+        .derivation-row {
+            display: grid;
+            grid-template-columns: 32px minmax(260px, 1fr) minmax(180px, 0.72fr);
+            gap: 14px;
+            align-items: center;
+            padding: 14px 16px;
+        }
+
+        .derivation-row + .derivation-row { border-top: 1px solid var(--line); }
+
+        .derivation-index {
+            width: 27px;
+            height: 27px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--derivation-accent);
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .derivation-expression {
+            min-width: 0;
+            color: #2c1712;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.55;
+        }
+
+        .derivation-reason {
+            padding-left: 14px;
+            color: var(--muted);
+            border-left: 2px solid #decac5;
+            font-size: 14px;
+            line-height: 1.55;
+        }
+
+        .equation {
+            display: grid;
+            grid-template-columns: minmax(72px, max-content) 22px minmax(0, 1fr);
+            align-items: baseline;
+            column-gap: 6px;
+        }
+
+        .equation + .equation { margin-top: 5px; }
+        .equation .lhs { text-align: right; }
+        .equation .relation { text-align: center; }
+
+        .math-stack { display: grid; gap: 6px; }
+
+        .fraction {
+            display: inline-grid;
+            grid-template-rows: auto auto;
+            vertical-align: middle;
+            text-align: center;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+
+        .fraction .numerator { padding: 0 4px 2px; border-bottom: 1px solid currentColor; }
+        .fraction .denominator { padding: 2px 4px 0; }
+
+        .derivation-result {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            color: #452018;
+            background: #fbefec;
+            border-top: 1px solid var(--line);
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 19px;
+            font-weight: 700;
+        }
+
+        .therefore {
+            color: var(--derivation-accent);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .step-list { counter-reset: math-step; list-style: none; padding: 0; }
+        .step-list > li { counter-increment: math-step; position: relative; padding: 0 0 22px 48px; margin: 0; }
+        .step-list > li::before {
+            content: counter(math-step);
+            position: absolute;
+            top: 1px;
+            left: 0;
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--coral);
+            border-radius: 50%;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .note, .warning {
+            margin: 20px 0;
+            padding: 15px 18px;
+            border-left: 4px solid var(--blue);
+            background: #edf5f9;
+        }
+        .warning { border-left-color: var(--gold); background: #faf5e8; }
+        .note strong, .warning strong { display: block; margin-bottom: 3px; }
+
+        code { padding: 1px 5px; color: #174c39; background: #edf3ef; border-radius: 3px; font-family: Consolas, "Cascadia Code", monospace; font-size: 0.92em; }
+        pre.code { margin: 18px 0; padding: 18px 20px; overflow: auto; color: var(--code-ink); background: var(--code); border-radius: var(--radius); line-height: 1.58; tab-size: 4; }
+        pre.code code { padding: 0; color: inherit; background: transparent; font-size: 14px; }
+        .comment { color: #91b6a5; }
+        .keyword { color: #7cc7e8; }
+        .type { color: #f1c675; }
+
+        .matrix {
+            display: grid;
+            gap: 7px 14px;
+            position: relative;
+            padding: 12px 17px;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 17px;
+            white-space: nowrap;
+        }
+
+        .matrix::before, .matrix::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            border-top: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .matrix::before { left: 0; border-left: 2px solid var(--ink); }
+        .matrix::after { right: 0; border-right: 2px solid var(--ink); }
+        .m3 { grid-template-columns: repeat(3, auto); }
+        .operator { font: 20px Cambria, serif; }
+
+        .matrix-display { white-space: normal; }
+        .formula-matrix {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .matrix-name { min-width: max-content; font-weight: 700; }
+
+        figure.diagram { margin: 24px 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fbfcfb; }
+        figure.diagram canvas { display: block; width: 100%; height: 340px; }
+        figure.diagram figcaption { padding: 11px 15px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+
+        .control-row { display: grid; grid-template-columns: 120px minmax(180px, 420px) 90px; align-items: center; gap: 14px; margin: 14px 0 4px; }
+        input[type="range"] { width: 100%; accent-color: var(--coral); }
+        output { color: var(--coral); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+        .equation-map { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 18px 0; }
+        .equation-map dt { color: var(--coral); font-family: Cambria, serif; font-size: 18px; font-weight: 700; }
+        .equation-map dd { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+
+        table { width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 11px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+        th { color: #ffffff; background: #26352f; }
+        tbody tr:nth-child(even) { background: var(--surface); }
+
+        .footer-nav { max-width: 1040px; margin: 0 auto; padding-top: 28px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 20px; }
+
+        @media (max-width: 1050px) {
+            .layout { grid-template-columns: 220px minmax(0, 1fr); }
+            .four-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 760px) {
+            .masthead-inner { display: block; padding-top: 22px; }
+            h1 { max-width: 100%; font-size: 26px; overflow-wrap: anywhere; }
+            .doc-switch { margin-top: 20px; width: fit-content; }
+            .layout { display: block; }
+            .toc { position: static; width: 100%; height: auto; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+            .toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+            main { padding: 34px 20px 64px; }
+            main > section { padding-bottom: 42px; }
+            main > section + section { padding-top: 40px; }
+            .two-column, .three-column, .four-column { grid-template-columns: 1fr; }
+            .control-row { grid-template-columns: 90px minmax(0, 1fr) 70px; }
+            figure.diagram canvas { height: 280px; }
+            .derivation-condition { grid-template-columns: 1fr; gap: 3px; }
+            .derivation-row { grid-template-columns: 29px minmax(0, 1fr); gap: 10px; padding: 13px 12px; }
+            .derivation-expression { font-size: 16px; overflow-x: auto; }
+            .derivation-reason { grid-column: 2; padding: 6px 0 0; border-top: 1px dashed #decac5; border-left: 0; }
+            .equation { grid-template-columns: minmax(52px, max-content) 18px minmax(90px, 1fr); column-gap: 4px; }
+            .formula-matrix { gap: 7px; }
+            .formula-matrix.named-matrix {
+                display: grid;
+                grid-template-columns: auto auto;
+                align-items: center;
+                justify-content: center;
+            }
+            .formula-matrix.named-matrix > .matrix { grid-column: 1 / -1; justify-self: center; }
+            .matrix-display .matrix { gap: 5px 8px; padding: 9px 13px; font-size: 14px; }
+            .footer-nav { display: block; }
+            .footer-nav a { display: block; margin-top: 10px; }
+        }
+
+        @media print {
+            .masthead { color: #000000; background: #ffffff; border-bottom: 2px solid #000000; }
+            .subtitle, .eyebrow { color: #333333; }
+            .doc-switch, .toc, .control-row { display: none; }
+            .layout { display: block; }
+            main { padding: 24px; }
+            main > section { break-inside: avoid; }
+            pre.code { white-space: pre-wrap; }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div>
+                <p class="eyebrow">Math Library Study Notes</p>
+                <h1>Quaternion 数学原理与引擎实现</h1>
+                <p class="subtitle">从复数旋转推广到四维单位球，推导轴角、Hamilton 积、qvq⁻¹、矩阵互转和球面插值。</p>
+            </div>
+            <nav class="doc-switch" aria-label="数学文档切换">
+                <a href="Matrix_Math_Guide.html">Matrix</a>
+                <a href="Quaternion_Math_Guide.html" aria-current="page">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
+                <a href="Curves_Math_Guide.html">Curves</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="toc">
+            <strong>目录</strong>
+            <ol>
+                <li><a href="#convention">0. 表示约定</a></li>
+                <li><a href="#origin">1. 从复数到四元数</a></li>
+                <li><a href="#axis-angle">2. 轴角与半角</a></li>
+                <li><a href="#multiply">3. Hamilton 积</a></li>
+                <li><a href="#inverse">4. 共轭与逆</a></li>
+                <li><a href="#rotate">5. 旋转向量</a></li>
+                <li><a href="#matrix">6. 与矩阵互转</a></li>
+                <li><a href="#euler">7. Euler 组合</a></li>
+                <li><a href="#interpolation">8. Nlerp 与 Slerp</a></li>
+                <li><a href="#trs">9. TRS 与层级</a></li>
+                <li><a href="#stability">10. 稳定性与性能</a></li>
+                <li><a href="#mapping">11. API 对照</a></li>
+            </ol>
+        </aside>
+
+        <main>
+            <section id="convention">
+                <h2>0. 当前实现的表示约定</h2>
+                <p class="lead">四元数不是“四个欧拉角”，而是一个实部加三个虚部。当前类型按 <code>(x,y,z,w)</code> 存储，其中 xyz 是虚部向量，w 是实部。本文世界坐标统一采用左手系：+X 向右、+Y 向上、+Z 向前。</p>
+
+                <div class="four-column">
+                    <div class="fact"><strong>存储顺序</strong><p>Quaternion(x, y, z, w)</p></div>
+                    <div class="fact"><strong>单位旋转</strong><p>(0,0,0,1)</p></div>
+                    <div class="fact"><strong>组合</strong><p>lhs*rhs：先 rhs，后 lhs</p></div>
+                    <div class="fact"><strong>向量旋转</strong><p>q·(v,0)·q⁻¹</p></div>
+                </div>
+
+                <div class="formula">q = xi + yj + zk + w
+  = (v, w)，其中 v=(x,y,z)
+
+旋转四元数必须满足：||q|| = √(x²+y²+z²+w²) = 1</div>
+
+                <div class="note">
+                    <strong>坐标系手性不会改写四元数代数</strong>
+                    左手系不会改变 Hamilton 积、<code>q·(v,0)·q⁻¹</code>、共轭或逆的公式。手性主要决定哪个方向被解释为相机前方，以及 View/Projection 如何构造；不能因为改用左手 View/Projection 就随意取反四元数或旋转角。
+                </div>
+
+                <div class="warning">
+                    <strong>Quaternion 的分量本身不是旋转轴和角度</strong>
+                    只有通过轴角关系 <code>xyz = axis·sin(θ/2)</code>、<code>w = cos(θ/2)</code> 才能解释它们。
+                </div>
+            </section>
+
+            <section id="origin">
+                <h2>1. 为什么复数能旋转，四元数如何推广</h2>
+
+                <h3>1.1 二维复数旋转</h3>
+                <p>二维单位复数可以写为欧拉公式：</p>
+                <div class="formula">z = cosθ + i sinθ，且 i²=-1</div>
+                <p>把二维点 p=x+iy 乘 z：</p>
+                <div class="formula">zp = (cosθ+i sinθ)(x+iy)
+   = (x cosθ-y sinθ) + i(x sinθ+y cosθ)</div>
+                <p>实部和虚部恰好是二维旋转矩阵的结果。复数乘法把角度相加，因此连续组合稳定。</p>
+
+                <h3>1.2 三维为什么需要三个虚数单位</h3>
+                <p>三维旋转不再只绕一个固定平面，需要三个彼此正交的虚数方向 i、j、k：</p>
+                <div class="formula">i² = j² = k² = ijk = -1
+
+ij =  k，ji = -k
+jk =  i，kj = -i
+ki =  j，ik = -j</div>
+                <p>乘法次序交换后符号改变，所以四元数乘法不满足交换律。这与三维旋转的次序相关性完全一致。</p>
+
+                <figure class="diagram">
+                    <canvas id="doubleCoverCanvas" aria-label="四元数双覆盖图解"></canvas>
+                    <figcaption>单位四元数位于四维单位球 S³。图中用圆作降维示意：q 和 -q 位于对径点，却映射为同一个三维旋转。</figcaption>
+                </figure>
+
+                <h3>1.3 为什么 q 与 -q 表示同一个旋转</h3>
+                <div class="formula">(-q) · p · (-q)⁻¹
+= (-q) · p · (-q⁻¹)
+= q · p · q⁻¹</div>
+                <p>负号出现两次后抵消。这叫四元数对 SO(3) 旋转群的<strong>双覆盖</strong>，也是插值时必须检查点积符号的原因。</p>
+            </section>
+
+            <section id="axis-angle">
+                <h2>2. 轴角公式为什么使用半角</h2>
+                <p>给定单位旋转轴 n=(nₓ,nᵧ,n_z) 和旋转角 θ，单位四元数为：</p>
+                <div class="formula">q = ( n sin(θ/2), cos(θ/2) )
+
+x = nₓ sin(θ/2)
+y = nᵧ sin(θ/2)
+z = n_z sin(θ/2)
+w = cos(θ/2)</div>
+
+                <p>本文沿用 <code>Quaternion.hpp</code> 的正角定义：<code>axis=(0,0,1)</code>、<code>θ=+90°</code> 时，<code>+X</code> 会旋转到 <code>+Y</code>。左手系的 <code>+Z</code> 同时是默认前向，但这不要求把轴角公式改成负半角。</p>
+
+                <h3>2.1 单位长度验证</h3>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">逐步验证</span>
+                        <strong>轴角四元数为什么天然是单位长度</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>前提</strong>
+                        <span>旋转轴 n 已归一化，因此 ||n||=1；令 α=θ/2，q=(n sinα, cosα)。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">||q||²</span><span class="relation">=</span><span>||n sinα||² + cos²α</span>
+                        </div>
+                        <div class="derivation-reason">四元数长度平方等于虚部长度平方加实部平方。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">||q||²</span><span class="relation">=</span><span>||n||²sin²α + cos²α</span>
+                        </div>
+                        <div class="derivation-reason">标量 sinα 可从向量长度中提出，平方后成为 sin²α。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">||q||²</span><span class="relation">=</span><span>sin²α + cos²α = 1</span>
+                        </div>
+                        <div class="derivation-reason">代入 ||n||=1，再使用三角恒等式 sin²α+cos²α=1。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">结论</span>
+                        <span>||q||=1，因此共轭 q* 同时也是逆 q⁻¹</span>
+                    </div>
+                </div>
+
+                <h3>2.2 半角来自左右各乘一次</h3>
+                <p>向量旋转使用 qpq⁻¹，q 和 q⁻¹ 分别参与一次。展开后会出现双角公式：</p>
+                <div class="formula">2sin(θ/2)cos(θ/2) = sinθ
+cos²(θ/2)-sin²(θ/2) = cosθ</div>
+                <p>两次乘法把四元数中的半角合成为最终空间旋转角 θ。如果直接存 sinθ/cosθ，最终会产生 2θ。</p>
+
+                <div class="control-row">
+                    <label for="angleRange">绕 Z 轴角度</label>
+                    <input id="angleRange" type="range" min="0" max="360" value="90" step="1">
+                    <output id="angleValue" for="angleRange">90°</output>
+                </div>
+                <figure class="diagram">
+                    <canvas id="axisAngleCanvas" aria-label="轴角四元数图解"></canvas>
+                    <figcaption>绿色箭头是 +X 原向量，橙色箭头是旋转结果；绕 +Z 旋转 +90° 时结果为 +Y。下方实时列出 q=(0,0,sin(θ/2),cos(θ/2))。</figcaption>
+                </figure>
+
+                <h3>2.3 90° 绕 Z 轴的具体数值</h3>
+                <div class="formula">axis = (0,0,1)，θ = 90° = π/2
+θ/2 = 45° = π/4
+sin(π/4)=cos(π/4)=√2/2
+
+q = (0, 0, √2/2, √2/2)
+  ≈ (0, 0, 0.7071068, 0.7071068)</div>
+
+                <pre class="code"><code><span class="type">floatQuaternion</span> q = QuaternionFromAxisAngle(
+    <span class="type">float3</span>(0.0F, 0.0F, 1.0F),
+    Radians(90.0F));</code></pre>
+            </section>
+
+            <section id="multiply">
+                <h2>3. Hamilton 积如何得到旋转组合</h2>
+                <p>把四元数写成 q=(v,w)，v 是三维虚部。两个四元数相乘可整理为点积和叉积：</p>
+                <div class="formula alt">q₁q₂ = ( w₁v₂ + w₂v₁ + v₁×v₂,
+          w₁w₂ - v₁·v₂ )</div>
+
+                <h3>3.1 从基单位乘法展开</h3>
+                <p>令 q₁=x₁i+y₁j+z₁k+w₁，q₂=x₂i+y₂j+z₂k+w₂。逐项相乘，使用 i²=j²=k²=-1 以及 ij=k 等规则，收集 i/j/k/实数项：</p>
+                <div class="formula">x = w₁x₂ + x₁w₂ + y₁z₂ - z₁y₂
+y = w₁y₂ - x₁z₂ + y₁w₂ + z₁x₂
+z = w₁z₂ + x₁y₂ - y₁x₂ + z₁w₂
+w = w₁w₂ - x₁x₂ - y₁y₂ - z₁z₂</div>
+
+                <h3>3.2 为什么乘法顺序就是旋转顺序</h3>
+                <p>先用 q₂ 旋转 p，再用 q₁：</p>
+                <div class="formula">p' = q₂ p q₂⁻¹
+p'' = q₁ p' q₁⁻¹
+    = q₁(q₂ p q₂⁻¹)q₁⁻¹
+    = (q₁q₂) p (q₂⁻¹q₁⁻¹)
+    = (q₁q₂) p (q₁q₂)⁻¹</div>
+                <p>所以组合四元数 <code>q1 * q2</code> 表示先 q2、后 q1，与当前列向量矩阵组合规则一致。</p>
+
+                <div class="warning">
+                    <strong>不满足交换律</strong>
+                    绕 X 90° 后绕 Y 90°，通常不等于绕 Y 后绕 X。代码中不能随意交换四元数乘法顺序。
+                </div>
+            </section>
+
+            <section id="inverse">
+                <h2>4. 长度、共轭与逆四元数</h2>
+
+                <dl class="equation-map">
+                    <dt>长度</dt><dd>||q|| = √(x²+y²+z²+w²)</dd>
+                    <dt>共轭</dt><dd>q* = (-x,-y,-z,w)</dd>
+                    <dt>逆</dt><dd>q⁻¹ = q* / ||q||²</dd>
+                    <dt>单位四元数</dt><dd>||q||=1，因此 q⁻¹=q*</dd>
+                </dl>
+
+                <h3>4.1 为什么 q·q* 只剩实数</h3>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">乘积推导</span>
+                        <strong>共轭为何能够构造四元数的逆</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>定义</strong>
+                        <span>q=(v,w)，q*=(-v,w)；Hamilton 积的虚部使用叉积，实部使用点积。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q q*</span><span class="relation">=</span><span>(v,w)(-v,w)</span>
+                        </div>
+                        <div class="derivation-reason">共轭只翻转虚部 v，实部 w 保持不变。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">vector(q q*)</span><span class="relation">=</span><span>-wv + wv + v×(-v) = 0</span>
+                        </div>
+                        <div class="derivation-reason">前两项抵消；平行向量叉积为 0，所以虚部完全消失。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">scalar(q q*)</span><span class="relation">=</span><span>w²-v·(-v)=w²+||v||²</span>
+                        </div>
+                        <div class="derivation-reason">v·v=||v||²，因此负向量把点积项的符号再次翻转。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q q*</span><span class="relation">=</span><span>(0, ||q||²)</span>
+                        </div>
+                        <div class="derivation-reason">因为 ||q||²=||v||²+w²，乘积只剩一个实标量。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">5</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q(<span class="fraction"><span class="numerator">q*</span><span class="denominator">||q||²</span></span>)</span><span class="relation">=</span><span>1</span>
+                        </div>
+                        <div class="derivation-reason">当 q≠0 时同除以 ||q||²，便得到乘法单位元 (0,1)。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">结论</span>
+                        <span>q⁻¹ = <span class="fraction"><span class="numerator">q*</span><span class="denominator">||q||²</span></span>；若 ||q||=1，则 q⁻¹=q*</span>
+                    </div>
+                </div>
+                <p>因此 q(q*/||q||²)=1。对单位旋转，求逆只需翻转 xyz，代表绕相反方向旋转同样角度。</p>
+
+                <h3>4.2 为什么要保持单位长度</h3>
+                <p><code>Rotate</code> 使用共轭等价于逆的前提是 ||q||=1。若长度漂移，旋转会混入缩放，矩阵转换也不再正交。</p>
+                <pre class="code"><code><span class="type">floatQuaternion</span> rotation = Normalize(accumulatedRotation);
+<span class="type">floatQuaternion</span> inverse = Conjugate(rotation); <span class="comment">// 单位旋转才成立</span></code></pre>
+            </section>
+
+            <section id="rotate">
+                <h2>5. q·p·q⁻¹ 如何旋转向量</h2>
+                <p>把三维向量 p 嵌入纯虚四元数 P=(p,0)。对单位 q=(u,s)：</p>
+                <div class="formula">P' = qPq⁻¹
+q = (u,s)，q⁻¹=(-u,s)</div>
+
+                <h3>5.1 第一次 Hamilton 积</h3>
+                <div class="formula">qP = ( s p + u×p,
+       -u·p )</div>
+
+                <h3>5.2 再乘共轭并整理</h3>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">完整展开</span>
+                        <strong>从 qPq⁻¹ 得到只含两次叉积的旋转公式</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>记号</strong>
+                        <span>q=(u,s) 为单位四元数，P=(p,0)，q⁻¹=(-u,s)；令 qP=(a,b)，其中 a=sp+u×p，b=-u·p。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">P'</span><span class="relation">=</span><span>(a,b)(-u,s)</span>
+                        </div>
+                        <div class="derivation-reason">先保存第一次 Hamilton 积，再与共轭 q⁻¹ 相乘。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">scalar(P')</span><span class="relation">=</span><span>bs+a·u=0</span>
+                        </div>
+                        <div class="derivation-reason">代入 a、b 后，-s(u·p)+s(p·u) 抵消，且 (u×p)·u=0；结果仍是纯虚四元数。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">p'</span><span class="relation">=</span><span>b(-u)+sa+a×(-u)</span>
+                        </div>
+                        <div class="derivation-reason">按 Hamilton 积的虚部公式 w₁v₂+w₂v₁+v₁×v₂ 展开。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">p'</span><span class="relation">=</span><span>(s²-||u||²)p + 2(u·p)u + 2s(u×p)</span>
+                        </div>
+                        <div class="derivation-reason">代入 a、b，并使用 p×u=-u×p 与 (u×p)×u=||u||²p-(u·p)u。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">5</span>
+                        <div class="derivation-expression">
+                            <div class="equation"><span class="lhs">s²-||u||²</span><span class="relation">=</span><span>1-2||u||²</span></div>
+                            <div class="equation"><span class="lhs">u×(u×p)</span><span class="relation">=</span><span>u(u·p)-||u||²p</span></div>
+                        </div>
+                        <div class="derivation-reason">单位条件 s²+||u||²=1；第二式是向量三重积公式。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">6</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">p'</span><span class="relation">=</span><span>p+2s(u×p)+2u×(u×p)</span>
+                        </div>
+                        <div class="derivation-reason">把第 5 步两式代回第 4 步，得到与 Rodrigues 公式等价的形式。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">实现形式</span>
+                        <span>t=2(u×p)，p'=p+s·t+u×t</span>
+                    </div>
+                </div>
+                <p>代码中 u 对应 <code>q.xyz</code>、s 对应 <code>q.w</code>。该形式只需两次叉积，无需真的创建 P、q⁻¹ 和两个临时四元数。</p>
+
+                <ol class="step-list">
+                    <li>第一次叉积找出垂直于旋转轴和输入向量的方向。</li>
+                    <li>乘 2 和实部 w，形成与 sinθ 对应的旋转分量。</li>
+                    <li>第二次叉积形成与 1-cosθ 对应的轴向修正。</li>
+                    <li>与原向量相加，得到 Rodrigues 旋转公式的同一结果。</li>
+                </ol>
+
+                <h3>5.3 90° Z 轴算例</h3>
+                <div class="formula">u=(0,0,√2/2)，s=√2/2，p=(1,0,0)
+
+t = 2(u×p) = 2(0, √2/2, 0) = (0,√2,0)
+s·t = (0,1,0)
+u×t = (-1,0,0)
+
+p' = (1,0,0)+(0,1,0)+(-1,0,0) = (0,1,0)</div>
+
+                <figure class="diagram">
+                    <canvas id="rotationCanvas" aria-label="四元数向量旋转分量图解"></canvas>
+                    <figcaption>旋转结果可看成原向量 p、q.w·t 和 cross(q.xyz,t) 三个向量分量相加。</figcaption>
+                </figure>
+
+                <pre class="code"><code><span class="type">float3</span> rotated = math::Rotate(rotation, vector);
+
+<span class="comment">// 实现直接展开两次叉积，避免创建临时 Quaternion。</span>
+<span class="comment">// 单位四元数前置条件由调用方维护。</span></code></pre>
+            </section>
+
+            <section id="matrix">
+                <h2>6. 四元数与旋转矩阵互转</h2>
+                <p>Quaternion、Matrix3x3、Matrix4x4 的双向转换、稳定分支与缩放/剪切处理，见 <a href="Quaternion_Matrix_Conversion_Guide.html">Quaternion 与 Matrix 转换详解</a>。</p>
+
+                <h3>6.1 从 qpq⁻¹ 收集 p 的系数</h3>
+                <p>把上一节公式完全展开，并分别收集 pₓ、pᵧ、p_z 的系数，可得到：</p>
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">R(q)</span>
+                    <span class="operator">=</span>
+                    <span class="matrix m3" aria-label="四元数对应的三乘三旋转矩阵">
+                        <span>1-2(y²+z²)</span><span>2(xy-zw)</span><span>2(xz+yw)</span>
+                        <span>2(xy+zw)</span><span>1-2(x²+z²)</span><span>2(yz-xw)</span>
+                        <span>2(xz-yw)</span><span>2(yz+xw)</span><span>1-2(x²+y²)</span>
+                    </span>
+                </div>
+                <p><code>Matrix3x3FromQuaternion</code> 先归一化 q，再缓存 xx、xy、wx 等乘积，避免重复计算。</p>
+
+                <h3>6.2 为什么旋转矩阵是正交矩阵</h3>
+                <p>单位四元数旋转保持长度和夹角，因此 R 的列向量仍是正交单位基：</p>
+                <div class="formula">RᵀR = I
+det(R) = 1
+R⁻¹ = Rᵀ</div>
+
+                <h3>6.3 从矩阵恢复四元数</h3>
+                <p>矩阵迹 trace=R₀₀+R₁₁+R₂₂。由矩阵公式可得：</p>
+                <div class="formula">trace = 4w² - 1
+→ w = 1/2 √(trace+1)</div>
+                <p>当 trace>0 时用 w 作主分量稳定；当 trace≤0 时，选择最大对角元素对应的 x/y/z 分支，避免除以接近 0 的数。</p>
+                <ol class="step-list">
+                    <li>计算 trace。</li>
+                    <li>若 trace>0，先求 w，再由矩阵反对称部分求 xyz。</li>
+                    <li>否则比较 R₀₀、R₁₁、R₂₂，选择最大的虚部分量先求。</li>
+                    <li>最后 Normalize，消除输入矩阵的轻微数值误差。</li>
+                </ol>
+
+                <div class="warning">
+                    <strong>输入必须接近纯旋转矩阵</strong>
+                    带非均匀缩放或剪切的 3×3 不能直接转换为单位四元数。应先分解并正交化旋转部分。
+                </div>
+            </section>
+
+            <section id="euler">
+                <h2>7. Euler XYZ 如何组合</h2>
+                <p>当前 <code>QuaternionFromEulerXYZ</code> 分别创建 X/Y/Z 轴旋转，然后返回：</p>
+                <div class="formula">q = normalize(q_z · q_y · q_x)</div>
+                <p>因为右侧最先作用于列向量，实际应用顺序是 X → Y → Z。</p>
+
+                <div class="two-column">
+                    <div>
+                        <h3>Euler 的优势</h3>
+                        <ul>
+                            <li>编辑器中直观。</li>
+                            <li>单轴限制容易表达。</li>
+                            <li>适合序列化用户输入。</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3>Euler 的问题</h3>
+                        <ul>
+                            <li>旋转顺序影响结果。</li>
+                            <li>存在万向节锁。</li>
+                            <li>分量线性插值路径不自然。</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>7.1 万向节锁的本质</h3>
+                <p>当中间旋转使两个旋转轴重合时，三个自由度退化为两个。四元数不会让物理姿态丢失自由度，但“从四元数转回某套 Euler 角”仍会遇到该参数化的奇异点。</p>
+            </section>
+
+            <section id="interpolation">
+                <h2>8. Nlerp 与 Slerp 的推导</h2>
+
+                <h3>8.1 为什么普通 Lerp 不够</h3>
+                <div class="formula">Lerp(q₀,q₁,t) = (1-t)q₀ + tq₁</div>
+                <p>线性插值沿四维空间的弦运动，会离开单位球，结果不再是单位四元数。</p>
+
+                <h3>8.2 Nlerp</h3>
+                <div class="formula">Nlerp(q₀,q₁,t) = normalize((1-t)q₀ + tq₁)</div>
+                <p>它便宜、连续、始终沿短弧附近移动，但角速度不完全恒定。短动画和逐帧姿态混合常用 Nlerp。</p>
+
+                <h3>8.3 Slerp 权重如何得到</h3>
+                <p>设单位四元数夹角为 Ω，点积给出余弦：</p>
+                <div class="derivation">
+                    <div class="derivation-head">
+                        <span class="derivation-kind">权重推导</span>
+                        <strong>从单位圆参数式推到 Slerp</strong>
+                    </div>
+                    <div class="derivation-condition">
+                        <strong>前提</strong>
+                        <span>||q₀||=||q₁||=1，0&lt;Ω&lt;π，t∈[0,1]；q₀、q₁ 位于 S³ 上同一大圆平面。</span>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">1</span>
+                        <div class="derivation-expression">
+                            <div class="equation"><span class="lhs">cosΩ</span><span class="relation">=</span><span>dot(q₀,q₁)</span></div>
+                            <div class="equation"><span class="lhs">sinΩ</span><span class="relation">=</span><span>√(1-cos²Ω)</span></div>
+                            <div class="equation"><span class="lhs">Ω</span><span class="relation">=</span><span>atan2(sinΩ,cosΩ)</span></div>
+                        </div>
+                        <div class="derivation-reason">单位向量点积给出夹角余弦；atan2 同时使用正弦和余弦，象限更明确。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">2</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">e</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">q₁-q₀cosΩ</span><span class="denominator">sinΩ</span></span></span>
+                        </div>
+                        <div class="derivation-reason">从 q₁ 中减去沿 q₀ 的投影并归一化，得到与 q₀ 垂直的单位切向 e。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">3</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q(t)</span><span class="relation">=</span><span>q₀cos(tΩ)+e sin(tΩ)</span>
+                        </div>
+                        <div class="derivation-reason">在正交基 {q₀,e} 中，这是单位圆上从 q₀ 转过 tΩ 的标准参数式。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">4</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q(t)</span><span class="relation">=</span><span>q₀cos(tΩ)+<span class="fraction"><span class="numerator">q₁-q₀cosΩ</span><span class="denominator">sinΩ</span></span>sin(tΩ)</span>
+                        </div>
+                        <div class="derivation-reason">把第 2 步的 e 代入单位圆参数式。</div>
+                    </div>
+                    <div class="derivation-row">
+                        <span class="derivation-index">5</span>
+                        <div class="derivation-expression equation">
+                            <span class="lhs">q₀ 的系数</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">sinΩcos(tΩ)-cosΩsin(tΩ)</span><span class="denominator">sinΩ</span></span> = <span class="fraction"><span class="numerator">sin((1-t)Ω)</span><span class="denominator">sinΩ</span></span></span>
+                        </div>
+                        <div class="derivation-reason">使用 sin(A-B)=sinA cosB-cosA sinB 合并 q₀ 的两项。</div>
+                    </div>
+                    <div class="derivation-result">
+                        <span class="therefore">Slerp</span>
+                        <span>q(t)=q₀<span class="fraction"><span class="numerator">sin((1-t)Ω)</span><span class="denominator">sinΩ</span></span> + q₁<span class="fraction"><span class="numerator">sin(tΩ)</span><span class="denominator">sinΩ</span></span></span>
+                    </div>
+                </div>
+
+                <h3>8.4 为什么点积为负要翻转终点</h3>
+                <p>q₁ 与 -q₁ 是同一旋转，但在 S³ 上位于对径方向。若 dot&lt;0，直接插值会走超过 180° 的长弧：</p>
+                <div class="formula">if dot(q₀,q₁) &lt; 0:
+    q₁ = -q₁
+    cosΩ = -cosΩ</div>
+
+                <h3>8.5 小角度为什么退化为 Nlerp</h3>
+                <p>Ω→0 时 sinΩ→0，Slerp 分母变小，容易损失精度；同时弦和弧几乎重合，因此用 Nlerp 更稳定。</p>
+
+                <div class="control-row">
+                    <label for="slerpRange">插值 t</label>
+                    <input id="slerpRange" type="range" min="0" max="100" value="35" step="1">
+                    <output id="slerpValue" for="slerpRange">0.35</output>
+                </div>
+                <figure class="diagram">
+                    <canvas id="slerpCanvas" aria-label="Slerp 球面插值与 Lerp 弦插值对比"></canvas>
+                    <figcaption>橙色点沿单位圆弧做 Slerp；蓝色点沿弦做 Lerp，会进入单位球内部；绿色点是归一化后的 Nlerp。</figcaption>
+                </figure>
+
+                <div class="note">
+                    <strong>当前优化为何不在 Slerp 末尾 Normalize</strong>
+                    单位 q₀/q₁ 与球面权重理论上直接产生单位结果。与 DirectXMath 一样，当前实现依赖单位输入前置条件，省去一次 sqrt 和除法；小角度分支仍使用 Nlerp。
+                </div>
+            </section>
+
+            <section id="trs">
+                <h2>9. Quaternion 在 TRS 与层级中的位置</h2>
+                <p>当前矩阵使用列向量，因此对象局部到世界的组合为：</p>
+                <div class="formula">M_world = T · R(q) · S
+
+p_world = T(R(S(p_local)))</div>
+
+                <h3>9.1 父子层级</h3>
+                <div class="formula">M_childWorld = M_parentWorld · M_childLocal
+
+q_childWorld = q_parentWorld · q_childLocal
+p_childWorld = p_parentWorld + Rotate(q_parentWorld, scaledLocalPosition)</div>
+                <p>如果父节点包含非均匀缩放，单独组合 position/rotation/scale 可能产生剪切，此时矩阵层级比分量级组合更可靠。</p>
+
+                <pre class="code"><code><span class="type">floatQuaternion</span> rotation =
+    QuaternionFromEulerXYZ(eulerRadians);
+<span class="type">float4x4</span> localToWorld =
+    TRSMatrix(position, rotation, scale);
+
+<span class="type">float3</span> forward = math::Rotate(
+    rotation,
+    <span class="type">float3</span>(0.0F, 0.0F, 1.0F));
+<span class="type">float3</span> up = math::Rotate(
+    rotation,
+    <span class="type">float3</span>(0.0F, 1.0F, 0.0F));</code></pre>
+            </section>
+
+            <section id="stability">
+                <h2>10. 数值稳定性与性能</h2>
+
+                <h3>10.1 什么时候归一化</h3>
+                <table>
+                    <thead><tr><th>场景</th><th>建议</th><th>原因</th></tr></thead>
+                    <tbody>
+                        <tr><td>从轴角创建</td><td>先 NormalizeSafe(axis)</td><td>轴必须是单位向量</td></tr>
+                        <tr><td>连续累乘旋转</td><td>定期 Normalize(q)</td><td>浮点误差会缓慢漂移</td></tr>
+                        <tr><td>Rotate 热循环</td><td>不要每次内部归一化</td><td>调用方维护不变量更高效</td></tr>
+                        <tr><td>Slerp 输入</td><td>确保两端单位长度</td><td>公式和免归一化优化的前提</td></tr>
+                        <tr><td>Matrix→Quaternion</td><td>函数末尾归一化</td><td>吸收矩阵轻微误差</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>10.2 为什么当前 Rotate 比构造矩阵更便宜</h3>
+                <p>旋转一个向量只需要两次叉积和若干乘加；先把 q 转 3×3 矩阵再乘向量，需要构造九个矩阵系数。若同一旋转作用于大量向量，预构造矩阵或批量 SIMD 才可能更划算。</p>
+
+                <h3>10.3 常见错误</h3>
+                <ul>
+                    <li>把构造函数误写为 <code>(w,x,y,z)</code>。</li>
+                    <li>用角度直接传给要求弧度的 API。</li>
+                    <li>交换 <code>parent * local</code> 的顺序。</li>
+                    <li>对 q 的四个分量分别做 Euler 意义上的解释。</li>
+                    <li>忽略 q 与 -q 的双覆盖，导致插值绕远路。</li>
+                    <li>对非单位 q 直接使用共轭作为逆。</li>
+                    <li>误以为改成左手坐标系后，所有四元数角度或虚部都必须取反。</li>
+                </ul>
+            </section>
+
+            <section id="mapping">
+                <h2>11. 数学概念与当前 API 对照</h2>
+                <table>
+                    <thead><tr><th>任务</th><th>当前 API</th><th>数学含义</th></tr></thead>
+                    <tbody>
+                        <tr><td>单位旋转</td><td><code>Quaternion::Identity()</code></td><td>(0,0,0,1)</td></tr>
+                        <tr><td>轴角创建</td><td><code>QuaternionFromAxisAngle</code></td><td>(n sin θ/2, cos θ/2)</td></tr>
+                        <tr><td>Euler 创建</td><td><code>QuaternionFromEulerXYZ</code></td><td>qz·qy·qx</td></tr>
+                        <tr><td>组合旋转</td><td><code>lhs * rhs</code></td><td>先 rhs，后 lhs</td></tr>
+                        <tr><td>逆旋转</td><td><code>Inverse / Conjugate</code></td><td>q*/||q||²</td></tr>
+                        <tr><td>旋转向量</td><td><code>Rotate(q,v)</code></td><td>q(v,0)q⁻¹ 的展开</td></tr>
+                        <tr><td>转旋转矩阵</td><td><code>Matrix3x3FromQuaternion</code></td><td>收集 qpq⁻¹ 的向量系数</td></tr>
+                        <tr><td>矩阵恢复旋转</td><td><code>QuaternionFromMatrix</code></td><td>trace/最大对角稳定分支</td></tr>
+                        <tr><td>快速插值</td><td><code>Nlerp</code></td><td>弦插值后归一化</td></tr>
+                        <tr><td>恒角速度插值</td><td><code>Slerp</code></td><td>S³ 大圆短弧</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>建议手算练习</h3>
+                <ol>
+                    <li>从 Hamilton 积完整展开 q₁q₂ 的 x/y/z/w 四个分量。</li>
+                    <li>用 q=(0,0,√2/2,√2/2) 手算旋转 (1,0,0)。</li>
+                    <li>证明 q 与 -q 对任意向量产生相同旋转。</li>
+                    <li>由 qpq⁻¹ 展开推导 Rodrigues 公式。</li>
+                    <li>比较 Lerp、Nlerp、Slerp 在 t=0.5 时的长度和路径。</li>
+                    <li>解释为什么 <code>qz*qy*qx</code> 实际先执行 X。</li>
+                </ol>
+            </section>
+
+            <nav class="footer-nav" aria-label="文档尾部导航">
+                <a href="Matrix_Math_Guide.html">上一篇：Matrix 数学原理与引擎实现</a>
+                <a href="#convention">返回顶部</a>
+            </nav>
+        </main>
+    </div>
+
+    <script>
+        "use strict";
+
+        const colors = {
+            ink: "#18201d",
+            muted: "#7b8781",
+            line: "#d9dfdb",
+            green: "#147a56",
+            coral: "#c6533f",
+            blue: "#246a8d",
+            gold: "#9a6b12"
+        };
+
+        function prepareCanvas(canvas) {
+            const ratio = Math.max(1, window.devicePixelRatio || 1);
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.round(rect.width * ratio);
+            canvas.height = Math.round(rect.height * ratio);
+            const context = canvas.getContext("2d");
+            context.setTransform(ratio, 0, 0, ratio, 0, 0);
+            context.lineCap = "round";
+            context.lineJoin = "round";
+            return { context, width: rect.width, height: rect.height };
+        }
+
+        function arrow(context, fromX, fromY, toX, toY, color, label) {
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            context.strokeStyle = color;
+            context.fillStyle = color;
+            context.lineWidth = 2.5;
+            context.beginPath();
+            context.moveTo(fromX, fromY);
+            context.lineTo(toX, toY);
+            context.stroke();
+            context.beginPath();
+            context.moveTo(toX, toY);
+            context.lineTo(toX - 10 * Math.cos(angle - Math.PI / 6), toY - 10 * Math.sin(angle - Math.PI / 6));
+            context.lineTo(toX - 10 * Math.cos(angle + Math.PI / 6), toY - 10 * Math.sin(angle + Math.PI / 6));
+            context.closePath();
+            context.fill();
+            if (label) {
+                context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+                context.fillText(label, toX + 7, toY - 7);
+            }
+        }
+
+        function drawArc(context, centerX, centerY, radius, start, end, color, width = 2) {
+            context.strokeStyle = color;
+            context.lineWidth = width;
+            context.beginPath();
+            context.arc(centerX, centerY, radius, start, end, false);
+            context.stroke();
+        }
+
+        function drawDoubleCover() {
+            const canvas = document.getElementById("doubleCoverCanvas");
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const centerX = width * 0.5;
+            const centerY = height * 0.5;
+            const radius = Math.min(width, height) * 0.32;
+
+            context.strokeStyle = colors.line;
+            context.lineWidth = 2;
+            context.beginPath();
+            context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            context.stroke();
+            context.setLineDash([5, 6]);
+            context.beginPath();
+            context.moveTo(centerX - radius, centerY);
+            context.lineTo(centerX + radius, centerY);
+            context.stroke();
+            context.setLineDash([]);
+
+            const angle = -0.65;
+            const qx = centerX + Math.cos(angle) * radius;
+            const qy = centerY + Math.sin(angle) * radius;
+            const nx = centerX - Math.cos(angle) * radius;
+            const ny = centerY - Math.sin(angle) * radius;
+            for (const [x, y, color, label] of [[qx, qy, colors.coral, "q"], [nx, ny, colors.green, "-q"]]) {
+                context.fillStyle = color;
+                context.beginPath();
+                context.arc(x, y, 8, 0, Math.PI * 2);
+                context.fill();
+                context.font = "700 15px Segoe UI, sans-serif";
+                context.fillText(label, x + 12, y + 4);
+            }
+
+            context.fillStyle = colors.ink;
+            context.font = "600 14px Segoe UI, Microsoft YaHei, sans-serif";
+            context.textAlign = "center";
+            context.fillText("S³ 的二维降维示意", centerX, 30);
+            context.fillText("映射到同一个 SO(3) 旋转", centerX, height - 26);
+            context.textAlign = "start";
+            arrow(context, qx - 8, qy + 15, centerX + 35, height - 55, colors.coral, "同一姿态");
+            arrow(context, nx + 8, ny - 15, centerX - 35, height - 55, colors.green, "同一姿态");
+        }
+
+        function drawAxisAngle() {
+            const canvas = document.getElementById("axisAngleCanvas");
+            const range = document.getElementById("angleRange");
+            const output = document.getElementById("angleValue");
+            const degrees = Number(range.value);
+            const radians = degrees * Math.PI / 180;
+            output.value = `${degrees}°`;
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const narrow = width < 600;
+            const centerX = narrow ? width * 0.5 : width * 0.38;
+            const centerY = narrow ? height * 0.36 : height * 0.52;
+            const radius = Math.min(width, height) * (narrow ? 0.22 : 0.29);
+
+            context.strokeStyle = colors.line;
+            context.lineWidth = 1;
+            context.beginPath();
+            context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            context.stroke();
+            arrow(context, centerX, centerY, centerX + radius, centerY, colors.green, "p=(1,0,0)");
+            arrow(context, centerX, centerY, centerX + Math.cos(-radians) * radius, centerY + Math.sin(-radians) * radius, colors.coral, "Rotate(q,p)");
+            drawArc(context, centerX, centerY, radius * 0.52, 0, -radians, colors.gold, 3);
+
+            context.fillStyle = colors.blue;
+            context.beginPath();
+            context.arc(centerX, centerY, 6, 0, Math.PI * 2);
+            context.fill();
+            context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+            context.fillText("axis = +Z (LH forward)", centerX + 10, centerY + 20);
+
+            const sine = Math.sin(radians * 0.5);
+            const cosine = Math.cos(radians * 0.5);
+            context.fillStyle = colors.ink;
+            context.font = narrow ? "12px Consolas, monospace" : "15px Consolas, monospace";
+            const textX = narrow ? 16 : Math.min(width - 310, width * 0.65);
+            context.fillText(
+                "q = (0, 0, sin(θ/2), cos(θ/2))",
+                textX,
+                height * (narrow ? 0.72 : 0.38));
+            context.fillText(
+                `q = (0, 0, ${sine.toFixed(4)}, ${cosine.toFixed(4)})`,
+                textX,
+                height * (narrow ? 0.82 : 0.5));
+            context.fillText(
+                `θ/2 = ${(degrees * 0.5).toFixed(1)}°`,
+                textX,
+                height * (narrow ? 0.92 : 0.62));
+        }
+
+        function drawRotationParts() {
+            const canvas = document.getElementById("rotationCanvas");
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const originX = width * 0.2;
+            const originY = height * 0.7;
+            const scale = Math.min(width, height) * 0.24;
+
+            arrow(context, originX, originY, originX + scale, originY, colors.muted, "p");
+            arrow(context, originX + scale, originY, originX + scale, originY - scale, colors.coral, "q.w·t");
+            arrow(context, originX + scale, originY - scale, originX, originY - scale, colors.blue, "cross(q.xyz,t)");
+            arrow(context, originX, originY, originX, originY - scale, colors.green, "p'");
+
+            context.setLineDash([5, 5]);
+            context.strokeStyle = colors.line;
+            context.beginPath();
+            context.moveTo(originX, originY);
+            context.lineTo(originX + scale, originY - scale);
+            context.stroke();
+            context.setLineDash([]);
+            context.fillStyle = colors.ink;
+            context.font = width < 600
+                ? "600 12px Segoe UI, Microsoft YaHei, sans-serif"
+                : "600 14px Segoe UI, Microsoft YaHei, sans-serif";
+            context.fillText(
+                width < 600 ? "三项向量首尾相加" : "向量首尾相接表示公式中的三项相加",
+                width < 600 ? 18 : width * 0.48,
+                height * (width < 600 ? 0.9 : 0.82));
+        }
+
+        function pointOnArc(startAngle, endAngle, amount, radius, centerX, centerY) {
+            const angle = startAngle + (endAngle - startAngle) * amount;
+            return { x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
+        }
+
+        function drawSlerp() {
+            const canvas = document.getElementById("slerpCanvas");
+            const range = document.getElementById("slerpRange");
+            const output = document.getElementById("slerpValue");
+            const amount = Number(range.value) / 100;
+            output.value = amount.toFixed(2);
+            const { context, width, height } = prepareCanvas(canvas);
+            context.clearRect(0, 0, width, height);
+            const centerX = width * 0.48;
+            const centerY = height * 0.58;
+            const radius = Math.min(width, height) * 0.34;
+            const angle0 = Math.PI * 1.12;
+            const angle1 = Math.PI * 1.86;
+            const start = pointOnArc(angle0, angle1, 0, radius, centerX, centerY);
+            const end = pointOnArc(angle0, angle1, 1, radius, centerX, centerY);
+            const spherical = pointOnArc(angle0, angle1, amount, radius, centerX, centerY);
+            const linear = { x: start.x + (end.x - start.x) * amount, y: start.y + (end.y - start.y) * amount };
+            const dx = linear.x - centerX;
+            const dy = linear.y - centerY;
+            const linearLength = Math.hypot(dx, dy);
+            const normalized = { x: centerX + dx / linearLength * radius, y: centerY + dy / linearLength * radius };
+
+            context.strokeStyle = colors.line;
+            context.lineWidth = 2;
+            context.beginPath();
+            context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            context.stroke();
+            drawArc(context, centerX, centerY, radius, angle0, angle1, colors.coral, 4);
+            context.strokeStyle = colors.blue;
+            context.lineWidth = 2;
+            context.beginPath();
+            context.moveTo(start.x, start.y);
+            context.lineTo(end.x, end.y);
+            context.stroke();
+
+            for (const [point, color, label] of [
+                [start, colors.ink, "q₀"],
+                [end, colors.ink, "q₁"],
+                [spherical, colors.coral, "Slerp"],
+                [linear, colors.blue, "Lerp"],
+                [normalized, colors.green, "Nlerp"]
+            ]) {
+                context.fillStyle = color;
+                context.beginPath();
+                context.arc(point.x, point.y, 7, 0, Math.PI * 2);
+                context.fill();
+                context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
+                context.fillText(label, point.x + 10, point.y - 8);
+            }
+
+            context.fillStyle = colors.ink;
+            context.font = "600 14px Segoe UI, Microsoft YaHei, sans-serif";
+            context.fillText(`角度进度 = ${(amount * 100).toFixed(0)}%`, width * 0.68, height * 0.18);
+        }
+
+        function drawAll() {
+            drawDoubleCover();
+            drawAxisAngle();
+            drawRotationParts();
+            drawSlerp();
+        }
+
+        document.getElementById("angleRange").addEventListener("input", drawAxisAngle);
+        document.getElementById("slerpRange").addEventListener("input", drawSlerp);
+        window.addEventListener("resize", drawAll);
+        drawAll();
+
+        const initialSection =
+            window.location.hash.slice(1) || new URLSearchParams(window.location.search).get("section");
+        const initialTarget = document.getElementById(initialSection);
+        if (initialTarget) {
+            window.setTimeout(() => initialTarget.scrollIntoView({ block: "start" }), 120);
+        }
+    </script>
+</body>
+</html>

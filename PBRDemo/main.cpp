@@ -9,11 +9,7 @@
 #endif
 #include <vulkan/vulkan.h>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
+#include "Math.hpp"
 #include "PBRDemoConfig.hpp"
 #include "RHI.hpp"
 
@@ -44,30 +40,35 @@ constexpr rhi::u32 SHADOW_MAP_SIZE = 2048;
 constexpr float PI = 3.14159265359F;
 
 struct Vertex {
-    glm::vec3 position{};
-    glm::vec3 normal{};
-    glm::vec2 uv{};
+    float3 position{};
+    float3 normal{};
+    float2 uv{};
 };
 
 struct alignas(16) UniformBufferObject {
     // 主相机和物体变换。Shader 中按 projection * view * model * position 使用。
-    glm::mat4 model{1.0F};
-    glm::mat4 view{1.0F};
-    glm::mat4 projection{1.0F};
+    float4x4 model{1.0F};
+    float4x4 view{1.0F};
+    float4x4 projection{1.0F};
 
     // lightDirection.xyz 表示光线传播方向，因此 Shader 取反得到“表面指向光源”的 L。
     // vec4 可让 C++、GLSL std140 和 HLSL cbuffer 都自然满足 16 字节对齐。
-    glm::vec4 lightDirection{};
-    glm::vec4 lightColor{};
-    glm::vec4 cameraPosition{};
-    glm::vec4 baseColor{};          // rgb = albedo，a = metallic。
-    glm::vec4 materialParameters{}; // x = roughness，y = AO。
+    float4 lightDirection{};
+    float4 lightColor{};
+    float4 cameraPosition{};
+    float4 baseColor{};          // rgb = albedo，a = metallic。
+    float4 materialParameters{}; // x = roughness，y = AO。
 
     // 把世界空间位置变换到“光源相机”的裁剪空间，是生成和查询 Shadow Map 的共同坐标系。
-    glm::mat4 lightViewProjection{1.0F};
+    float4x4 lightViewProjection{1.0F};
     // xy = 单个阴影 texel 的 UV 尺寸，z = 最小 bias，w = 随法线斜率增长的 bias。
-    glm::vec4 shadowParameters{};
+    float4 shadowParameters{};
 };
+
+/// Math 的 Matrix 是行主序；两个 shader 均按 column_major 接收，因此上传前转置。
+[[nodiscard]] float4x4 ToShaderMatrix(const float4x4& matrix) noexcept {
+    return Transpose(matrix);
+}
 
 struct Mesh {
     std::vector<Vertex> vertices;
@@ -148,7 +149,7 @@ Mesh MakeSphere(rhi::u32 rings, rhi::u32 segments, float radius = 1.0F) {
             const float theta = u * 2.0F * PI;
             const float phi = v * PI;
             const float sinPhi = std::sin(phi);
-            const glm::vec3 normal{
+            const float3 normal{
                 -std::cos(theta) * sinPhi,
                 std::cos(phi),
                 std::sin(theta) * sinPhi};
@@ -744,47 +745,55 @@ private:
         const float time = std::chrono::duration<float>(
                                std::chrono::steady_clock::now() - startTime_)
                                .count();
-        const glm::vec3 eye{0.0F, 3.0F, 6.0F};
+        const float3 eye{0.0F, 3.0F, 6.0F};
 
         UniformBufferObject uniform{};
-        uniform.view = glm::lookAt(
+        uniform.view = ToShaderMatrix(LookAtRH(
             eye,
-            glm::vec3{0.0F, 0.5F, 0.0F},
-            glm::vec3{0.0F, 1.0F, 0.0F});
-        uniform.projection = glm::perspective(
-            glm::radians(45.0F),
+            float3{0.0F, 0.5F, 0.0F},
+            float3{0.0F, 1.0F, 0.0F}));
+        float4x4 projection = PerspectiveRH_ZO(
+            math::Radians(45.0F),
             static_cast<float>(swapchainExtent_.width) /
                 static_cast<float>(swapchainExtent_.height),
             0.1F,
             100.0F);
-        // GLM 的投影与 D3D 的 viewport Y 方向可直接配合；Vulkan 的正高度 viewport
+        // RH ZO 投影与 D3D 的 viewport Y 方向可直接配合；Vulkan 的正高度 viewport
         // 需要翻转 clip-space Y。若 D3D 也翻转，画面会上下颠倒且三角形屏幕绕序反转。
         if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
-            uniform.projection[1][1] *= -1.0F;
+            projection[1][1] *= -1.0F;
         }
-        uniform.lightDirection = glm::vec4(
-            glm::normalize(glm::vec3{-0.5F, -1.0F, -0.3F}), 0.0F);
+        uniform.projection = ToShaderMatrix(projection);
+        const float3 normalizedLightDirection = Normalize(float3{-0.5F, -1.0F, -0.3F});
+        uniform.lightDirection = {
+            normalizedLightDirection.x,
+            normalizedLightDirection.y,
+            normalizedLightDirection.z,
+            0.0F};
         uniform.lightColor = {1.0F, 0.96F, 0.90F, 1.0F};
-        uniform.cameraPosition = glm::vec4(eye, 1.0F);
+        uniform.cameraPosition = {eye.x, eye.y, eye.z, 1.0F};
 
         // 方向光没有真实位置，所有光线互相平行。为了生成 Shadow Map，仍需构造一个
         // “虚拟光源相机”：把它放在光线传播方向的反方向，并朝场景中心观察。
         //
         // lightPosition = target - lightDirection * distance
         // 因为 lightDirection 指向光线前进方向，减去它才会回到光线来源一侧。
-        const glm::vec3 lightDirection = glm::vec3(uniform.lightDirection);
-        const glm::vec3 shadowTarget{0.0F, 0.5F, 0.0F};
-        const glm::vec3 lightPosition = shadowTarget - lightDirection * 8.0F;
-        const glm::mat4 lightView = glm::lookAt(
+        const float3 lightDirection{
+            uniform.lightDirection.x,
+            uniform.lightDirection.y,
+            uniform.lightDirection.z};
+        const float3 shadowTarget{0.0F, 0.5F, 0.0F};
+        const float3 lightPosition = shadowTarget - lightDirection * 8.0F;
+        const float4x4 lightView = LookAtRH(
             lightPosition,
             shadowTarget,
-            glm::vec3{0.0F, 1.0F, 0.0F});
+            float3{0.0F, 1.0F, 0.0F});
 
         // 方向光没有“近大远小”，所以使用正交投影而不是透视投影。
         // left/right/bottom/top 决定 Shadow Map 覆盖的世界区域；范围过大时，每个 texel
         // 覆盖更多世界空间，阴影会变糊；范围过小时，范围外物体不会进入阴影图。
         // near/far 决定光源方向上的可记录深度范围，也应尽量贴合场景以提高精度。
-        glm::mat4 lightProjection = glm::ortho(
+        float4x4 lightProjection = OrthographicRH_ZO(
             -5.0F,
             5.0F,
             -5.0F,
@@ -801,7 +810,7 @@ private:
 
         // 顶点先 world = model * local，再 lightClip = lightVP * world。
         // model 因物体而异，lightVP 对同一个方向光覆盖的所有物体相同。
-        uniform.lightViewProjection = lightProjection * lightView;
+        uniform.lightViewProjection = ToShaderMatrix(lightProjection * lightView);
 
         // PCF 每次偏移一个 texel，因此把 1 / resolution 传给 Shader，避免硬编码。
         // z/w 是经过实际画面调节的比较 bias，单位是归一化光源深度 [0, 1]。
@@ -812,15 +821,13 @@ private:
             0.0025F};
 
         if (sphere) {
-            uniform.model = glm::translate(glm::mat4{1.0F}, {0.0F, 1.0F, 0.0F}) *
-                            glm::rotate(
-                                glm::mat4{1.0F},
-                                time * glm::radians(45.0F),
-                                glm::vec3{0.0F, 1.0F, 0.0F});
+            uniform.model = ToShaderMatrix(
+                TranslationMatrix(float3{0.0F, 1.0F, 0.0F}) *
+                RotationYMatrix(time * math::Radians(45.0F)));
             uniform.baseColor = {0.85F, 0.55F, 0.25F, 0.85F};
             uniform.materialParameters = {0.35F, 1.0F, 0.0F, 0.0F};
         } else {
-            uniform.model = glm::mat4{1.0F};
+            uniform.model = ToShaderMatrix(float4x4{1.0F});
             uniform.baseColor = {0.45F, 0.45F, 0.50F, 0.0F};
             uniform.materialParameters = {0.85F, 1.0F, 0.0F, 0.0F};
         }

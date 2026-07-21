@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Curves.hpp 中参数曲线、Bezier、样条、曲率、弧长和缓动函数的数学推导与图解。">
+    <title>Curves | 数学推导与曲线图解</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #58635e;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --blue: #246a8d;
+            --blue-soft: #e9f3f8;
+            --coral: #b94e3d;
+            --coral-soft: #faeeeb;
+            --gold: #8a6513;
+            --gold-soft: #f8f1dd;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.72;
+            letter-spacing: 0;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+        code { font-family: Consolas, "Cascadia Code", monospace; overflow-wrap: anywhere; }
+        .masthead { color: #f5fbf8; background: var(--nav); border-bottom: 4px solid var(--green); }
+        .masthead-inner {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .masthead-inner > div { min-width: 0; }
+        .eyebrow { margin: 0 0 6px; color: #8fd5b8; font-size: 13px; font-weight: 700; }
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin: 28px 0 11px; font-size: 19px; }
+        h4 { margin: 20px 0 8px; font-size: 16px; }
+        .subtitle { max-width: 820px; margin: 0; color: #c6d5ce; }
+        .doc-switch { display: flex; flex: 0 0 auto; overflow: hidden; border: 1px solid #476057; border-radius: var(--radius); }
+        .doc-switch a { padding: 8px 12px; color: #dce9e3; text-decoration: none; border-right: 1px solid #476057; font-size: 14px; }
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #fff; background: var(--green); }
+
+        .layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); width: min(1480px, 100%); margin: 0 auto; }
+        .toc { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 30px 24px 50px; background: var(--surface); border-right: 1px solid var(--line); }
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { margin: 0; padding: 0; list-style: none; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 9px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--green); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        section { max-width: 1100px; margin: 0 auto; padding: 0 0 56px; scroll-margin-top: 24px; }
+        section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+        .lead { max-width: 900px; color: #34403b; font-size: 18px; }
+        .grid-2, .grid-3, .api-grid { display: grid; gap: 18px; margin: 22px 0; }
+        .grid-2, .api-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .panel { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+        .panel h3 { margin-top: 0; }
+        .callout { margin: 20px 0; padding: 15px 17px; border-left: 4px solid var(--green); background: var(--green-soft); }
+        .callout.info { border-left-color: var(--blue); background: var(--blue-soft); }
+        .callout.warning { border-left-color: var(--gold); background: var(--gold-soft); }
+        .formula { margin: 16px 0; padding: 14px 16px; overflow-x: auto; border-left: 3px solid var(--blue); background: #f4f8fa; font-family: "Cambria Math", Cambria, serif; font-size: 17px; }
+        pre { margin: 18px 0; padding: 17px; overflow: auto; color: var(--code-ink); background: var(--code); border-radius: var(--radius); line-height: 1.55; }
+        pre code { overflow-wrap: normal; }
+        .scroll-table { overflow-x: auto; }
+        table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 10px 11px; text-align: left; vertical-align: top; border: 1px solid var(--line); }
+        th { background: var(--surface); }
+        canvas { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #fcfdfc; }
+        .caption, .small { color: var(--muted); font-size: 14px; }
+        .legend { display: flex; flex-wrap: wrap; gap: 13px; margin: 11px 0; color: var(--muted); font-size: 13px; }
+        .legend span::before { display: inline-block; width: 12px; height: 3px; margin-right: 5px; vertical-align: middle; content: ""; background: currentColor; }
+        .green { color: var(--green); }
+        .blue { color: var(--blue); }
+        .coral { color: var(--coral); }
+        .gold { color: var(--gold); }
+        .tag { display: inline-block; padding: 1px 7px; color: #285d49; background: var(--green-soft); border-radius: 3px; font-size: 12px; }
+        .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin: 18px 0 13px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+        label { display: grid; gap: 4px; color: #39443f; font-size: 14px; font-weight: 650; }
+        select { min-width: 180px; padding: 7px 9px; color: var(--ink); background: #fff; border: 1px solid #aab7b0; border-radius: 4px; font: inherit; }
+        input[type="range"] { width: 190px; accent-color: var(--green); }
+        output { min-width: 46px; color: var(--green); font-family: Consolas, monospace; font-weight: 700; }
+        .ease-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+        .ease-item { padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+        .ease-item strong { display: block; margin-bottom: 5px; font-family: Consolas, monospace; font-size: 13px; }
+        .ease-item canvas { border: 0; border-radius: 0; }
+        .no-margin { margin-bottom: 0; }
+
+        @media (max-width: 980px) {
+            .masthead-inner { align-items: flex-start; flex-direction: column; }
+            .doc-switch { flex-wrap: wrap; }
+            .layout { display: block; }
+            .toc { position: static; height: auto; padding: 18px 24px; border-right: 0; border-bottom: 1px solid var(--line); }
+            .toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+            main { padding-top: 34px; }
+        }
+
+        @media (max-width: 680px) {
+            body { font-size: 15px; }
+            h1 { font-size: 28px; }
+            h2 { font-size: 23px; }
+            .toc ol, .grid-2, .grid-3, .api-grid, .ease-grid { grid-template-columns: 1fr; }
+            main { padding: 30px 18px 56px; }
+            .masthead-inner { padding: 22px 18px; }
+            .doc-switch a { padding: 7px 9px; font-size: 13px; }
+            input[type="range"] { width: min(220px, 75vw); }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div>
+                <p class="eyebrow">Math / Curves.hpp</p>
+                <h1>曲线、样条与缓动函数</h1>
+                <p class="subtitle">从参数方程、导数和曲率出发，逐项对应当前 Math 库的 Bezier、样条、弧长与 31 个 Ease 曲线实现。</p>
+            </div>
+            <nav class="doc-switch" aria-label="数学文档切换">
+                <a href="Matrix_Math_Guide.html">Matrix</a>
+                <a href="Quaternion_Math_Guide.html">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
+                <a href="Curves_Math_Guide.html" aria-current="page">Curves</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="layout">
+        <nav class="toc" aria-label="目录">
+            <strong>本页目录</strong>
+            <ol>
+                <li><a href="#map">1. API 全图</a></li>
+                <li><a href="#parameter">2. 参数曲线基础</a></li>
+                <li><a href="#bezier">3. Bezier</a></li>
+                <li><a href="#casteljau">4. De Casteljau 与分割</a></li>
+                <li><a href="#rational">5. 有理 Bezier</a></li>
+                <li><a href="#differential">6. 导数、曲率、弧长</a></li>
+                <li><a href="#splines">7. Hermite 与样条</a></li>
+                <li><a href="#ease">8. Ease 缓动</a></li>
+                <li><a href="#usage">9. 使用与选型</a></li>
+            </ol>
+        </nav>
+
+        <main>
+            <section id="map">
+                <h2>1. <code>Curves.hpp</code> 的完整能力图</h2>
+                <p class="lead">参数曲线把参数 <code>t</code> 映射为标量、颜色、向量或空间位置：P(t)。当 P 是二维或三维向量时，它描述一条空间轨迹；当 P 是标量且范围为 0 到 1 时，它描述动画的时间节奏。</p>
+                <div class="api-grid">
+                    <article class="panel"><h3>Bezier <span class="tag">插值</span></h3><p><code>LinearBezier</code>、<code>QuadraticBezier</code>、<code>CubicBezier</code>、通用 <code>Bezier</code>、<code>BernsteinBasis</code>。端点在曲线上，控制点决定切线与弯曲。</p></article>
+                    <article class="panel"><h3>有理与切分 <span class="tag">构造</span></h3><p><code>RationalBezier</code>、<code>RationalQuadraticBezier</code>、<code>SplitQuadraticBezier</code>、<code>SplitCubicBezier</code>。权重可精确表达圆锥曲线，切分不改变形状。</p></article>
+                    <article class="panel"><h3>插值样条 <span class="tag">经过点</span></h3><p><code>CubicHermite</code>、<code>CardinalSpline</code>、<code>CatmullRom</code>、<code>CatmullRomNonUniform</code>、<code>KochanekBartels</code>。适合路径、镜头、骨骼与关键帧。</p></article>
+                    <article class="panel"><h3>B-Spline <span class="tag">逼近</span></h3><p><code>CubicBSpline</code> 一般不穿过控制点，但能通过局部四点影响得到更平滑的 C2 连续运动。</p></article>
+                    <article class="panel"><h3>微分几何 <span class="tag">测量</span></h3><p>二次/三次一阶、二阶、三阶导数，<code>Curvature</code> 和 <code>ApproximateCurveLength</code>。用于朝向、曲率约束和匀速运动。</p></article>
+                    <article class="panel"><h3>时间缓动 <span class="tag">动画</span></h3><p><code>EaseCurve</code> 和 <code>EvaluateEase</code> 调度 31 条缓动函数。它们不是空间路径，而是把线性时间重新映射为非线性时间。</p></article>
+                </div>
+                <div class="callout warning"><strong>当前源码的关键区别：</strong>Bezier、Hermite、Cardinal、Catmull-Rom、TCB、B-Spline 都<strong>不钳制</strong> t，允许主动外插。所有 <code>Ease*</code> 都会先 <code>Saturate(t)</code>，所以输入被限制在 [0, 1]。</div>
+                <h3>实现内部的四个辅助函数</h3>
+                <div class="scroll-table"><table>
+                    <thead><tr><th>函数</th><th>职责</th><th>为什么需要它</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>detail::CurveLerp</code></td><td>计算 <code>start + (end-start)*t</code>；对 2/3/4 维 Vector 有专门展开版本。</td><td>让 De Casteljau、分割和 knot 插值共用同一种线性插值语义。</td></tr>
+                        <tr><td><code>detail::EvaluateBezierLevel</code></td><td>原地缩短控制点数组，每轮把相邻点 Lerp 为下一层。</td><td>是通用 <code>Bezier</code> 的 De Casteljau 核心循环。</td></tr>
+                        <tr><td><code>detail::CurveDistance</code></td><td>标量使用 <code>Abs(lhs-rhs)</code>，Vector 使用 <code>Distance(lhs,rhs)</code>。</td><td>让 <code>ApproximateCurveLength</code> 可同时处理数值曲线和空间向量曲线。</td></tr>
+                        <tr><td><code>detail::KnotLerp</code></td><td>按非均匀 knot 区间插值；区间接近零时返回起点。</td><td>支撑 non-uniform Catmull-Rom，并避免重合控制点造成除零。</td></tr>
+                    </tbody>
+                </table></div>
+            </section>
+
+            <section id="parameter">
+                <h2>2. 参数曲线的基础：位置、速度、加速度</h2>
+                <p>不要把 t 当作已走距离。它只是参数。二维轨迹 P(t)=(x(t),y(t)) 的一阶导数是速度或切线，二阶导数是加速度：</p>
+                <div class="formula">位置：P(t)；速度/切线：P'(t)=dP/dt；加速度：P''(t)=d²P/dt²；瞬时速度大小：|P'(t)|</div>
+                <div class="grid-2">
+                    <article class="panel"><h3>t 不等于距离</h3><p>相同 Δt 在弯曲段和直线段实际走过的距离不同。因此直接每帧递增 t，物体通常会视觉上忽快忽慢。匀速需要弧长查找表，详见第 6 节。</p></article>
+                    <article class="panel"><h3>导数如何决定朝向</h3><p>使用 <code>Normalize(P'(t))</code> 作为前进方向。二维角度是 <code>atan2(tangent.y, tangent.x)</code>；三维则用切线与稳定的 up 向量构造旋转。</p></article>
+                </div>
+                <pre><code>const float3 position = CubicBezier(p0, p1, p2, p3, t);
+const float3 velocity = CubicBezierDerivative(p0, p1, p2, p3, t);
+const float3 forward = Normalize(velocity); // 速度趋近 0 时应自行提供回退朝向。</code></pre>
+            </section>
+
+            <section id="bezier">
+                <h2>3. Bezier：由 Lerp 推导出的曲线</h2>
+                <h3>3.1 <code>LinearBezier</code></h3>
+                <div class="formula">B(t) = (1-t)P0 + tP1 = P0 + t(P1-P0)，t ∈ [0,1]</div>
+                <p>t=0 得到 P0，t=1 得到 P1。导数 B'(t)=P1-P0 是常量，所以它是匀速直线。</p>
+                <h3>3.2 <code>QuadraticBezier</code></h3>
+                <p>先在 P0-P1 与 P1-P2 上插值，再对两个中间点插值。将嵌套 Lerp 展开：</p>
+                <div class="formula">B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2</div>
+                <p>P1 通常不在曲线上，但控制端点切线：B'(0)=2(P1-P0)，B'(1)=2(P2-P1)。</p>
+                <h3>3.3 <code>CubicBezier</code></h3>
+                <p>四个控制点的三次 Bezier 是图形软件、UI 和路径编辑中最常用的形式：</p>
+                <div class="formula">B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3</div>
+                <div class="grid-2">
+                    <article class="panel"><h3>端点和把手</h3><p>P0/P3 是端点。P1 决定从 P0 离开的方向，P2 决定进入 P3 的方向。B'(0)=3(P1-P0)，B'(1)=3(P3-P2)。</p></article>
+                    <article class="panel"><h3>凸包性质</h3><p>系数是非负且总和为 1 的 Bernstein 基函数，因此 t 在 [0,1] 时，曲线不会超出控制点的凸包。需要超调请使用外插或特殊 Ease。</p></article>
+                </div>
+                <div class="controls">
+                    <label>参数 t<input id="bezierT" type="range" min="0" max="1" step="0.001" value="0.47"></label>
+                    <output id="bezierTOut">0.470</output>
+                </div>
+                <canvas id="bezierCanvas" width="960" height="500" aria-label="三次 Bezier 和控制多边形"></canvas>
+                <div class="legend"><span class="coral">控制多边形</span><span class="gold">De Casteljau 中间层</span><span class="green">Bezier 曲线</span><span class="blue">当前 P(t) 与切线</span></div>
+                <p class="caption">滑动 t 可以看到同一个 t 如何在每一层线段上插值，并最终得到曲线点。</p>
+            </section>
+
+            <section id="casteljau">
+                <h2>4. 任意阶 Bezier、Bernstein 与精确切分</h2>
+                <h3>4.1 通用 <code>Bezier</code>：De Casteljau 算法</h3>
+                <p>当前头文件的 <code>Bezier(std::span&lt;const Value&gt;, t)</code> 先复制控制点，再反复执行相邻 Lerp。每一轮活动点少一个，最后一个点就是答案。<code>std::array</code> 重载提供固定数量控制点的版本。</p>
+                <div class="formula">Qᵢ⁰=Pᵢ；Qᵢʳ=(1-t)Qᵢʳ⁻¹+tQᵢ₊₁ʳ⁻¹；B(t)=Q₀ⁿ</div>
+                <p>它比直接展开高阶多项式更稳定，并直接显示曲线的几何构造过程。内部 <code>EvaluateBezierLevel</code> 就是这一循环。</p>
+                <h3>4.2 <code>BernsteinBasis</code></h3>
+                <div class="formula">Bᵢⁿ(t)=C(n,i)(1-t)ⁿ⁻ⁱtⁱ，C(n,i)=n!/[i!(n-i)!]</div>
+                <p><code>BernsteinBasis(degree,index,t)</code> 返回这一项。源码先迭代计算组合数而不是直接算阶乘；当 <code>index &gt; degree</code> 时返回 0。任意阶 Bezier 就是 ΣBᵢⁿ(t)Pᵢ。</p>
+                <h3>4.3 <code>SplitQuadraticBezier</code> 与 <code>SplitCubicBezier</code></h3>
+                <p>De Casteljau 三角形的左边界和右边界分别就是切分后的控制点。三次曲线在 t 处切分：</p>
+                <div class="formula">左段=[P0,P01,P012,P0123]；右段=[P0123,P123,P23,P3]</div>
+                <p>P0123=B(t)，两段在该点连续连接，拼接后与原曲线严格相同。自适应细分、路径裁剪、碰撞近似和 tessellation 都可从这里出发。</p>
+            </section>
+
+            <section id="rational">
+                <h2>5. 有理 Bezier：权重让圆弧变为精确</h2>
+                <p>普通多项式 Bezier 无法精确表示圆。<code>RationalBezier</code> 为每个控制点加权，在齐次坐标中加权后再除以总权重：</p>
+                <div class="formula">R(t) = [Σ Bᵢⁿ(t)wᵢPᵢ] / [Σ Bᵢⁿ(t)wᵢ]</div>
+                <p>当所有 wᵢ 都为 1 时，它就是普通 Bezier。源码若权重个数与控制点个数不一致，或分母接近浮点 epsilon，会返回 <code>Value{}</code>，避免非法除法。</p>
+                <h3><code>RationalQuadraticBezier</code>：90 度单位圆弧示例</h3>
+                <div class="formula">P0=(1,0)，P1=(1,1)，P2=(0,1)，w0=w2=1，w1=√2/2</div>
+                <ol>
+                    <li>在 t=0.5，三个未归一化基项是 1/4、√2/4、1/4。</li>
+                    <li>分子 x=y=1/4+√2/4，分母=1/2+√2/4。</li>
+                    <li>相除可得 R(0.5)=(√2/2,√2/2)，恰为单位圆的 45 度点。</li>
+                </ol>
+                <div class="callout info"><strong>权重的直觉：</strong>减小中间控制点的权重，曲线会远离它；增大权重则向它靠拢。只有权重选择符合圆锥曲线关系时才会得到精确圆弧。</div>
+            </section>
+
+            <section id="differential">
+                <h2>6. 导数、曲率与弧长</h2>
+                <h3>6.1 当前实现中的 Bezier 导数</h3>
+                <p>n 阶 Bezier 的一阶导数是 n-1 阶 Bezier，相邻差分控制点乘 n。因此不需要数值差分就能得到精确切线。</p>
+                <div class="formula">B'(t)=nΣBᵢⁿ⁻¹(t)(Pᵢ₊₁-Pᵢ)</div>
+                <div class="scroll-table"><table>
+                    <thead><tr><th>函数</th><th>公式</th><th>作用</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>QuadraticBezierDerivative</code></td><td>2(1-t)(P1-P0)+2t(P2-P1)</td><td>速度、切线</td></tr>
+                        <tr><td><code>QuadraticBezierSecondDerivative</code></td><td>2(P2-2P1+P0)</td><td>恒定加速度、曲率</td></tr>
+                        <tr><td><code>CubicBezierDerivative</code></td><td>3[(1-t)²(P1-P0)+2(1-t)t(P2-P1)+t²(P3-P2)]</td><td>速度、切线</td></tr>
+                        <tr><td><code>CubicBezierSecondDerivative</code></td><td>6[(1-t)(P2-2P1+P0)+t(P3-2P2+P1)]</td><td>弯曲变化</td></tr>
+                        <tr><td><code>CubicBezierThirdDerivative</code></td><td>6(P3-3P2+3P1-P0)</td><td>三次曲线的常量 jerk</td></tr>
+                    </tbody>
+                </table></div>
+                <h3>6.2 <code>Curvature</code>：曲线弯得有多急</h3>
+                <div class="formula">二维：κ=|x'y''-y'x''|/|P'|³；三维：κ=|P'×P''|/|P'|³；曲率半径 R=1/κ</div>
+                <p>源码先计算 <code>speedSquared=|P'|²</code>。若它小于等于 epsilon，说明速度退化，函数返回 0；否则 <code>speedSquared * sqrt(speedSquared)</code> 就是分母 |P'|³。</p>
+                <h3>二次 Bezier 的完整曲率计算</h3>
+                <p>取 P0=(0,0)、P1=(1,2)、P2=(2,0)、t=0.5：</p>
+                <ol>
+                    <li>P'(0.5)=2×0.5(P1-P0)+2×0.5(P2-P1)=(2,0)。</li>
+                    <li>P''=2(P2-2P1+P0)=(0,-8)。</li>
+                    <li>x'y''-y'x''=2×(-8)-0×0=-16，|P'|³=2³=8。</li>
+                    <li>κ=|-16|/8=2，因此 R=1/2=0.5。</li>
+                </ol>
+                <canvas id="geometryCanvas" width="960" height="500" aria-label="切线曲率圆和弧长采样"></canvas>
+                <p class="caption">蓝色是 t=0.5 的切线，黄色虚线圆是曲率圆，灰绿色折线是等参数采样得到的弧长近似。</p>
+                <h3>6.3 <code>ApproximateCurveLength</code></h3>
+                <div class="formula">L=∫₀¹|P'(t)|dt ≈ Σᵢ₌₁ᴺ |P(i/N)-P((i-1)/N)|</div>
+                <p>源码按等参数间隔采样并累加相邻距离，<code>subdivisions==0</code> 时返回零。N 越大越准，但 t 等间隔不代表距离等间隔。</p>
+                <div class="grid-2">
+                    <article class="panel"><h3>自适应精度</h3><p>比较控制折线长度与端点弦长；误差过大就通过 <code>SplitCubicBezier</code> 继续二分。弯曲区自动得到更多采样，直线区不浪费计算。</p></article>
+                    <article class="panel"><h3>匀速行进</h3><p>预计算 (t, cumulativeLength) 表。按目标距离二分查表，再在两项 t 之间插值。对象按距离累加，不按 t 累加，即可近似匀速。</p></article>
+                </div>
+            </section>
+
+            <section id="splines">
+                <h2>7. Hermite、Cardinal、Catmull-Rom、TCB 与 B-Spline</h2>
+                <h3>7.1 <code>CubicHermite</code> 与 <code>CubicHermiteDerivative</code></h3>
+                <p>Hermite 用端点 P0/P1 和端点切线 m0/m1 定义曲线。对三次多项式施加 P(0)=P0、P(1)=P1、P'(0)=m0、P'(1)=m1 四个条件，解得：</p>
+                <div class="formula">P(t)=h00P0+h10m0+h01P1+h11m1<br>h00=2t³-3t²+1，h10=t³-2t²+t，h01=-2t³+3t²，h11=t³-t²</div>
+                <p><code>CubicHermiteDerivative</code> 对这四项求导。切线长度会改变曲线形状，不只是方向。</p>
+                <div class="formula">Hermite → Bezier：B0=P0，B1=P0+m0/3，B2=P1-m1/3，B3=P1<br>Bezier → Hermite：m0=3(B1-B0)，m1=3(B3-B2)</div>
+                <h3>7.2 自动切线样条：所有函数的差异</h3>
+                <div class="scroll-table"><table>
+                    <thead><tr><th>函数</th><th>核心计算</th><th>端点</th><th>适用场景</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>CardinalSpline</code></td><td>m1=(1-T)(P2-P0)/2，m2=(1-T)(P3-P1)/2</td><td>经过 P1/P2</td><td>可调松紧的路径</td></tr>
+                        <tr><td><code>CatmullRom</code></td><td>调用 Cardinal，tension=0</td><td>经过 P1/P2</td><td>最常见自动切线插值</td></tr>
+                        <tr><td><code>CatmullRomNonUniform</code></td><td>按距离建立 knot，再进行三轮 KnotLerp</td><td>经过 P1/P2</td><td>点间距差异大时推荐</td></tr>
+                        <tr><td><code>KochanekBartels</code></td><td>由 Tension、Bias、Continuity 分别求 out/in 切线</td><td>经过 P1/P2</td><td>镜头和动画的艺术控制</td></tr>
+                        <tr><td><code>CubicBSpline</code></td><td>四个 B-Spline 基函数加权后除以 6</td><td>一般不经过控制点</td><td>需要 C2 连续平滑轨迹</td></tr>
+                    </tbody>
+                </table></div>
+                <h3>7.3 非均匀 Catmull-Rom：<code>CatmullRomNonUniform</code></h3>
+                <div class="formula">kᵢ₊₁=kᵢ+|Pᵢ₊₁-Pᵢ|ᵅ；α=0 为 uniform，α=0.5 为 centripetal，α=1 为 chordal</div>
+                <p>源码将 alpha 钳制到 [0,1]。centripetal（0.5）通常能显著减少控制点间距很不均匀时的回环和自交。若相邻点重合，<code>KnotLerp</code> 检查到 knot 区间为零，直接返回起点而不是除零。</p>
+                <h3>7.4 Kochanek-Bartels（TCB）</h3>
+                <div class="formula">s=(1-T)/2<br>out=(P1-P0)s(1+B)(1+C)+(P2-P1)s(1-B)(1-C)<br>in=(P2-P1)s(1+B)(1-C)+(P3-P2)s(1-B)(1+C)</div>
+                <p>Tension 越大切线越短；Bias 使形状偏向前段或后段；Continuity 改变连接处的锐利程度。源码求出 out/in 后直接调用 Hermite。</p>
+                <canvas id="splineCanvas" width="960" height="820" aria-label="多种样条曲线对比"></canvas>
+                <p class="caption">上方对比 Hermite 与等价 Bezier、Cardinal tension、Non-uniform Catmull-Rom alpha、TCB 参数；下方绿色 Catmull-Rom 经过 P1/P2，蓝色 B-Spline 只逼近控制点。</p>
+            </section>
+
+            <section id="ease">
+                <h2>8. <code>EaseCurve</code>：全部 31 条缓动曲线</h2>
+                <p>缓动把线性时间 t 映射为 u=Ease(t)，再用 u 驱动 Lerp 或其他曲线：</p>
+                <div class="formula">value(t)=Lerp(start,end,Ease(t))</div>
+                <div class="callout"><strong>当前实现规则：</strong>所有 Ease 函数先 <code>Saturate(t)</code>。Exponential 在 t=0 和 t=1 时显式返回精确端点；Back、Elastic、Bounce 的函数值会按设计短暂越过 [0,1]。</div>
+                <div class="controls">
+                    <label>对比曲线族<select id="easeFamily"><option>Sine</option><option>Quadratic</option><option>Cubic</option><option>Quartic</option><option>Quintic</option><option>Exponential</option><option>Circular</option><option selected>Back</option><option>Elastic</option><option>Bounce</option></select></label>
+                    <label>参数 t<input id="easeT" type="range" min="0" max="1" step="0.001" value="0.56"></label>
+                    <output id="easeTOut">0.560</output>
+                </div>
+                <canvas id="easeCanvas" width="960" height="390" aria-label="In Out InOut 缓动对比"></canvas>
+                <div class="legend"><span class="green">In：慢起步</span><span class="blue">Out：慢结束</span><span class="coral">InOut：两端平缓</span></div>
+                <h3>所有枚举值的曲线</h3>
+                <p>每张图都以源码中 <code>EaseCurve</code> 的同名函数绘制。Power 系列分别使用二至五次幂；Circular 来自单位圆；Back 有回拉；Elastic 是指数衰减正弦；Bounce 是分段二次函数。</p>
+                <div id="easeGrid" class="ease-grid"></div>
+                <h3>实际函数名与宏生成关系</h3>
+                <p><code>EvaluateEase(EaseCurve, t)</code> 是统一入口，内部用 <code>switch</code> 分派到下面的实际函数。<code>MATH_DEFINE_POWER_EASE</code> 宏按同一模式生成 Quadratic、Cubic、Quartic、Quintic 的 In/Out/InOut 三个函数，随后立即 <code>#undef</code>，避免宏名泄漏给包含该头文件的其他代码。</p>
+                <pre><code>EaseLinear
+EaseInSine / EaseOutSine / EaseInOutSine
+EaseInQuadratic / EaseOutQuadratic / EaseInOutQuadratic
+EaseInCubic / EaseOutCubic / EaseInOutCubic
+EaseInQuartic / EaseOutQuartic / EaseInOutQuartic
+EaseInQuintic / EaseOutQuintic / EaseInOutQuintic
+EaseInExponential / EaseOutExponential / EaseInOutExponential
+EaseInCircular / EaseOutCircular / EaseInOutCircular
+EaseInBack / EaseOutBack / EaseInOutBack
+EaseInElastic / EaseOutElastic / EaseInOutElastic
+EaseInBounce / EaseOutBounce / EaseInOutBounce</code></pre>
+                <div class="scroll-table"><table>
+                    <thead><tr><th>族</th><th>当前源码的关键常量或构造</th></tr></thead>
+                    <tbody>
+                        <tr><td>Exponential</td><td>In: 2^(10t-10)，Out: 1-2^(-10t)。</td></tr>
+                        <tr><td>Circular</td><td>核心是 sqrt(1-t²)，对应圆方程 x²+y²=1。</td></tr>
+                        <tr><td>Back</td><td><code>overshoot=1.70158</code>；InOut 使用 <code>1.70158*1.525</code>。</td></tr>
+                        <tr><td>Elastic</td><td>In/Out 使用 2π/3 相位；InOut 使用 2π/4.5 相位。</td></tr>
+                        <tr><td>Bounce</td><td><code>scale=7.5625</code>，<code>interval=2.75</code>，按四段抛物线反弹。</td></tr>
+                    </tbody>
+                </table></div>
+            </section>
+
+            <section id="usage">
+                <h2>9. C++ 使用、边界条件与曲线选型</h2>
+                <pre><code>#include "Math/Curves.hpp"
+
+const float3 position = CubicBezier(p0, p1, p2, p3, t);
+const float3 tangent = Normalize(CubicBezierDerivative(p0, p1, p2, p3, t));
+
+const float length = ApproximateCurveLength(
+    [&](float u) { return CubicBezier(p0, p1, p2, p3, u); },
+    128);
+
+const float easedT = EvaluateEase(EaseCurve::InOutCubic, t);
+const float3 animatedPosition = CubicBezier(p0, p1, p2, p3, easedT);
+
+const std::array<float2, 5> points{{{0, 0}, {1, 2}, {3, -1}, {5, 2}, {6, 0}}};
+const float2 highOrderPoint = Bezier(std::span{points}, 0.5f);</code></pre>
+                <div class="scroll-table"><table>
+                    <thead><tr><th>目标</th><th>优先函数</th><th>原因</th></tr></thead>
+                    <tbody>
+                        <tr><td>两个值平滑过渡</td><td><code>LinearBezier</code> + Ease</td><td>最少参数，Ease 负责节奏。</td></tr>
+                        <tr><td>可编辑把手的 UI 或路径</td><td><code>CubicBezier</code></td><td>两端方向可直观控制。</td></tr>
+                        <tr><td>经过一串采样点</td><td><code>CatmullRomNonUniform</code></td><td>无需手工切线；alpha=0.5 通常稳定。</td></tr>
+                        <tr><td>需要更多艺术控制</td><td><code>KochanekBartels</code></td><td>可逐段调 T/B/C。</td></tr>
+                        <tr><td>精确圆弧</td><td><code>RationalQuadraticBezier</code></td><td>普通 Bezier 只能近似圆。</td></tr>
+                        <tr><td>平滑摄像机轨迹</td><td><code>CubicBSpline</code></td><td>C2 连续，但不保证经过控制点。</td></tr>
+                        <tr><td>沿路径匀速</td><td>任意曲线 + 弧长表</td><td>不能只线性推进 t。</td></tr>
+                    </tbody>
+                </table></div>
+                <ul>
+                    <li>导数可能是零向量；调用 Normalize 前应检测长度，必要时沿用上一帧朝向。</li>
+                    <li>有理曲线的控制点与权重数量必须一致，总权重分母不能接近零。</li>
+                    <li>对渲染或碰撞的曲线离散化，应按屏幕误差或几何误差自适应细分，而不是一律使用固定大采样数。</li>
+                    <li>Back、Elastic、Bounce 的超调是视觉设计；用于不允许越界的物理数值时，需要额外 Clamp。</li>
+                </ul>
+                <p class="small no-margin">本页的公式、名称与边界行为均对应当前 <code>Math/Curves.hpp</code>。二维图只是示意；模板函数同样可作用于标量、颜色和支持加减乘除的任意维向量。</p>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        (() => {
+            "use strict";
+
+            const C = { green: "#147a56", blue: "#246a8d", coral: "#c6533f", gold: "#9a7217", ink: "#18201d", grid: "#d9dfdb", muted: "#58635e" };
+            const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+            const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+            const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+            const mul = (a, s) => ({ x: a.x * s, y: a.y * s });
+            const lerp = (a, b, t) => add(a, mul(sub(b, a), t));
+            const len = a => Math.hypot(a.x, a.y);
+            const norm = a => { const l = len(a); return l > 1e-7 ? mul(a, 1 / l) : { x: 0, y: 0 }; };
+            const cross = (a, b) => a.x * b.y - a.y * b.x;
+            const fixed = n => Number(n).toFixed(3);
+
+            function canvasState(canvas) {
+                const ratio = window.devicePixelRatio || 1;
+                const cssWidth = canvas.clientWidth || canvas.width;
+                const cssHeight = cssWidth * (canvas.height / canvas.width);
+                const width = Math.round(cssWidth * ratio);
+                const height = Math.round(cssHeight * ratio);
+                if (canvas.width !== width || canvas.height !== height) {
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+                const ctx = canvas.getContext("2d");
+                ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+                ctx.fillStyle = "#fcfdfc";
+                ctx.fillRect(0, 0, cssWidth, cssHeight);
+                return { ctx, width: cssWidth, height: cssHeight };
+            }
+
+            function drawLine(ctx, points, color, width = 2, dash = []) {
+                if (!points.length) return;
+                ctx.save();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.setLineDash(dash);
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; ++i) ctx.lineTo(points[i].x, points[i].y);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawDot(ctx, p, color, radius = 5, text = "") {
+                ctx.save();
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+                if (text) {
+                    ctx.fillStyle = C.ink;
+                    ctx.font = "13px Segoe UI";
+                    ctx.fillText(text, p.x + 8, p.y - 8);
+                }
+                ctx.restore();
+            }
+
+            function drawArrow(ctx, p, v, color, scale = 58) {
+                const d = norm(v);
+                const end = add(p, mul(d, scale));
+                const left = { x: end.x - d.x * 11 - d.y * 5, y: end.y - d.y * 11 + d.x * 5 };
+                const right = { x: end.x - d.x * 11 + d.y * 5, y: end.y - d.y * 11 - d.x * 5 };
+                drawLine(ctx, [p, end], color, 2.5);
+                drawLine(ctx, [end, left], color, 2.5);
+                drawLine(ctx, [end, right], color, 2.5);
+            }
+
+            function sample(fn, count = 150) {
+                const points = [];
+                for (let i = 0; i <= count; ++i) points.push(fn(i / count));
+                return points;
+            }
+
+            function quadratic(p0, p1, p2, t) {
+                const u = 1 - t;
+                return add(add(mul(p0, u * u), mul(p1, 2 * u * t)), mul(p2, t * t));
+            }
+
+            function quadraticD(p0, p1, p2, t) {
+                return add(mul(sub(p1, p0), 2 * (1 - t)), mul(sub(p2, p1), 2 * t));
+            }
+
+            function cubic(p0, p1, p2, p3, t) {
+                const u = 1 - t;
+                return add(add(mul(p0, u * u * u), mul(p1, 3 * u * u * t)), add(mul(p2, 3 * u * t * t), mul(p3, t * t * t)));
+            }
+
+            function cubicD(p0, p1, p2, p3, t) {
+                const u = 1 - t;
+                return add(add(mul(sub(p1, p0), 3 * u * u), mul(sub(p2, p1), 6 * u * t)), mul(sub(p3, p2), 3 * t * t));
+            }
+
+            function hermite(p0, m0, p1, m1, t) {
+                const t2 = t * t;
+                const t3 = t2 * t;
+                return add(add(mul(p0, 2 * t3 - 3 * t2 + 1), mul(m0, t3 - 2 * t2 + t)), add(mul(p1, -2 * t3 + 3 * t2), mul(m1, t3 - t2)));
+            }
+
+            function cardinal(p0, p1, p2, p3, t, tension) {
+                const s = (1 - tension) * .5;
+                return hermite(p1, mul(sub(p2, p0), s), p2, mul(sub(p3, p1), s), t);
+            }
+
+            function knotLerp(a, b, ka, kb, k) {
+                return Math.abs(kb - ka) < 1e-8 ? a : lerp(a, b, (k - ka) / (kb - ka));
+            }
+
+            function nonUniformCatmull(p0, p1, p2, p3, t, alpha) {
+                const nextKnot = (k, a, b) => k + Math.pow(len(sub(b, a)), clamp(alpha));
+                const k0 = 0;
+                const k1 = nextKnot(k0, p0, p1);
+                const k2 = nextKnot(k1, p1, p2);
+                const k3 = nextKnot(k2, p2, p3);
+                const k = k1 + (k2 - k1) * t;
+                const a1 = knotLerp(p0, p1, k0, k1, k);
+                const a2 = knotLerp(p1, p2, k1, k2, k);
+                const a3 = knotLerp(p2, p3, k2, k3, k);
+                const b1 = knotLerp(a1, a2, k0, k2, k);
+                const b2 = knotLerp(a2, a3, k1, k3, k);
+                return knotLerp(b1, b2, k1, k2, k);
+            }
+
+            function tcb(p0, p1, p2, p3, t, tension, bias, continuity) {
+                const s = (1 - tension) * .5;
+                const outgoing = add(mul(sub(p1, p0), s * (1 + bias) * (1 + continuity)), mul(sub(p2, p1), s * (1 - bias) * (1 - continuity)));
+                const incoming = add(mul(sub(p2, p1), s * (1 + bias) * (1 - continuity)), mul(sub(p3, p2), s * (1 - bias) * (1 + continuity)));
+                return hermite(p1, outgoing, p2, incoming, t);
+            }
+
+            function bSpline(p0, p1, p2, p3, t) {
+                const t2 = t * t;
+                const t3 = t2 * t;
+                const b0 = -t3 + 3 * t2 - 3 * t + 1;
+                const b1 = 3 * t3 - 6 * t2 + 4;
+                const b2 = -3 * t3 + 3 * t2 + 3 * t + 1;
+                return mul(add(add(mul(p0, b0), mul(p1, b1)), add(mul(p2, b2), mul(p3, t3))), 1 / 6);
+            }
+
+            const bezierCanvas = document.getElementById("bezierCanvas");
+            const bezierSlider = document.getElementById("bezierT");
+            const bezierOutput = document.getElementById("bezierTOut");
+
+            function drawBezier() {
+                const state = canvasState(bezierCanvas);
+                const ctx = state.ctx;
+                const sx = state.width / 960;
+                const sy = state.height / 500;
+                const points = [{ x: 85 * sx, y: 405 * sy }, { x: 265 * sx, y: 80 * sy }, { x: 650 * sx, y: 430 * sy }, { x: 875 * sx, y: 135 * sy }];
+                const t = Number(bezierSlider.value);
+                bezierOutput.value = fixed(t);
+
+                drawLine(ctx, points, C.coral, 1.5, [7, 6]);
+                points.forEach((p, i) => drawDot(ctx, p, C.coral, 5, "P" + i));
+                drawLine(ctx, sample(u => cubic(points[0], points[1], points[2], points[3], u)), C.green, 4);
+
+                const l1 = [lerp(points[0], points[1], t), lerp(points[1], points[2], t), lerp(points[2], points[3], t)];
+                const l2 = [lerp(l1[0], l1[1], t), lerp(l1[1], l1[2], t)];
+                const p = lerp(l2[0], l2[1], t);
+                drawLine(ctx, l1, C.gold, 1.7, [5, 4]);
+                drawLine(ctx, l2, C.blue, 1.7, [5, 4]);
+                l1.forEach((q, i) => drawDot(ctx, q, C.gold, 4, "L1[" + i + "]"));
+                l2.forEach((q, i) => drawDot(ctx, q, C.blue, 4, "L2[" + i + "]"));
+                drawDot(ctx, p, C.blue, 7, "B(t)");
+                drawArrow(ctx, p, cubicD(points[0], points[1], points[2], points[3], t), C.blue);
+                ctx.fillStyle = C.muted;
+                ctx.font = "14px Segoe UI";
+                ctx.fillText("De Casteljau: 同一个 t 在每一层相邻点之间插值", 18, 28);
+            }
+
+            const geometryCanvas = document.getElementById("geometryCanvas");
+
+            function drawGeometry() {
+                const state = canvasState(geometryCanvas);
+                const ctx = state.ctx;
+                const sx = state.width / 960;
+                const sy = state.height / 500;
+                const p0 = { x: 110 * sx, y: 390 * sy };
+                const p1 = { x: 480 * sx, y: 55 * sy };
+                const p2 = { x: 850 * sx, y: 390 * sy };
+                const t = .5;
+
+                drawLine(ctx, [p0, p1, p2], C.coral, 1.5, [7, 6]);
+                [p0, p1, p2].forEach((p, i) => drawDot(ctx, p, C.coral, 5, "P" + i));
+                drawLine(ctx, sample(u => quadratic(p0, p1, p2, u)), C.green, 4);
+                drawLine(ctx, sample(u => quadratic(p0, p1, p2, u), 8), "#6a8f7d", 1.4, [3, 4]);
+
+                const p = quadratic(p0, p1, p2, t);
+                const first = quadraticD(p0, p1, p2, t);
+                const second = mul(add(sub(p2, mul(p1, 2)), p0), 2);
+                const speed = len(first);
+                const kappa = Math.abs(cross(first, second)) / (speed * speed * speed);
+                const radius = 1 / kappa;
+                const normal = norm({ x: -first.y, y: first.x });
+                const center = add(p, mul(normal, radius * sx));
+
+                drawDot(ctx, p, C.blue, 7, "t=0.5");
+                drawArrow(ctx, p, first, C.blue, 80);
+                ctx.save();
+                ctx.strokeStyle = C.gold;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, radius * sx, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                drawLine(ctx, [p, center], C.gold, 1.5, [5, 5]);
+                drawDot(ctx, center, C.gold, 4, "曲率圆心");
+                ctx.fillStyle = C.muted;
+                ctx.font = "14px Segoe UI";
+                ctx.fillText("P'=(2,0), P''=(0,-8), κ=2, R=0.5", 18, 28);
+            }
+
+            const splineCanvas = document.getElementById("splineCanvas");
+
+            function drawSpline() {
+                const state = canvasState(splineCanvas);
+                const ctx = state.ctx;
+                const width = state.width;
+                const height = state.height;
+                const gap = 18;
+                const panelW = (width - gap * 3) / 2;
+                const panelH = (height - gap * 4) / 3;
+                const base = [{ x: .07, y: .77 }, { x: .29, y: .20 }, { x: .72, y: .80 }, { x: .93, y: .33 }];
+                const panels = [[gap, gap, panelW], [gap * 2 + panelW, gap, panelW], [gap, gap * 2 + panelH, panelW], [gap * 2 + panelW, gap * 2 + panelH, panelW], [gap, gap * 3 + panelH * 2, width - gap * 2]];
+
+                function map(point, panel) { return { x: panel[0] + point.x * panel[2], y: panel[1] + point.y * panelH }; }
+                function title(text, panel) { ctx.fillStyle = C.ink; ctx.font = "600 13px Segoe UI"; ctx.fillText(text, panel[0] + 10, panel[1] + 20); }
+                panels.forEach(panel => { ctx.strokeStyle = C.grid; ctx.strokeRect(panel[0], panel[1], panel[2], panelH); });
+
+                const a = panels[0];
+                const pa = base.map(p => map(p, a));
+                const m0 = { x: panelW * .72, y: -panelH * .52 };
+                const m1 = { x: panelW * .62, y: panelH * .38 };
+                drawLine(ctx, sample(t => hermite(pa[0], m0, pa[3], m1, t)), C.green, 3.2);
+                drawLine(ctx, sample(t => cubic(pa[0], add(pa[0], mul(m0, 1 / 3)), sub(pa[3], mul(m1, 1 / 3)), pa[3], t)), C.blue, 1.8, [5, 4]);
+                title("Hermite 与等价 Bezier 重合", a);
+
+                const b = panels[1];
+                const pb = base.map(p => map(p, b));
+                [-.5, 0, .65].forEach((tension, i) => drawLine(ctx, sample(t => cardinal(pb[0], pb[1], pb[2], pb[3], t, tension)), [C.coral, C.green, C.blue][i], 2.4));
+                title("Cardinal: tension -0.5 / 0 / 0.65", b);
+
+                const c = panels[2];
+                const pc = base.map(p => map(p, c));
+                [0, .5, 1].forEach((alpha, i) => drawLine(ctx, sample(t => nonUniformCatmull(pc[0], pc[1], pc[2], pc[3], t, alpha)), [C.coral, C.green, C.blue][i], 2.4));
+                title("Non-uniform: alpha 0 / .5 / 1", c);
+
+                const d = panels[3];
+                const pd = base.map(p => map(p, d));
+                [[0, 0, 0], [.25, -.6, .4], [-.4, .6, -.4]].forEach((v, i) => drawLine(ctx, sample(t => tcb(pd[0], pd[1], pd[2], pd[3], t, v[0], v[1], v[2])), [C.green, C.coral, C.blue][i], 2.4));
+                title("Kochanek-Bartels: 三组 T/B/C", d);
+
+                const e = panels[4];
+                const pe = base.map(p => map(p, e));
+                drawLine(ctx, pe, C.coral, 1.3, [6, 5]);
+                drawLine(ctx, sample(t => cardinal(pe[0], pe[1], pe[2], pe[3], t, 0)), C.green, 3);
+                drawLine(ctx, sample(t => bSpline(pe[0], pe[1], pe[2], pe[3], t)), C.blue, 3);
+                pe.forEach((p, i) => drawDot(ctx, p, C.coral, 4, "P" + i));
+                title("绿色 Catmull-Rom 经过 P1/P2；蓝色 Cubic B-Spline 逼近它们", e);
+            }
+
+            const ease = {
+                Linear: t => t,
+                InSine: t => 1 - Math.cos(t * Math.PI / 2),
+                OutSine: t => Math.sin(t * Math.PI / 2),
+                InOutSine: t => -(Math.cos(Math.PI * t) - 1) / 2,
+                InQuadratic: t => t * t,
+                OutQuadratic: t => 1 - (1 - t) * (1 - t),
+                InOutQuadratic: t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2,
+                InCubic: t => t ** 3,
+                OutCubic: t => 1 - (1 - t) ** 3,
+                InOutCubic: t => t < .5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2,
+                InQuartic: t => t ** 4,
+                OutQuartic: t => 1 - (1 - t) ** 4,
+                InOutQuartic: t => t < .5 ? 8 * t ** 4 : 1 - (-2 * t + 2) ** 4 / 2,
+                InQuintic: t => t ** 5,
+                OutQuintic: t => 1 - (1 - t) ** 5,
+                InOutQuintic: t => t < .5 ? 16 * t ** 5 : 1 - (-2 * t + 2) ** 5 / 2,
+                InExponential: t => t === 0 ? 0 : 2 ** (10 * t - 10),
+                OutExponential: t => t === 1 ? 1 : 1 - 2 ** (-10 * t),
+                InOutExponential: t => t === 0 || t === 1 ? t : t < .5 ? 2 ** (20 * t - 10) / 2 : (2 - 2 ** (-20 * t + 10)) / 2,
+                InCircular: t => 1 - Math.sqrt(1 - t * t),
+                OutCircular: t => Math.sqrt(1 - (t - 1) ** 2),
+                InOutCircular: t => t < .5 ? (1 - Math.sqrt(1 - (2 * t) ** 2)) / 2 : (Math.sqrt(1 - (-2 * t + 2) ** 2) + 1) / 2,
+                InBack: t => { const s = 1.70158; return (s + 1) * t ** 3 - s * t * t; },
+                OutBack: t => { const s = 1.70158; const u = t - 1; return 1 + (s + 1) * u ** 3 + s * u * u; },
+                InOutBack: t => { const s = 1.70158 * 1.525; return t < .5 ? ((2 * t) ** 2 * ((s + 1) * 2 * t - s)) / 2 : ((2 * t - 2) ** 2 * ((s + 1) * (2 * t - 2) + s) + 2) / 2; },
+                InElastic: t => t === 0 || t === 1 ? t : -(2 ** (10 * t - 10)) * Math.sin((t * 10 - 10.75) * (2 * Math.PI / 3)),
+                OutElastic: t => t === 0 || t === 1 ? t : 2 ** (-10 * t) * Math.sin((t * 10 - .75) * (2 * Math.PI / 3)) + 1,
+                InOutElastic: t => { const c = 2 * Math.PI / 4.5; return t === 0 || t === 1 ? t : t < .5 ? -(2 ** (20 * t - 10) * Math.sin((20 * t - 11.125) * c)) / 2 : (2 ** (-20 * t + 10) * Math.sin((20 * t - 11.125) * c)) / 2 + 1; },
+                OutBounce: t => { const n = 7.5625; const d = 2.75; if (t < 1 / d) return n * t * t; if (t < 2 / d) { t -= 1.5 / d; return n * t * t + .75; } if (t < 2.5 / d) { t -= 2.25 / d; return n * t * t + .9375; } t -= 2.625 / d; return n * t * t + .984375; }
+            };
+            ease.InBounce = t => 1 - ease.OutBounce(1 - t);
+            ease.InOutBounce = t => t < .5 ? (1 - ease.OutBounce(1 - 2 * t)) / 2 : (1 + ease.OutBounce(2 * t - 1)) / 2;
+            const easeValue = (name, t) => ease[name](clamp(t));
+
+            function drawAxes(ctx, width, height, pad) {
+                ctx.save();
+                ctx.strokeStyle = C.grid;
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 4; ++i) {
+                    const x = pad + (width - pad * 2) * i / 4;
+                    const y = height - pad - (height - pad * 2) * i / 4;
+                    ctx.beginPath();
+                    ctx.moveTo(x, pad);
+                    ctx.lineTo(x, height - pad);
+                    ctx.moveTo(pad, y);
+                    ctx.lineTo(width - pad, y);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            const easeCanvas = document.getElementById("easeCanvas");
+            const easeFamily = document.getElementById("easeFamily");
+            const easeSlider = document.getElementById("easeT");
+            const easeOutput = document.getElementById("easeTOut");
+
+            function drawEase() {
+                const state = canvasState(easeCanvas);
+                const ctx = state.ctx;
+                const width = state.width;
+                const height = state.height;
+                const pad = 38;
+                const family = easeFamily.value;
+                const t = Number(easeSlider.value);
+                const suffixes = family === "Sine" ? ["InSine", "OutSine", "InOutSine"] : ["In" + family, "Out" + family, "InOut" + family];
+
+                drawAxes(ctx, width, height, pad);
+                suffixes.forEach((name, index) => {
+                    const color = [C.green, C.blue, C.coral][index];
+                    const points = [];
+                    for (let i = 0; i <= 180; ++i) {
+                        const u = i / 180;
+                        points.push({ x: pad + u * (width - pad * 2), y: height - pad - easeValue(name, u) * (height - pad * 2) });
+                    }
+                    drawLine(ctx, points, color, 3);
+                    drawDot(ctx, { x: pad + t * (width - pad * 2), y: height - pad - easeValue(name, t) * (height - pad * 2) }, color, 5);
+                });
+                easeOutput.value = fixed(t);
+                ctx.fillStyle = C.muted;
+                ctx.font = "14px Segoe UI";
+                ctx.fillText(family + "：横轴 t，纵轴 Ease(t)", 18, 24);
+            }
+
+            function drawEaseGrid() {
+                const families = ["Sine", "Quadratic", "Cubic", "Quartic", "Quintic", "Exponential", "Circular", "Back", "Elastic", "Bounce"];
+                const names = ["Linear"].concat(...families.map(f => ["In" + f, "Out" + f, "InOut" + f]));
+                const grid = document.getElementById("easeGrid");
+                names.forEach(name => {
+                    const item = document.createElement("article");
+                    item.className = "ease-item";
+                    const title = document.createElement("strong");
+                    title.textContent = name;
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 280;
+                    canvas.height = 150;
+                    item.append(title, canvas);
+                    grid.append(item);
+
+                    const state = canvasState(canvas);
+                    const ctx = state.ctx;
+                    const pad = 20;
+                    drawAxes(ctx, state.width, state.height, pad);
+                    const points = [];
+                    for (let i = 0; i <= 100; ++i) {
+                        const t = i / 100;
+                        points.push({ x: pad + t * (state.width - pad * 2), y: state.height - pad - easeValue(name, t) * (state.height - pad * 2) });
+                    }
+                    drawLine(ctx, points, C.green, 2.5);
+                });
+            }
+
+            function redraw() {
+                drawBezier();
+                drawGeometry();
+                drawSpline();
+                drawEase();
+            }
+
+            bezierSlider.addEventListener("input", drawBezier);
+            easeFamily.addEventListener("change", drawEase);
+            easeSlider.addEventListener("input", drawEase);
+            drawEaseGrid();
+            redraw();
+
+            let resizeTimer = 0;
+            window.addEventListener("resize", () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(redraw, 80);
+            });
+        })();
+    </script>
+</body>
+</html>

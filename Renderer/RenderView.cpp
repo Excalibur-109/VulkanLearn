@@ -7,44 +7,28 @@ namespace renderer {
 
 namespace {
 
-RenderPlane NormalizePlane(const glm::vec4& equation) noexcept {
-    const glm::vec3 normal(equation.x, equation.y, equation.z);
-    const float length = glm::length(normal);
+RenderPlane NormalizePlane(const float4& equation) noexcept {
+    const float3 normal{equation.x, equation.y, equation.z};
+    const float length = Length(normal);
     if (length <= 1.0e-6F || !std::isfinite(length)) {
         return {};
     }
     return {normal / length, equation.w / length};
 }
 
-float SignedDistance(const RenderPlane& plane, const glm::vec3& point) noexcept {
-    return glm::dot(plane.normal, point) + plane.distance;
+float SignedDistance(const RenderPlane& plane, const float3& point) noexcept {
+    return Dot(plane.normal, point) + plane.distance;
 }
 
 } // namespace
 
-RenderFrustum RenderFrustum::FromViewProjectionZO(const glm::mat4& viewProjection) noexcept {
-    // GLM 使用 column-major 存储，matrix[column][row]。先显式取出数学意义上的四个行向量，
-    // 再按照裁剪不等式组合平面，可避免把“内存列”误当成“矩阵行”。
-    const glm::vec4 row0(
-        viewProjection[0][0],
-        viewProjection[1][0],
-        viewProjection[2][0],
-        viewProjection[3][0]);
-    const glm::vec4 row1(
-        viewProjection[0][1],
-        viewProjection[1][1],
-        viewProjection[2][1],
-        viewProjection[3][1]);
-    const glm::vec4 row2(
-        viewProjection[0][2],
-        viewProjection[1][2],
-        viewProjection[2][2],
-        viewProjection[3][2]);
-    const glm::vec4 row3(
-        viewProjection[0][3],
-        viewProjection[1][3],
-        viewProjection[2][3],
-        viewProjection[3][3]);
+RenderFrustum RenderFrustum::FromViewProjectionZO(const float4x4& viewProjection) noexcept {
+    // Math 的 Matrix 是行主序，operator[] 直接返回数学意义上的一行。
+    // 因此裁剪平面可直接由四行组合，不需要额外转置读取。
+    const float4 row0 = viewProjection[0];
+    const float4 row1 = viewProjection[1];
+    const float4 row2 = viewProjection[2];
+    const float4 row3 = viewProjection[3];
 
     RenderFrustum result{};
     result.planes_[0] = NormalizePlane(row3 + row0); // left:   x + w >= 0
@@ -74,14 +58,14 @@ RenderFrustumResult RenderFrustum::Classify(const rhi::RHIBoundingBox& box) cons
     for (const RenderPlane& plane : planes_) {
         // positiveVertex 是沿平面法线方向最远的角。它仍在平面外侧时，整个 AABB 都在外面。
         // negativeVertex 是反方向最远的角。它在外面而 positive 在里面时，AABB 与平面相交。
-        const glm::vec3 positiveVertex(
+        const float3 positiveVertex{
             plane.normal.x >= 0.0F ? box.max.x : box.min.x,
             plane.normal.y >= 0.0F ? box.max.y : box.min.y,
-            plane.normal.z >= 0.0F ? box.max.z : box.min.z);
-        const glm::vec3 negativeVertex(
+            plane.normal.z >= 0.0F ? box.max.z : box.min.z};
+        const float3 negativeVertex{
             plane.normal.x >= 0.0F ? box.min.x : box.max.x,
             plane.normal.y >= 0.0F ? box.min.y : box.max.y,
-            plane.normal.z >= 0.0F ? box.min.z : box.max.z);
+            plane.normal.z >= 0.0F ? box.min.z : box.max.z};
 
         if (SignedDistance(plane, positiveVertex) < 0.0F) {
             return RenderFrustumResult::Outside;

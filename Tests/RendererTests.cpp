@@ -16,9 +16,9 @@ void Check(bool condition, const char* message) {
 
 rhi::RHICameraData IdentityCamera() {
     rhi::RHICameraData camera{};
-    camera.view = glm::mat4(1.0F);
-    camera.projection = glm::mat4(1.0F);
-    camera.viewProjection = glm::mat4(1.0F);
+    camera.view = float4x4(1.0F);
+    camera.projection = float4x4(1.0F);
+    camera.viewProjection = float4x4(1.0F);
     camera.position = {0.0F, 0.0F, 0.0F};
     return camera;
 }
@@ -64,7 +64,7 @@ rhi::RHIRenderObjectDesc Object(
     rhi::RHIMesh mesh,
     rhi::RHIMaterial material,
     rhi::RHIRenderQueue queue,
-    const glm::vec3& center,
+    const float3& center,
     rhi::u32 layerMask = 1) {
     rhi::RHIRenderObjectDesc object{};
     object.debugName = name;
@@ -73,7 +73,7 @@ rhi::RHIRenderObjectDesc Object(
     object.queue = queue;
     object.layerMask = layerMask;
     object.worldBoundsSphere = {center, 0.05F};
-    object.worldBounds = {center - glm::vec3(0.05F), center + glm::vec3(0.05F)};
+    object.worldBounds = {center - float3(0.05F), center + float3(0.05F)};
     return object;
 }
 
@@ -115,7 +115,7 @@ renderer::RenderFrameBuildDesc BasicBuildDesc() {
 
 void TestFrustumClassification() {
     const renderer::RenderFrustum frustum =
-        renderer::RenderFrustum::FromViewProjectionZO(glm::mat4(1.0F));
+        renderer::RenderFrustum::FromViewProjectionZO(float4x4(1.0F));
 
     Check(
         frustum.Classify({{-0.25F, -0.25F, 0.25F}, {0.25F, 0.25F, 0.75F}}) ==

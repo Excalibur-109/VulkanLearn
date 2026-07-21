@@ -9,8 +9,8 @@
 //   TEXCOORD0  : float2 UV
 //
 // cbuffer 字段顺序必须和 main.cpp 的 UniformBufferObject 完全一致，不能只按名称匹配。
-// GLM 默认上传列主序矩阵，所以这里显式使用 column_major，并采用 mul(matrix, vector)，
-// 使其和 GLSL 的 matrix * vector 得到相同变换结果。
+// C++ Math 在 CPU 使用行主序；main.cpp 在写入常量缓冲前显式转置，因此这里继续按
+// column_major 读取，并采用 mul(matrix, vector)，与 GLSL 的 matrix * vector 保持一致。
 // =============================================================================
 
 static const float PI = 3.14159265359F;

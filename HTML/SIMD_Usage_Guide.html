@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="结合当前 C++ Math 库 SSE2 实现讲解 SIMD、intrinsic、内存布局、运行时分派、性能测试与常见陷阱。">
+    <title>SIMD 详细使用手册 | C++ Math</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #58635e;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --blue: #246a8d;
+            --blue-soft: #e9f3f8;
+            --coral: #b94e3d;
+            --coral-soft: #faeeeb;
+            --gold: #8a6513;
+            --gold-soft: #f8f1dd;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+        /* 长文档在移动端会先展开目录；即时定位可避免深链接在重排期间落到错误位置。 */
+        html { scroll-behavior: auto; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.72;
+            letter-spacing: 0;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+        code, kbd { font-family: Consolas, "Cascadia Code", monospace; }
+        code { overflow-wrap: anywhere; }
+
+        .masthead {
+            color: #f5fbf8;
+            background: var(--nav);
+            border-bottom: 4px solid var(--green);
+        }
+
+        .masthead-inner {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .masthead-inner > div:first-child { min-width: 0; }
+        .eyebrow { margin: 0 0 6px; color: #8fd5b8; font-size: 13px; font-weight: 700; }
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin: 28px 0 11px; font-size: 19px; }
+        h4 { margin: 20px 0 8px; font-size: 16px; }
+        .subtitle { margin: 0; color: #c6d5ce; max-width: 820px; overflow-wrap: anywhere; }
+
+        .doc-switch {
+            flex: 0 0 auto;
+            display: flex;
+            border: 1px solid #476057;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .doc-switch a {
+            color: #dce9e3;
+            padding: 8px 13px;
+            text-decoration: none;
+            border-right: 1px solid #476057;
+            font-size: 14px;
+        }
+
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #ffffff; background: var(--green); }
+
+        .layout {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 285px minmax(0, 1fr);
+        }
+
+        .toc {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: auto;
+            padding: 30px 24px 50px;
+            background: var(--surface);
+            border-right: 1px solid var(--line);
+        }
+
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { list-style: none; margin: 0; padding: 0; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 8px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--green); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        main > section { max-width: 1060px; margin: 0 auto; padding: 0 0 56px; scroll-margin-top: 24px; }
+        main > section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+        .lead { color: #34403b; font-size: 18px; max-width: 900px; }
+
+        .two-column, .three-column, .status-grid {
+            display: grid;
+            gap: 18px;
+            margin: 22px 0;
+        }
+
+        .two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+        .fact {
+            padding: 16px;
+            background: var(--surface);
+            border-top: 3px solid var(--green);
+            border-radius: var(--radius);
+        }
+
+        .fact.blue { border-top-color: var(--blue); }
+        .fact.coral { border-top-color: var(--coral); }
+        .fact.gold { border-top-color: var(--gold); }
+        .fact strong { display: block; margin-bottom: 4px; }
+        .fact p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .note, .warning, .important {
+            margin: 20px 0;
+            padding: 15px 17px;
+            border-left: 4px solid var(--blue);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            background: var(--blue-soft);
+        }
+
+        .warning { border-left-color: var(--coral); background: var(--coral-soft); }
+        .important { border-left-color: var(--green); background: var(--green-soft); }
+        .note strong, .warning strong, .important strong { display: block; margin-bottom: 4px; }
+
+        .formula {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow-x: auto;
+            color: #12241d;
+            background: var(--green-soft);
+            border-left: 4px solid var(--green);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+        }
+
+        pre.code {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow: auto;
+            color: var(--code-ink);
+            background: var(--code);
+            border-radius: var(--radius);
+            font: 14px/1.62 Consolas, "Cascadia Code", monospace;
+            tab-size: 4;
+        }
+
+        pre.code code { overflow-wrap: normal; }
+        .comment { color: #89a99a; }
+        .keyword { color: #8ec9ff; }
+        .type { color: #a8dfbc; }
+        .literal { color: #f0c782; }
+        .function { color: #e7a9a0; }
+
+        .table-wrap { margin: 20px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+        table { width: 100%; border-collapse: collapse; min-width: 680px; }
+        th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+        th { color: #24312c; background: var(--surface); font-size: 14px; }
+        tr:last-child td { border-bottom: 0; }
+        td code { font-size: 13px; }
+
+        .visual {
+            margin: 22px 0;
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fbfcfb;
+        }
+
+        .visual-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .visual-head strong { font-size: 16px; }
+        .visual-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+        .segmented { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid #b7c3bd; border-radius: var(--radius); overflow: hidden; }
+        .segmented button {
+            min-height: 36px;
+            padding: 6px 11px;
+            color: #27342e;
+            background: #ffffff;
+            border: 0;
+            border-right: 1px solid #b7c3bd;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .segmented button:last-child { border-right: 0; }
+        .segmented button[aria-pressed="true"] { color: #ffffff; background: var(--green); }
+        canvas { display: block; width: 100%; height: 260px; background: #ffffff; border: 1px solid var(--line); border-radius: 4px; }
+        #matrixCanvas { height: 420px; }
+
+        .flow {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1px;
+            margin: 22px 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--line);
+        }
+
+        .flow div { padding: 15px; background: #ffffff; }
+        .flow b { display: block; color: var(--green); font-size: 13px; }
+        .flow span { display: block; margin-top: 3px; font-size: 14px; }
+
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li { position: relative; padding: 10px 12px 10px 38px; border-top: 1px solid var(--line); }
+        .checklist li::before { content: "✓"; position: absolute; left: 12px; color: var(--green); font-weight: 800; }
+
+        .reference-list { list-style: none; padding: 0; }
+        .reference-list li { padding: 14px 0; border-top: 1px solid var(--line); }
+        .reference-list a { font-weight: 700; }
+        .reference-list p { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+
+        .tag {
+            display: inline-block;
+            padding: 1px 7px;
+            color: #315246;
+            background: var(--green-soft);
+            border: 1px solid #badaca;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        footer { padding: 28px; color: #63706a; background: var(--surface); border-top: 1px solid var(--line); text-align: center; font-size: 13px; }
+
+        @media (max-width: 1020px) {
+            .layout { grid-template-columns: 230px minmax(0, 1fr); }
+            .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .three-column { grid-template-columns: 1fr; }
+            .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 760px) {
+            .masthead-inner { display: block; }
+            .doc-switch { margin-top: 20px; width: fit-content; max-width: 100%; flex-wrap: wrap; }
+            .layout { display: block; }
+            .toc { position: static; width: auto; height: auto; padding: 20px 24px; border-right: 0; border-bottom: 1px solid var(--line); }
+            .toc ol { columns: 2; column-gap: 24px; }
+            .toc li { break-inside: avoid; }
+            main { padding: 38px 20px 70px; }
+            .two-column, .status-grid { grid-template-columns: 1fr; }
+            .visual-head { align-items: flex-start; flex-direction: column; }
+            canvas { height: 310px; }
+            #matrixCanvas { height: 540px; }
+            h1 { font-size: 29px; }
+        }
+
+        @media (max-width: 500px) {
+            .toc ol { columns: 1; }
+            .flow { grid-template-columns: 1fr; }
+            .segmented { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); }
+            .segmented button { border-bottom: 1px solid #b7c3bd; }
+            .segmented button:nth-child(2) { border-right: 0; }
+            .segmented button:nth-last-child(-n + 2) { border-bottom: 0; }
+            table { min-width: 600px; }
+            pre.code { padding: 15px; font-size: 13px; }
+        }
+
+        @media print {
+            .doc-switch, .toc, .segmented { display: none; }
+            .layout { display: block; }
+            main { padding: 25px; }
+            main > section { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div>
+                <p class="eyebrow">C++ Math / CPU Vectorization</p>
+                <h1>SIMD 详细使用手册</h1>
+                <p class="subtitle">从寄存器 lane、intrinsic 和数据布局，到当前 Math 库的 SSE2 矩阵路径、运行时分派、测试与性能诊断。</p>
+            </div>
+            <nav class="doc-switch" aria-label="数学文档切换">
+                <a href="Matrix_Math_Guide.html">Matrix</a>
+                <a href="Quaternion_Math_Guide.html">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html" aria-current="page">SIMD</a>
+                <a href="Curves_Math_Guide.html">Curves</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="toc">
+            <strong>目录</strong>
+            <ol>
+                <li><a href="#project">0. 项目现状</a></li>
+                <li><a href="#model">1. SIMD 思维模型</a></li>
+                <li><a href="#isa">2. 指令集选择</a></li>
+                <li><a href="#intrinsics">3. Intrinsic 基础</a></li>
+                <li><a href="#memory">4. 内存与布局</a></li>
+                <li><a href="#operations">5. 核心操作</a></li>
+                <li><a href="#matrix">6. 当前矩阵路径</a></li>
+                <li><a href="#examples">7. 完整改写示例</a></li>
+                <li><a href="#dispatch">8. 运行时分派</a></li>
+                <li><a href="#build">9. 编译与 constexpr</a></li>
+                <li><a href="#performance">10. 性能测量</a></li>
+                <li><a href="#pitfalls">11. 正确性陷阱</a></li>
+                <li><a href="#workflow">12. 优化流程</a></li>
+                <li><a href="#reference">13. 官方文档</a></li>
+                <li><a href="#glossary">14. 术语速查</a></li>
+            </ol>
+        </aside>
+
+        <main>
+            <section id="project">
+                <h2>0. 先看当前项目实际做了什么</h2>
+                <p class="lead">SIMD 不是一种算法，而是同一条指令同时处理多个数据元素。当前 Math 库只把经过筛选的 <code>float4x4</code> 热点放进 SSE2 路径，公共类型仍保持普通、紧凑、可序列化的内存布局。</p>
+
+                <div class="status-grid">
+                    <div class="fact"><strong>当前 ISA</strong><p>x86/x64 SSE2，使用 128 位 <code>__m128</code>。</p></div>
+                    <div class="fact blue"><strong>当前热路径</strong><p>4x4 矩阵乘向量、乘矩阵与求逆。</p></div>
+                    <div class="fact coral"><strong>当前回退</strong><p>关闭 SIMD 或常量求值时执行标量 C++。</p></div>
+                    <div class="fact gold"><strong>当前数据布局</strong><p>行主序存储，列向量右乘：<code>p' = M * p</code>。</p></div>
+                </div>
+
+                <div class="flow">
+                    <div><b>1. API</b><span><code>float4x4 * float4x4</code></span></div>
+                    <div><b>2. 编译期判断</b><span><code>MATH_MATRIX_HAS_SSE2</code></span></div>
+                    <div><b>3. 求值环境</b><span>运行时 SIMD / constexpr 标量</span></div>
+                    <div><b>4. 存储</b><span>结果写回普通 <code>Matrix</code></span></div>
+                </div>
+
+                <pre class="code"><code><span class="comment">// CMakeLists.txt：默认启用架构相关路径。</span>
+option(MATH_ENABLE_SIMD "Enable architecture-specific Math SIMD paths" ON)
+
+<span class="comment">// 关闭后，Math 接口目标向使用方传播 MATH_DISABLE_SIMD=1。</span>
+cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF
+cmake --build build_math_scalar --config Release</code></pre>
+
+                <div class="important">
+                    <strong>学习时先记住这条边界</strong>
+                    <code>float4</code> 是内存中的数据类型，<code>__m128</code> 是计算时的寄存器类型。当前实现只在函数入口 Load、函数出口 Store，没有要求所有对象永久以 SIMD 类型存在。
+                </div>
+            </section>
+
+            <section id="model">
+                <h2>1. SIMD 的思维模型</h2>
+                <p>把寄存器看作由若干 <strong>lane</strong> 组成的短数组。对两个寄存器做一次加法时，相同位置的 lane 同时相加。SSE 的 128 位寄存器能放 4 个 <code>float</code>，AVX2 的 256 位寄存器能放 8 个，AVX-512 能放 16 个。</p>
+
+                <div class="formula">A = [a₀, a₁, a₂, a₃]
+B = [b₀, b₁, b₂, b₃]
+A + B = [a₀+b₀, a₁+b₁, a₂+b₂, a₃+b₃]</div>
+
+                <div class="visual">
+                    <div class="visual-head">
+                        <div><strong>寄存器与 lane 可视化</strong><p>切换 ISA，观察单条 float 向量指令一次覆盖的数据量。</p></div>
+                        <div class="segmented" role="group" aria-label="选择 SIMD 指令集">
+                            <button type="button" data-isa="sse2" aria-pressed="true">SSE2</button>
+                            <button type="button" data-isa="avx2" aria-pressed="false">AVX2</button>
+                            <button type="button" data-isa="avx512" aria-pressed="false">AVX-512</button>
+                            <button type="button" data-isa="neon" aria-pressed="false">NEON</button>
+                        </div>
+                    </div>
+                    <canvas id="registerCanvas" aria-label="SIMD 寄存器 lane 图"></canvas>
+                </div>
+
+                <h3>1.1 SIMD 适合什么</h3>
+                <div class="two-column">
+                    <div class="fact"><strong>适合</strong><p>大量元素执行同一种算术；矩阵、粒子、蒙皮、图像、音频、压缩和碰撞批处理。</p></div>
+                    <div class="fact coral"><strong>不一定适合</strong><p>数据量很小、分支极不一致、内存随机访问、算法主要受缓存或延迟限制。</p></div>
+                </div>
+
+                <h3>1.2 向量化的三个层级</h3>
+                <ol>
+                    <li><strong>编译器自动向量化：</strong>保持普通循环，让编译器证明迭代互不依赖后生成向量指令。</li>
+                    <li><strong>编译器向量扩展或 <code>std::simd</code>：</strong>用接近 C++ 运算符的方式表达 lane 运算。</li>
+                    <li><strong>intrinsic：</strong>直接调用与指令接近的函数，例如 <code>_mm_add_ps</code>。控制力最强，但架构耦合也最强。</li>
+                </ol>
+
+                <div class="warning">
+                    <strong>SIMD 宽度不是理论加速倍数</strong>
+                    4 个 lane 不等于必然快 4 倍。Load/Store、shuffle、水平归约、缓存未命中、前后依赖、调用开销和 CPU 执行端口都会消耗周期。
+                </div>
+            </section>
+
+            <section id="isa">
+                <h2>2. 指令集怎么选</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ISA</th><th>float lane</th><th>主要能力</th><th>使用条件</th></tr></thead>
+                        <tbody>
+                            <tr><td>SSE / SSE2</td><td>4 × float / 128 bit</td><td>基础浮点、整数、shuffle；x64 最稳妥基线</td><td>x86-64 保证 SSE2；32 位 x86 需检测或编译目标保证</td></tr>
+                            <tr><td>SSE3 / SSSE3 / SSE4.1</td><td>4 × float</td><td>水平加法、字节 shuffle、blend、dot 等便利指令</td><td>必须检查对应 CPUID feature bit</td></tr>
+                            <tr><td>AVX</td><td>8 × float / 256 bit</td><td>三操作数编码、256 位浮点</td><td>CPU 支持 AVX，且 OS 保存 YMM 状态</td></tr>
+                            <tr><td>AVX2 + FMA</td><td>8 × float</td><td>256 位整数、gather；FMA 是独立 feature</td><td>分别检测 AVX2 和 FMA，不要假设总是一起存在</td></tr>
+                            <tr><td>AVX-512</td><td>16 × float / 512 bit</td><td>mask 寄存器、宽向量、丰富的 masked operation</td><td>检查具体子集与扩展 XCR0 状态；部分 CPU 会降频</td></tr>
+                            <tr><td>Arm NEON / AdvSIMD</td><td>4 × float / 128 bit</td><td>Arm 固定宽度 SIMD；AArch64 的常用基线</td><td>使用 <code>arm_neon.h</code> 和 <code>float32x4_t</code></td></tr>
+                            <tr><td>Arm SVE / SVE2</td><td>实现定义</td><td>向量长度无关编程、谓词寄存器</td><td>循环不能写死 lane 数，按运行时向量长度推进</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>2.1 当前项目为何选择 SSE2</h3>
+                <p>项目当前目标是 Windows/x64 学习型引擎。x64 ABI 保证 SSE2，因此不需要给 SSE2 路径写运行时 CPUID 分派；128 位宽度也与 <code>float4</code>、矩阵一行天然匹配。AVX2 更适合一次处理多个对象、多个顶点或多个粒子，而不只是把一个 <code>float4</code> 放进更宽寄存器。</p>
+
+                <h3>2.2 不要按“更新”盲目选 ISA</h3>
+                <ul>
+                    <li>一个 4 分量向量用 AVX2 时，高 128 位可能空着，未获得双倍有效数据。</li>
+                    <li>AVX-512 在部分微架构上可能触发更低频率，宽度收益需要实测。</li>
+                    <li>引擎发布版本通常选择一个广泛基线，再为热点提供 AVX2 等可选实现。</li>
+                    <li>跨 x86 与 Arm 时，应把算法接口和 ISA 实现分层，避免 intrinsic 泄漏到业务层。</li>
+                </ul>
+            </section>
+
+            <section id="intrinsics">
+                <h2>3. Intrinsic 基础</h2>
+                <p>intrinsic 是编译器提供的函数样式接口，通常映射到一条或少数几条机器指令。它不是普通库函数，不要根据函数名猜性能；最终应检查编译器生成的汇编。</p>
+
+                <h3>3.1 x86 名称怎么读</h3>
+                <div class="formula">_mm_add_ps
+│   │   └─ ps = packed single-precision，多个 float
+│   └───── add = 加法
+└───────── _mm = 128 位 SSE 家族
+
+_mm256_mul_ps  → 256 位、8 个 float 的并行乘法
+_mm_add_ss     → scalar single，只更新最低 float lane</div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>后缀</th><th>含义</th><th>常见类型</th><th>例子</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>ps</code></td><td>packed single</td><td>多个 float</td><td><code>_mm_mul_ps</code></td></tr>
+                            <tr><td><code>pd</code></td><td>packed double</td><td>多个 double</td><td><code>_mm_add_pd</code></td></tr>
+                            <tr><td><code>ss</code></td><td>scalar single</td><td>最低 float lane</td><td><code>_mm_add_ss</code></td></tr>
+                            <tr><td><code>epi32</code></td><td>packed 32-bit integer</td><td>有符号/按位整数 lane</td><td><code>_mm_add_epi32</code></td></tr>
+                            <tr><td><code>si128</code></td><td>整个 128 位整数寄存器</td><td>不强调 lane 类型</td><td><code>_mm_loadu_si128</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>3.2 常见寄存器类型</h3>
+                <pre class="code"><code><span class="keyword">#include</span> &lt;immintrin.h&gt;
+
+__m128  fourFloats;       <span class="comment">// 128 bit: 4 × float</span>
+__m128d twoDoubles;       <span class="comment">// 128 bit: 2 × double</span>
+__m128i integerBits;      <span class="comment">// 128 bit: integer / raw bits</span>
+__m256  eightFloats;      <span class="comment">// 256 bit: 8 × float, requires AVX</span>
+__m512  sixteenFloats;    <span class="comment">// 512 bit: 16 × float, requires AVX-512F</span>
+
+<span class="comment">// __m128i 本身不记录“这是 i8 还是 i32”。具体指令决定 lane 解释。</span></code></pre>
+
+                <h3>3.3 一条 intrinsic 不一定等于一条指令</h3>
+                <p><code>_MM_TRANSPOSE4_PS</code> 是宏，会展开为多条 unpack/move 指令；<code>_mm_set_ps</code> 也可能由常量加载、插入或 shuffle 构成。反过来，编译器也可能融合乘加、消除多余 Load，或把多个 intrinsic 重新安排。</p>
+            </section>
+
+            <section id="memory">
+                <h2>4. Load、Store、对齐和数据布局</h2>
+                <p>CPU 只能对寄存器执行大多数 SIMD 算术。数据先从内存 Load 到寄存器，完成运算后再 Store。算法是否快，常常取决于数据能否连续、批量地进入寄存器。</p>
+
+                <h3>4.1 对齐与非对齐访问</h3>
+                <pre class="code"><code><span class="keyword">const</span> <span class="type">float</span>* source = ...;
+<span class="type">float</span>* destination = ...;
+
+__m128 a = _mm_loadu_ps(source);          <span class="comment">// 任意合法 float 地址，读取 16 bytes</span>
+_mm_storeu_ps(destination, a);            <span class="comment">// 任意合法 float 地址，写入 16 bytes</span>
+
+__m128 b = _mm_load_ps(alignedSource);    <span class="comment">// 地址必须满足 16-byte alignment</span>
+_mm_store_ps(alignedDestination, b);       <span class="comment">// 未满足对齐要求属于错误</span></code></pre>
+
+                <p>现代 x86 上，未对齐访问若没有跨缓存行或页边界，通常与对齐访问接近；但“通常接近”不代表可以越界。<code>_mm_loadu_ps</code> 仍会读取完整 16 字节，即使你只需要 3 个 float。</p>
+
+                <div class="warning">
+                    <strong><code>float3</code> 的典型越界问题</strong>
+                    紧凑 <code>float3</code> 只有 12 字节。直接从最后一个独立 <code>float3</code> 执行 <code>_mm_loadu_ps</code> 会额外读取第 4 个 float，若对象后面没有可访问空间就是越界。当前矩阵路径加载的是完整 <code>float4</code>，不存在这个问题。
+                </div>
+
+                <h3>4.2 AoS 与 SoA</h3>
+                <div class="two-column">
+                    <div class="fact"><strong>AoS：Array of Structures</strong><p><code>Particle{x,y,z,life}</code> 连续排列。读取一个对象全部字段方便，批量处理同一字段时需要 shuffle/gather。</p></div>
+                    <div class="fact blue"><strong>SoA：Structure of Arrays</strong><p><code>x[]</code>、<code>y[]</code>、<code>z[]</code>、<code>life[]</code> 分开。每次 Load 得到多个对象的同一字段，适合批处理。</p></div>
+                </div>
+
+                <pre class="code"><code><span class="comment">// AoS：每个对象的数据聚在一起。</span>
+<span class="keyword">struct</span> ParticleAoS { <span class="type">float</span> x, y, z, life; };
+std::vector&lt;ParticleAoS&gt; particles;
+
+<span class="comment">// SoA：同一字段连续，可一次读取 4 或 8 个粒子的 x。</span>
+<span class="keyword">struct</span> ParticleSoA {
+    std::vector&lt;<span class="type">float</span>&gt; x, y, z, life;
+};</code></pre>
+
+                <h3>4.3 尾部处理</h3>
+                <p>元素数量通常不是 SIMD 宽度的整数倍。SSE 每次处理 4 个 float，主循环走到 <code>count / 4 * 4</code>，余下 0 到 3 个元素用标量处理。也可用 padding 或 masked load，但必须保证不访问无效内存。</p>
+
+                <pre class="code"><code><span class="type">std::size_t</span> i = <span class="literal">0</span>;
+<span class="keyword">for</span> (; i + <span class="literal">4</span> &lt;= count; i += <span class="literal">4</span>) {
+    <span class="comment">// SIMD body</span>
+}
+<span class="keyword">for</span> (; i &lt; count; ++i) {
+    <span class="comment">// Scalar tail</span>
+}</code></pre>
+
+                <h3>4.4 别名与内存生命周期</h3>
+                <ul>
+                    <li>不要通过不兼容的 C++ 指针类型解引用来“强转”寄存器，优先使用 Load/Store、<code>std::bit_cast</code> 或 <code>memcpy</code>。</li>
+                    <li>输入输出可能重叠时，编译器不能自由重排。明确 API 不重叠，或在支持的编译器上谨慎使用 <code>restrict</code>。</li>
+                    <li>对齐只描述地址边界，不代表对象后面存在足够的可读字节。</li>
+                </ul>
+            </section>
+
+            <section id="operations">
+                <h2>5. SIMD 的核心操作</h2>
+
+                <h3>5.1 构造、广播和算术</h3>
+                <pre class="code"><code>__m128 zero = _mm_setzero_ps();                    <span class="comment">// [0, 0, 0, 0]</span>
+__m128 one  = _mm_set1_ps(<span class="literal">1.0F</span>);                 <span class="comment">// [1, 1, 1, 1]</span>
+__m128 data = _mm_setr_ps(<span class="literal">1</span>, <span class="literal">2</span>, <span class="literal">3</span>, <span class="literal">4</span>);         <span class="comment">// 按阅读顺序构造</span>
+
+__m128 sum     = _mm_add_ps(data, one);            <span class="comment">// [2, 3, 4, 5]</span>
+__m128 product = _mm_mul_ps(data, one);            <span class="comment">// lane-wise multiply</span>
+__m128 minimum = _mm_min_ps(data, one);
+__m128 root    = _mm_sqrt_ps(data);</code></pre>
+
+                <h3>5.2 Shuffle</h3>
+                <p>shuffle 在 lane 之间重排数据。它是矩阵、复数、叉积等算法的核心，也常是吞吐瓶颈。<code>_MM_SHUFFLE(z,y,x,w)</code> 的参数阅读方向容易混乱，应先写测试确认输出 lane。</p>
+
+                <pre class="code"><code>__m128 row = _mm_setr_ps(<span class="literal">1</span>, <span class="literal">2</span>, <span class="literal">3</span>, <span class="literal">4</span>);
+__m128 xxxx = _mm_shuffle_ps(row, row, _MM_SHUFFLE(<span class="literal">0</span>, <span class="literal">0</span>, <span class="literal">0</span>, <span class="literal">0</span>));
+<span class="comment">// xxxx = [1, 1, 1, 1]：把 x 广播到全部 lane。</span></code></pre>
+
+                <h3>5.3 比较、mask 与 Select</h3>
+                <p>SSE 比较结果不是 C++ <code>bool4</code>，而是每个 lane 全 1 或全 0 的位掩码。按位组合后可用 <code>and/andnot/or</code> 在不分支的情况下选择值。</p>
+
+                <pre class="code"><code>__m128 mask = _mm_cmpgt_ps(value, threshold);
+__m128 selected = _mm_or_ps(
+    _mm_and_ps(mask, whenTrue),
+    _mm_andnot_ps(mask, whenFalse));
+
+<span class="comment">// SSE4.1 可用 _mm_blendv_ps(whenFalse, whenTrue, mask)。</span>
+<span class="type">int</span> laneBits = _mm_movemask_ps(mask);             <span class="comment">// 提取 4 个符号位</span>
+<span class="type">bool</span> any = laneBits != <span class="literal">0</span>;
+<span class="type">bool</span> all = laneBits == <span class="literal">0b1111</span>;</code></pre>
+
+                <h3>5.4 水平归约</h3>
+                <p>lane-wise 运算保持 lane 独立；点积、总和、最小值需要把多个 lane 合成一个标量，这叫 reduction。归约会形成依赖链，不能简单按 lane 数估算收益。</p>
+
+                <pre class="code"><code><span class="comment">// 当前项目 DotFloat3：只累加 x/y/z，忽略 w。</span>
+__m128 product = _mm_mul_ps(lhs, rhs);
+__m128 sum = _mm_add_ss(
+    product,
+    _mm_shuffle_ps(product, product, _MM_SHUFFLE(<span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>)));
+sum = _mm_add_ss(
+    sum,
+    _mm_shuffle_ps(product, product, _MM_SHUFFLE(<span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>)));
+<span class="type">float</span> dot = _mm_cvtss_f32(sum);</code></pre>
+
+                <h3>5.5 Gather、Scatter 和预取</h3>
+                <ul>
+                    <li><strong>Gather：</strong>根据多个索引读取离散地址。AVX2 提供 gather，但它通常明显慢于连续 Load。</li>
+                    <li><strong>Scatter：</strong>向多个离散地址写入；x86 到 AVX-512 才有更完整的硬件 scatter。</li>
+                    <li><strong>Prefetch：</strong>提示缓存提前读取。硬件预取器已很强，手动 prefetch 只有在有稳定距离且实测有效时才保留。</li>
+                </ul>
+            </section>
+
+            <section id="matrix">
+                <h2>6. 当前 <code>Matrix.hpp</code> 的 SIMD 路径</h2>
+                <p>当前矩阵采用行主序存储，数学约定是列向量右乘。矩阵乘矩阵的第 <code>i</code> 行可写成右矩阵四行的线性组合：</p>
+
+                <div class="formula">resultRowᵢ = lhsᵢ.x · rhsRow₀
+           + lhsᵢ.y · rhsRow₁
+           + lhsᵢ.z · rhsRow₂
+           + lhsᵢ.w · rhsRow₃</div>
+
+                <div class="visual">
+                    <div class="visual-head">
+                        <div><strong><code>MultiplyMatrixRow</code> 数据流</strong><p>观察 LHS 行如何广播，并与 RHS 四行加权得到最终结果。</p></div>
+                    </div>
+                    <canvas id="matrixCanvas" aria-label="矩阵行 SIMD 乘法图"></canvas>
+                </div>
+
+                <pre class="code"><code><span class="type">MATH_FORCE_INLINE</span> __m128 <span class="function">MultiplyMatrixRow</span>(
+    __m128 lhsRow,
+    __m128 rhsRow0,
+    __m128 rhsRow1,
+    __m128 rhsRow2,
+    __m128 rhsRow3) <span class="keyword">noexcept</span> {
+    <span class="keyword">const</span> __m128 xxxx = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(<span class="literal">0</span>, <span class="literal">0</span>, <span class="literal">0</span>, <span class="literal">0</span>));
+    <span class="keyword">const</span> __m128 yyyy = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(<span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>));
+    <span class="keyword">const</span> __m128 zzzz = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(<span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>));
+    <span class="keyword">const</span> __m128 wwww = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(<span class="literal">3</span>, <span class="literal">3</span>, <span class="literal">3</span>, <span class="literal">3</span>));
+
+    __m128 result = _mm_mul_ps(xxxx, rhsRow0);
+    result = _mm_add_ps(result, _mm_mul_ps(yyyy, rhsRow1));
+    result = _mm_add_ps(result, _mm_mul_ps(zzzz, rhsRow2));
+    <span class="keyword">return</span> _mm_add_ps(result, _mm_mul_ps(wwww, rhsRow3));
+}</code></pre>
+
+                <h3>6.1 一行里每一步发生了什么</h3>
+                <ol>
+                    <li><code>LoadFloat4(lhs.rows[i])</code> 把左矩阵一整行加载到 <code>__m128</code>。</li>
+                    <li>四次 shuffle 分别得到 <code>[x,x,x,x]</code>、<code>[y,y,y,y]</code>、<code>[z,z,z,z]</code>、<code>[w,w,w,w]</code>。</li>
+                    <li>每个广播寄存器与右矩阵对应行逐 lane 相乘，一条乘法同时算出四个输出列的贡献。</li>
+                    <li>三次并行加法合并四份贡献，得到结果矩阵完整的一行。</li>
+                    <li>右矩阵四行只加载一次，然后被左矩阵四行复用。</li>
+                </ol>
+
+                <h3>6.2 矩阵乘向量为何先转置</h3>
+                <p><code>M * v</code> 的结果是矩阵四列分别乘 <code>v.x/y/z/w</code> 后相加。内存里存的是四行，因此当前实现先用 <code>_MM_TRANSPOSE4_PS</code> 把四个行寄存器变成四个列寄存器，再做广播加权。另一种写法是每行做点积；两种数学等价，性能应由目标 CPU 实测。</p>
+
+                <h3>6.3 <code>constexpr</code> 如何与 intrinsic 共存</h3>
+                <pre class="code"><code><span class="type">MATH_FORCE_INLINE constexpr</span> float4x4 <span class="keyword">operator</span>*(
+    <span class="keyword">const</span> float4x4&amp; lhs,
+    <span class="keyword">const</span> float4x4&amp; rhs) <span class="keyword">noexcept</span> {
+<span class="keyword">#if</span> MATH_MATRIX_HAS_SSE2
+    <span class="keyword">if</span> (!std::is_constant_evaluated()) {
+        <span class="keyword">return</span> detail::MultiplyFloat4x4(lhs, rhs);
+    }
+<span class="keyword">#endif</span>
+    <span class="keyword">return</span> /* 展开的标量公式 */;
+}</code></pre>
+
+                <p>编译期常量表达式不能执行普通 x86 intrinsic，因此 <code>std::is_constant_evaluated()</code> 在常量求值时选择纯 C++ 路径；运行时选择 SSE2。这样保留一个公共 API，同时兼顾编译期计算与运行时速度。</p>
+
+                <h3>6.4 4x4 求逆路径</h3>
+                <p><code>TryInverseFloat4x4</code> 把四行装入寄存器，以三维叉积和点积构造余子式与行列式。行列式接近 0 时返回 <code>false</code>；成功时只做一次标量除法，再把逆行列式广播到所有 lane。最后通过 <code>_MM_TRANSPOSE4_PS</code> 把中间列形式转回行主序输出。</p>
+
+                <div class="note">
+                    <strong>接口不因 SIMD 改变</strong>
+                    调用方仍使用 <code>float4x4</code> 和 <code>TryInverse</code>。intrinsic 被限制在 <code>detail</code> 内，这使单元测试、序列化和未来 NEON 实现都更容易维护。
+                </div>
+            </section>
+
+            <section id="examples">
+                <h2>7. 从标量代码到 SIMD 的完整示例</h2>
+
+                <h3>7.1 数组相加：最清楚的第一步</h3>
+                <pre class="code"><code><span class="keyword">void</span> <span class="function">AddArraysSSE</span>(
+    <span class="keyword">const</span> <span class="type">float</span>* lhs,
+    <span class="keyword">const</span> <span class="type">float</span>* rhs,
+    <span class="type">float</span>* output,
+    <span class="type">std::size_t</span> count) <span class="keyword">noexcept</span> {
+    <span class="type">std::size_t</span> i = <span class="literal">0</span>;
+    <span class="keyword">for</span> (; i + <span class="literal">4</span> &lt;= count; i += <span class="literal">4</span>) {
+        <span class="keyword">const</span> __m128 a = _mm_loadu_ps(lhs + i);
+        <span class="keyword">const</span> __m128 b = _mm_loadu_ps(rhs + i);
+        _mm_storeu_ps(output + i, _mm_add_ps(a, b));
+    }
+
+    <span class="comment">// count 不是 4 的倍数时，处理剩余 0..3 个元素。</span>
+    <span class="keyword">for</span> (; i &lt; count; ++i) {
+        output[i] = lhs[i] + rhs[i];
+    }
+}</code></pre>
+
+                <p>这个循环没有跨迭代依赖，访问连续，SIMD 主体和标量尾部清晰。实际工程中应先查看编译器是否已经自动向量化；手写版本只有在性能、汇编或稳定性确实更好时才有保留价值。</p>
+
+                <h3>7.2 一次计算 4 个点与平面的有符号距离</h3>
+                <p>与其用一个寄存器表示一个点的 <code>x/y/z/w</code>，这里用四个寄存器表示 4 个点的 x、y、z 和常数 1，即 SoA。这样一次得到 4 个独立点的距离。</p>
+
+                <pre class="code"><code><span class="keyword">struct</span> Plane { <span class="type">float</span> nx, ny, nz, d; };
+
+__m128 <span class="function">SignedDistance4</span>(
+    __m128 pointX,
+    __m128 pointY,
+    __m128 pointZ,
+    <span class="keyword">const</span> Plane&amp; plane) <span class="keyword">noexcept</span> {
+    <span class="keyword">const</span> __m128 nx = _mm_set1_ps(plane.nx);
+    <span class="keyword">const</span> __m128 ny = _mm_set1_ps(plane.ny);
+    <span class="keyword">const</span> __m128 nz = _mm_set1_ps(plane.nz);
+    <span class="keyword">const</span> __m128 d  = _mm_set1_ps(plane.d);
+
+    __m128 result = _mm_mul_ps(pointX, nx);
+    result = _mm_add_ps(result, _mm_mul_ps(pointY, ny));
+    result = _mm_add_ps(result, _mm_mul_ps(pointZ, nz));
+    <span class="keyword">return</span> _mm_add_ps(result, d);
+}</code></pre>
+
+                <p>当结果与 0 比较时，可得到 4 个点位于平面哪一侧的 mask。将这种批处理扩展到 4 个 AABB、4 个包围球或 4 个视锥体平面，是引擎可见性检测中常见的 SIMD 设计。</p>
+
+                <h3>7.3 点积：明确 w 是否参与</h3>
+                <pre class="code"><code><span class="type">float</span> <span class="function">Dot3SSE2</span>(__m128 lhs, __m128 rhs) <span class="keyword">noexcept</span> {
+    <span class="keyword">const</span> __m128 p = _mm_mul_ps(lhs, rhs);
+    <span class="keyword">const</span> __m128 y = _mm_shuffle_ps(p, p, _MM_SHUFFLE(<span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>, <span class="literal">1</span>));
+    <span class="keyword">const</span> __m128 z = _mm_shuffle_ps(p, p, _MM_SHUFFLE(<span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>, <span class="literal">2</span>));
+    <span class="keyword">return</span> _mm_cvtss_f32(_mm_add_ss(_mm_add_ss(p, y), z));
+}</code></pre>
+
+                <div class="warning">
+                    <strong>不要把 Dot3 和 Dot4 混为一谈</strong>
+                    如果 w lane 未初始化，错误地把它加入点积会导致随机结果。API 应明确维度，并用单元测试覆盖 w 为非零、NaN 或填充值的情况。
+                </div>
+
+                <h3>7.4 分支改写为 mask 前先判断收益</h3>
+                <pre class="code"><code><span class="comment">// 将 value 限制到 [0, 1]，没有逐 lane 分支。</span>
+__m128 clamped = _mm_min_ps(_mm_max_ps(value, _mm_setzero_ps()), _mm_set1_ps(<span class="literal">1.0F</span>));</code></pre>
+
+                <p>简单 min/max 很适合无分支表达；但复杂 if/else 若两边都计算再 blend，可能比可预测分支更慢。SIMD mask 解决的是 lane 分歧，不保证减少总工作量。</p>
+            </section>
+
+            <section id="dispatch">
+                <h2>8. 运行时 CPUID 与多版本分派</h2>
+                <p>SSE2 在 x64 可作为编译基线，但 AVX/AVX2/AVX-512 不能只看编译器宏。编译器宏说明“这个翻译单元允许生成什么指令”，CPUID 说明“当前 CPU 支持什么”，XGETBV 说明“操作系统会保存哪些扩展寄存器状态”。三者缺一不可。</p>
+
+                <h3>8.1 AVX2 的完整判断顺序</h3>
+                <ol>
+                    <li>CPUID leaf 1：检查 OSXSAVE 和 AVX bit。</li>
+                    <li>执行 <code>XGETBV(0)</code>：确认 XMM bit 1 与 YMM bit 2 都由 OS 启用。</li>
+                    <li>CPUID leaf 7 subleaf 0：检查 AVX2 bit。</li>
+                    <li>若算法用 FMA，还要单独检查 CPUID leaf 1 的 FMA bit。</li>
+                </ol>
+
+                <pre class="code"><code><span class="comment">// MSVC/x86 示例：展示必要检查。生产代码还应封装最大 CPUID leaf 检查。</span>
+<span class="keyword">#include</span> &lt;intrin.h&gt;
+
+<span class="keyword">bool</span> <span class="function">SupportsAvx2</span>() <span class="keyword">noexcept</span> {
+    <span class="type">int</span> registers[<span class="literal">4</span>]{};
+    __cpuid(registers, <span class="literal">1</span>);
+
+    <span class="keyword">constexpr</span> <span class="type">int</span> OsxsaveBit = <span class="literal">1</span> &lt;&lt; <span class="literal">27</span>;
+    <span class="keyword">constexpr</span> <span class="type">int</span> AvxBit     = <span class="literal">1</span> &lt;&lt; <span class="literal">28</span>;
+    <span class="keyword">if</span> ((registers[<span class="literal">2</span>] &amp; (OsxsaveBit | AvxBit)) != (OsxsaveBit | AvxBit)) {
+        <span class="keyword">return false</span>;
+    }
+
+    <span class="keyword">const</span> <span class="type">unsigned __int64</span> xcr0 = _xgetbv(<span class="literal">0</span>);
+    <span class="keyword">if</span> ((xcr0 &amp; <span class="literal">0b110</span>) != <span class="literal">0b110</span>) {       <span class="comment">// XMM + YMM state</span>
+        <span class="keyword">return false</span>;
+    }
+
+    __cpuidex(registers, <span class="literal">7</span>, <span class="literal">0</span>);
+    <span class="keyword">constexpr</span> <span class="type">int</span> Avx2Bit = <span class="literal">1</span> &lt;&lt; <span class="literal">5</span>;
+    <span class="keyword">return</span> (registers[<span class="literal">1</span>] &amp; Avx2Bit) != <span class="literal">0</span>;
+}</code></pre>
+
+                <h3>8.2 推荐的引擎组织</h3>
+                <pre class="code"><code><span class="keyword">using</span> TransformPointsFunction = <span class="keyword">void</span> (*)(
+    <span class="keyword">const</span> float4x4&amp;,
+    <span class="keyword">const</span> float3*,
+    float3*,
+    std::size_t);
+
+<span class="keyword">struct</span> MathDispatch {
+    TransformPointsFunction transformPoints = TransformPointsScalar;
+};
+
+MathDispatch <span class="function">BuildMathDispatch</span>() {
+    MathDispatch dispatch{};
+    <span class="keyword">if</span> (SupportsAvx2()) {
+        dispatch.transformPoints = TransformPointsAvx2;
+    } <span class="keyword">else if</span> (SupportsSse2()) {
+        dispatch.transformPoints = TransformPointsSse2;
+    }
+    <span class="keyword">return</span> dispatch;
+}</code></pre>
+
+                <ul>
+                    <li>启动时检测一次并保存函数指针，避免每个元素或每次函数调用都判断 CPUID。</li>
+                    <li>标量、SSE2、AVX2 实现使用相同输入输出契约，并运行同一套正确性测试。</li>
+                    <li>MSVC 通常把 AVX2 实现放在单独的 <code>.cpp</code>，只对该文件启用 <code>/arch:AVX2</code>。</li>
+                    <li>不要让含 AVX2 指令的静态初始化或普通路径在分派前执行。</li>
+                </ul>
+
+                <div class="warning">
+                    <strong>只检查 CPUID 的 AVX bit 仍可能崩溃</strong>
+                    旧操作系统可能不保存 YMM 状态。必须同时检查 OSXSAVE 与 <code>XGETBV</code>。AVX-512 还需要确认 opmask、ZMM 高位等额外状态位。
+                </div>
+            </section>
+
+            <section id="build">
+                <h2>9. 编译开关、内联与 constexpr</h2>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>目标</th><th>MSVC</th><th>GCC / Clang</th><th>说明</th></tr></thead>
+                        <tbody>
+                            <tr><td>SSE2 x64</td><td>x64 默认</td><td><code>-msse2</code>，x86-64 通常默认</td><td>当前项目基线</td></tr>
+                            <tr><td>AVX</td><td><code>/arch:AVX</code></td><td><code>-mavx</code></td><td>允许生成 YMM 浮点指令</td></tr>
+                            <tr><td>AVX2</td><td><code>/arch:AVX2</code></td><td><code>-mavx2</code></td><td>仍需运行时分派才能兼容旧 CPU</td></tr>
+                            <tr><td>FMA</td><td>随目标与编译器策略</td><td><code>-mfma</code></td><td>运行时还需检查 FMA feature</td></tr>
+                            <tr><td>本机全部能力</td><td>无完全等价通用开关</td><td><code>-march=native</code></td><td>适合本机测试，不适合分发通用二进制</td></tr>
+                            <tr><td>查看向量化报告</td><td><code>/Qvec-report:2</code></td><td><code>-fopt-info-vec</code> / <code>-Rpass=loop-vectorize</code></td><td>确认自动向量化成功或失败原因</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>9.1 当前项目的检测宏</h3>
+                <pre class="code"><code><span class="keyword">#if</span> !defined(MATH_DISABLE_SIMD) &amp;&amp; \
+    (defined(_M_X64) || (defined(_M_IX86_FP) &amp;&amp; _M_IX86_FP &gt;= <span class="literal">2</span>) || defined(__SSE2__))
+<span class="keyword">#include</span> &lt;immintrin.h&gt;
+<span class="keyword">#define</span> MATH_MATRIX_HAS_SSE2 <span class="literal">1</span>
+<span class="keyword">#else</span>
+<span class="keyword">#define</span> MATH_MATRIX_HAS_SSE2 <span class="literal">0</span>
+<span class="keyword">#endif</span></code></pre>
+
+                <p><code>_M_X64</code> 表示 MSVC x64，<code>_M_IX86_FP &gt;= 2</code> 表示 32 位 MSVC 至少启用 SSE2，<code>__SSE2__</code> 是 GCC/Clang 常见特性宏。<code>MATH_DISABLE_SIMD</code> 优先级最高，用来强制验证标量路径。</p>
+
+                <h3>9.2 <code>MATH_FORCE_INLINE</code> 的边界</h3>
+                <p>强制内联减少微小包装函数的调用开销，也让编译器看见更多常量和别名信息。但它不是性能保证；过度内联会增加代码体积、指令缓存压力和编译时间。只对非常小、非常热、封装 intrinsic 的函数使用。</p>
+
+                <h3>9.3 Debug 与 Release 的区别</h3>
+                <ul>
+                    <li>Debug 下寄存器值更容易观察，但未优化代码不能代表最终性能。</li>
+                    <li>性能测试必须使用 Release，并确认没有调试迭代器、ASan 或频繁日志。</li>
+                    <li>正确性测试应同时覆盖 SIMD 开启和关闭两种配置。</li>
+                </ul>
+            </section>
+
+            <section id="performance">
+                <h2>10. 如何正确测 SIMD 性能</h2>
+                <p>当前仓库的 <code>Benchmarks/MathBenchmarks.cpp</code> 已包含预热、自动校准、7 次采样、中位数、最小值和结果消费，并与 DirectXMath 对照。这个框架比只计时一次可靠，但仍要理解测到的是什么。</p>
+
+                <h3>10.1 当前可直接使用的命令</h3>
+                <pre class="code"><code>cmake -S . -B build_math -DMATH_BUILD_TESTS=ON -DMATH_BUILD_BENCHMARKS=ON
+cmake --build build_math --config Release
+ctest --test-dir build_math -C Release --output-on-failure
+
+<span class="comment"># Windows 多配置生成器：</span>
+.\build_math\Release\MathBenchmarks.exe
+
+<span class="comment"># 再构建纯标量版本，对比同一台机器、同一配置：</span>
+cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF -DMATH_BUILD_BENCHMARKS=ON
+cmake --build build_math_scalar --config Release</code></pre>
+
+                <h3>10.2 吞吐、延迟和依赖链</h3>
+                <div class="two-column">
+                    <div class="fact"><strong>延迟 latency</strong><p>一条指令的结果要过多少周期才能被下一条依赖指令使用。连续 <code>x = f(x)</code> 主要测延迟。</p></div>
+                    <div class="fact blue"><strong>吞吐 throughput</strong><p>流水线稳定后每周期能启动多少条独立指令。多个独立累加器更接近吞吐测试。</p></div>
+                </div>
+
+                <p>矩阵反复写回自己会形成跨迭代依赖，适合衡量实际串行调用的延迟，却不能证明 CPU 能同时处理多少个独立矩阵。引擎应同时测试“单对象连续变换”和“批量独立对象”。</p>
+
+                <h3>10.3 防止基准被编译器删除</h3>
+                <ul>
+                    <li>让结果流入外部可观察 sink，当前 benchmark 用 <code>volatile</code> 与 <code>atomic_signal_fence</code>。</li>
+                    <li>不要把输入全部写成可在编译期折叠的常量。</li>
+                    <li>查看生成汇编，确认循环和目标指令真的存在。</li>
+                    <li>记录 CPU 型号、编译器版本、参数和电源模式，避免跨环境直接比较数字。</li>
+                </ul>
+
+                <h3>10.4 FMA 与数值变化</h3>
+                <p><code>a*b+c</code> 可融合成一次 FMA，只进行一次舍入，通常更快且更精确，但结果最低位可能与分开的乘法加法不同。若 SIMD 和标量路径必须逐 bit 一致，应控制 contraction 策略；图形数学一般使用误差范围比较。</p>
+
+                <div class="important">
+                    <strong>优化目标应是完整工作负载</strong>
+                    一个 intrinsic 微基准快，不代表场景更新更快。最终应测真实对象数量、真实数据布局和真实调用链，并用 profiler 确认热点占比下降。
+                </div>
+            </section>
+
+            <section id="pitfalls">
+                <h2>11. 正确性和性能常见陷阱</h2>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>问题</th><th>症状</th><th>处理方式</th></tr></thead>
+                        <tbody>
+                            <tr><td>读取越界</td><td>偶发崩溃、ASan 报告、发布版随机值</td><td>Load 前保证完整 16/32/64 字节有效，尾部走标量或 mask</td></tr>
+                            <tr><td>对齐假设错误</td><td><code>_mm_load_ps</code> 在某些地址崩溃</td><td>无法证明对齐时使用 <code>loadu</code>；对齐分配与类型声明一致</td></tr>
+                            <tr><td>未初始化 lane</td><td>Dot、比较或 Store 出现随机值</td><td>明确 zero-fill w，或确保后续操作永远屏蔽该 lane</td></tr>
+                            <tr><td>SSE/AVX 切换</td><td>调用旧 SSE 代码时出现额外惩罚</td><td>AVX 函数返回前使用编译器生成的 <code>vzeroupper</code>，保持编译边界清晰</td></tr>
+                            <tr><td>NaN 比较语义</td><td>min/max、比较结果和预期不同</td><td>阅读具体 intrinsic 的 ordered/unordered 与 operand 规则，写 NaN 测试</td></tr>
+                            <tr><td>Denormal</td><td>接近 0 的浮点计算突然变慢</td><td>在受控数值域考虑 FTZ/DAZ，并了解精度影响</td></tr>
+                            <tr><td>整数溢出</td><td>结果回绕或饱和行为错误</td><td>区分普通加法与 saturating add，区分有符号/无符号比较</td></tr>
+                            <tr><td>错误 ISA 分派</td><td>Illegal instruction</td><td>同时检查 CPU、OS 状态；高 ISA 放独立 TU；启动时分派</td></tr>
+                            <tr><td>过多 shuffle</td><td>理论 lane 利用率高但实测不快</td><td>重排数据布局，尽量让 Load 后即可算，而不是每步转置</td></tr>
+                            <tr><td>代码体积膨胀</td><td>热点反而出现指令缓存压力</td><td>只多版本化真正热点，控制强制内联与模板实例数量</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>11.1 浮点环境：FTZ 与 DAZ</h3>
+                <p>非常接近 0 的 subnormal 数能保持渐进下溢精度，但某些 CPU/路径处理较慢。MXCSR 的 FTZ（结果 flush to zero）和 DAZ（输入 denormals are zero）可改变行为。引擎若启用，应在工作线程入口统一设置并记录，不要让第三方库静默改变全局线程状态。</p>
+
+                <h3>11.2 <code>min/max</code> 遇到 NaN</h3>
+                <p>x86 <code>MINPS/MAXPS</code> 的 NaN 和相等值选择规则不完全等于 <code>std::min/std::max</code> 的直觉。若算法依赖 NaN 传播、正负零或精确 operand 选择，应查 Intel 指令文档并写针对性测试。</p>
+
+                <h3>11.3 SSE 与 AVX 混用</h3>
+                <p>旧式 SSE 指令写 XMM 时，与 AVX 写 YMM 后进入旧 SSE 代码可能产生 transition penalty。现代编译器通常在 AVX 函数边界插入 <code>vzeroupper</code>；手写汇编、跨编译选项对象文件和函数指针分派时仍需检查反汇编。</p>
+            </section>
+
+            <section id="workflow">
+                <h2>12. 一套可重复的 SIMD 优化流程</h2>
+                <ol class="checklist">
+                    <li>先用 profiler 找到真实热点，并记录它占整帧或整任务的百分比。</li>
+                    <li>为标量实现准备单元测试、随机输入、边界值、NaN/Inf 和误差容限。</li>
+                    <li>确认瓶颈是算术、分支还是内存；如果是缓存未命中，先处理数据布局。</li>
+                    <li>检查 Release 编译器的自动向量化报告和汇编，避免重复手工优化。</li>
+                    <li>选择最低必要 ISA；优先固定、清楚的基线，再添加可选高 ISA 版本。</li>
+                    <li>设计向量化维度：一个对象的多个分量，还是多个对象的同一分量。</li>
+                    <li>明确 Load/Store 范围、对齐契约、别名关系、尾部策略和 mask 语义。</li>
+                    <li>先实现最简单正确的 intrinsic 版本，再减少 shuffle、Load 和依赖链。</li>
+                    <li>让 SIMD 与标量实现执行同一套测试，并在多种 CPU 上运行。</li>
+                    <li>用真实数据做 Release benchmark，分别观察延迟、吞吐与完整帧时间。</li>
+                    <li>检查汇编、缓存 miss、分支、频率和执行端口，而不仅是源代码行数。</li>
+                    <li>只有收益稳定、代码可维护时才保留；把 ISA 细节限制在内部实现层。</li>
+                </ol>
+
+                <h3>12.1 调试寄存器的实用方法</h3>
+                <pre class="code"><code><span class="keyword">alignas</span>(<span class="literal">16</span>) <span class="type">float</span> lanes[<span class="literal">4</span>]{};
+_mm_store_ps(lanes, value);
+<span class="comment">// 在调试器中观察 lanes[0..3]。只用于调试，不留在热循环。</span></code></pre>
+
+                <ul>
+                    <li>为 shuffle 单独写输入为 <code>[1,2,3,4]</code> 的测试，输出顺序一眼可见。</li>
+                    <li>用 AddressSanitizer 检查 Load/Store 越界，用 UBSan 检查普通 C++ 未定义行为。</li>
+                    <li>MSVC Disassembly、Compiler Explorer 或 <code>objdump/llvm-objdump</code> 可确认最终指令。</li>
+                    <li>Intel VTune、AMD uProf、Linux <code>perf</code> 可进一步查看缓存、分支和流水线指标。</li>
+                </ul>
+
+                <h3>12.2 对当前 Math 库的合理下一步</h3>
+                <ul>
+                    <li>保留 SSE2 作为 x64 基线，不必为单个 <code>float4</code> 盲目换成 AVX2。</li>
+                    <li>若蒙皮、粒子、剔除成为热点，设计一次处理 4/8 个对象的批量 API，再评估 SSE2/AVX2。</li>
+                    <li>增加随机矩阵对照测试，比较 SIMD、标量和高精度参考结果。</li>
+                    <li>benchmark 增加多个独立矩阵累加器，分别报告依赖延迟与批量吞吐。</li>
+                    <li>需要 Arm 平台时，在内部增加 NEON 实现，保持公共 <code>Vector/Matrix</code> API 不变。</li>
+                </ul>
+            </section>
+
+            <section id="reference">
+                <h2>13. 官方文档链接</h2>
+                <p>查 intrinsic 时优先使用厂商文档确认：需要哪个 ISA、参数 lane 顺序、对应指令、伪代码、异常与吞吐信息。第三方文章适合理解思路，不能替代指令语义。</p>
+
+                <ul class="reference-list">
+                    <li><a href="https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html" target="_blank" rel="noopener noreferrer">Intel Intrinsics Guide</a> <span class="tag">首选查询</span><p>按名称、ISA、类型搜索 x86 intrinsic，提供指令映射、操作描述以及部分延迟/吞吐数据。</p></li>
+                    <li><a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" target="_blank" rel="noopener noreferrer">Intel 64 and IA-32 Architectures Software Developer Manuals</a><p>最完整的 x86 架构、指令、CPUID、内存模型和系统编程官方手册。</p></li>
+                    <li><a href="https://learn.microsoft.com/en-us/cpp/intrinsics/x64-amd64-intrinsics-list?view=msvc-170" target="_blank" rel="noopener noreferrer">Microsoft x64/AMD64 Intrinsics List</a><p>MSVC x64 intrinsic 总表，适合确认头文件、平台和编译器支持。</p></li>
+                    <li><a href="https://learn.microsoft.com/en-us/cpp/intrinsics/compiler-intrinsics?view=msvc-170" target="_blank" rel="noopener noreferrer">Microsoft Compiler Intrinsics</a><p>MSVC intrinsic 总入口，包含架构分类与编译器使用说明。</p></li>
+                    <li><a href="https://www.amd.com/en/search/documentation/hub.html" target="_blank" rel="noopener noreferrer">AMD Documentation Hub</a><p>AMD 官方文档检索入口；可按处理器系列查找 AMD64 Architecture Programmer's Manual 与 Software Optimization Guide。</p></li>
+                    <li><a href="https://arm-software.github.io/acle/neon_intrinsics/advsimd.html" target="_blank" rel="noopener noreferrer">Arm Neon Intrinsics Reference</a> <span class="tag">Arm</span><p>AdvSIMD/NEON intrinsic 的类型、参数、指令映射和架构要求。</p></li>
+                    <li><a href="https://arm-software.github.io/acle/main/acle.html" target="_blank" rel="noopener noreferrer">Arm C Language Extensions (ACLE)</a><p>Arm C/C++ 扩展总规范，覆盖 NEON、SVE、特性宏与平台约定。</p></li>
+                    <li><a href="https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html" target="_blank" rel="noopener noreferrer">GCC Vector Extensions</a><p>GCC 向量类型、运算符、shuffle 与转换规则。</p></li>
+                    <li><a href="https://clang.llvm.org/docs/LanguageExtensions.html#vectors-and-extended-vectors" target="_blank" rel="noopener noreferrer">Clang Vector and Extended Vector Extensions</a><p>Clang 的向量类型、OpenCL 风格向量与 swizzle 扩展说明。</p></li>
+                    <li><a href="https://wg21.link/P1928R15" target="_blank" rel="noopener noreferrer">WG21 P1928R15: std::simd</a><p>C++ 数据并行类型提案，可了解标准化 SIMD 抽象的设计、mask、ABI 与操作语义。</p></li>
+                </ul>
+
+                <div class="note">
+                    <strong>链接可访问性</strong>
+                    厂商站点可能按地区、脚本或 User-Agent 重定向。若 Intel/Microsoft 页面暂时无法打开，可从对应官方文档首页按标题搜索，不要改用语义不明的转载版本。
+                </div>
+            </section>
+
+            <section id="glossary">
+                <h2>14. 术语速查</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>术语</th><th>含义</th></tr></thead>
+                        <tbody>
+                            <tr><td>SIMD</td><td>Single Instruction, Multiple Data，一条指令并行操作多个数据元素。</td></tr>
+                            <tr><td>Lane</td><td>向量寄存器中的一个元素位置，例如 <code>__m128</code> 有 4 个 float lane。</td></tr>
+                            <tr><td>ISA</td><td>Instruction Set Architecture；SSE2、AVX2、NEON 都是指令集能力集合。</td></tr>
+                            <tr><td>Intrinsic</td><td>由编译器识别、接近机器指令语义的函数样式接口。</td></tr>
+                            <tr><td>Broadcast</td><td>把一个标量复制到所有 lane。</td></tr>
+                            <tr><td>Shuffle / Permute</td><td>在寄存器内部或寄存器之间重新排列 lane。</td></tr>
+                            <tr><td>Mask</td><td>逐 lane 的条件结果，用于选择、屏蔽读写或控制计算。</td></tr>
+                            <tr><td>Reduction</td><td>把多个 lane 合并成更少 lane 或一个标量，例如 Sum、Dot、Min。</td></tr>
+                            <tr><td>Gather / Scatter</td><td>按离散索引批量读取 / 写入多个不连续地址。</td></tr>
+                            <tr><td>AoS / SoA</td><td>对象数组 / 字段数组，两种影响 SIMD 和缓存行为的数据布局。</td></tr>
+                            <tr><td>Latency / Throughput</td><td>依赖结果可用所需周期 / 稳态单位周期可启动的操作数量。</td></tr>
+                            <tr><td>FMA</td><td>Fused Multiply-Add，融合乘加，只进行一次舍入。</td></tr>
+                            <tr><td>FTZ / DAZ</td><td>将 subnormal 结果 / 输入按 0 处理的浮点环境模式。</td></tr>
+                            <tr><td>CPUID / XGETBV</td><td>查询 CPU feature / 查询 OS 启用的扩展寄存器状态。</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>SIMD 使用手册 · 对应当前仓库 Math SSE2 实现 · 官方链接最后核对：2026-07-21</footer>
+
+    <script>
+        (() => {
+            const colors = {
+                ink: "#18201d",
+                muted: "#58635e",
+                line: "#d9dfdb",
+                green: "#147a56",
+                greenSoft: "#e7f4ee",
+                blue: "#246a8d",
+                blueSoft: "#e9f3f8",
+                coral: "#b94e3d",
+                coralSoft: "#faeeeb",
+                gold: "#8a6513",
+                goldSoft: "#f8f1dd"
+            };
+
+            function prepareCanvas(canvas) {
+                const ratio = Math.max(1, window.devicePixelRatio || 1);
+                const rect = canvas.getBoundingClientRect();
+                const width = Math.max(320, Math.round(rect.width));
+                const height = Math.max(220, Math.round(rect.height));
+                canvas.width = Math.round(width * ratio);
+                canvas.height = Math.round(height * ratio);
+                const context = canvas.getContext("2d");
+                context.setTransform(ratio, 0, 0, ratio, 0, 0);
+                context.clearRect(0, 0, width, height);
+                context.font = '14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                context.textBaseline = "middle";
+                return { context, width, height };
+            }
+
+            const registerCanvas = document.getElementById("registerCanvas");
+            let selectedIsa = "sse2";
+            const isaData = {
+                sse2: { name: "SSE2 / __m128", bits: 128, lanes: 4, register: "XMM", color: colors.green, soft: colors.greenSoft },
+                avx2: { name: "AVX2 / __m256", bits: 256, lanes: 8, register: "YMM", color: colors.blue, soft: colors.blueSoft },
+                avx512: { name: "AVX-512 / __m512", bits: 512, lanes: 16, register: "ZMM", color: colors.coral, soft: colors.coralSoft },
+                neon: { name: "Arm NEON / float32x4_t", bits: 128, lanes: 4, register: "V", color: colors.gold, soft: colors.goldSoft }
+            };
+
+            function drawRegister() {
+                const { context: ctx, width, height } = prepareCanvas(registerCanvas);
+                const data = isaData[selectedIsa];
+                const margin = width < 560 ? 20 : 36;
+                const top = 72;
+                const gap = data.lanes > 8 ? 3 : 6;
+                const available = width - margin * 2;
+                const laneWidth = (available - gap * (data.lanes - 1)) / data.lanes;
+                const laneHeight = width < 560 ? 76 : 92;
+
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 17px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(data.name, margin, 25);
+                ctx.fillStyle = colors.muted;
+                ctx.font = '13px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(`${data.bits} bit = ${data.lanes} × 32-bit float`, margin, 49);
+
+                for (let i = 0; i < data.lanes; ++i) {
+                    const x = margin + i * (laneWidth + gap);
+                    ctx.fillStyle = data.soft;
+                    ctx.strokeStyle = data.color;
+                    ctx.lineWidth = 1.5;
+                    ctx.fillRect(x, top, laneWidth, laneHeight);
+                    ctx.strokeRect(x, top, laneWidth, laneHeight);
+                    ctx.fillStyle = data.color;
+                    ctx.font = data.lanes > 8 ? '700 10px Consolas, monospace' : '700 13px Consolas, monospace';
+                    ctx.textAlign = "center";
+                    ctx.fillText(`f${i}`, x + laneWidth / 2, top + laneHeight / 2 - 8);
+                    ctx.fillStyle = colors.muted;
+                    ctx.font = data.lanes > 8 ? '9px Consolas, monospace' : '11px Consolas, monospace';
+                    ctx.fillText("32b", x + laneWidth / 2, top + laneHeight / 2 + 14);
+                }
+
+                ctx.textAlign = "left";
+                ctx.fillStyle = colors.ink;
+                ctx.font = '14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                const description = selectedIsa === "avx512"
+                    ? "宽度更大并带 mask，但收益取决于数据规模、频率和具体微架构。"
+                    : selectedIsa === "avx2"
+                        ? "适合一次处理 8 个独立 float；一个 float4 无法自动占满它。"
+                        : selectedIsa === "neon"
+                            ? "与 SSE 同为 128 位，但 intrinsic 名称和部分操作语义不同。"
+                            : "当前 Math 矩阵路径：一个 float4 / 矩阵行恰好占满一个寄存器。";
+                ctx.fillText(description, margin, Math.min(height - 28, top + laneHeight + 38));
+            }
+
+            document.querySelectorAll("[data-isa]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    selectedIsa = button.dataset.isa;
+                    document.querySelectorAll("[data-isa]").forEach((other) => {
+                        other.setAttribute("aria-pressed", String(other === button));
+                    });
+                    drawRegister();
+                });
+            });
+
+            const matrixCanvas = document.getElementById("matrixCanvas");
+            const lhs = [1, 2, 3, 4];
+            const rhs = [
+                [1, 0, 2, 0],
+                [0, 1, 0, 2],
+                [2, 0, 1, 0],
+                [0, 2, 0, 1]
+            ];
+
+            function roundedRect(ctx, x, y, width, height, radius) {
+                const r = Math.min(radius, width / 2, height / 2);
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.arcTo(x + width, y, x + width, y + height, r);
+                ctx.arcTo(x + width, y + height, x, y + height, r);
+                ctx.arcTo(x, y + height, x, y, r);
+                ctx.arcTo(x, y, x + width, y, r);
+                ctx.closePath();
+            }
+
+            function drawVector(ctx, values, x, y, width, height, fill, stroke, compact = false) {
+                const gap = 4;
+                const laneWidth = (width - gap * 3) / 4;
+                values.forEach((value, index) => {
+                    const laneX = x + index * (laneWidth + gap);
+                    ctx.fillStyle = fill;
+                    ctx.strokeStyle = stroke;
+                    roundedRect(ctx, laneX, y, laneWidth, height, 3);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.fillStyle = stroke;
+                    ctx.textAlign = "center";
+                    ctx.font = compact ? "11px Consolas, monospace" : "13px Consolas, monospace";
+                    ctx.fillText(Number(value).toFixed(0), laneX + laneWidth / 2, y + height / 2);
+                });
+            }
+
+            function drawMatrix() {
+                const { context: ctx, width, height } = prepareCanvas(matrixCanvas);
+                const mobile = width < 650;
+                const margin = mobile ? 14 : 24;
+                const vectorWidth = mobile ? width - margin * 2 : Math.min(300, width * 0.3);
+                const laneHeight = 34;
+                const result = [0, 0, 0, 0];
+                for (let row = 0; row < 4; ++row) {
+                    for (let column = 0; column < 4; ++column) {
+                        result[column] += lhs[row] * rhs[row][column];
+                    }
+                }
+
+                ctx.fillStyle = colors.ink;
+                ctx.textAlign = "left";
+                ctx.font = '700 15px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText("LHS 当前行", margin, 24);
+                drawVector(ctx, lhs, margin, 42, vectorWidth, laneHeight, colors.greenSoft, colors.green);
+
+                if (mobile) {
+                    ctx.fillStyle = colors.muted;
+                    ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText("广播系数 × RHS 对应行", margin, 99);
+                    rhs.forEach((row, index) => {
+                        const y = 116 + index * 69;
+                        const labelWidth = 70;
+                        drawVector(ctx, [lhs[index], lhs[index], lhs[index], lhs[index]], margin, y, vectorWidth, 25, colors.goldSoft, colors.gold, true);
+                        ctx.fillStyle = colors.muted;
+                        ctx.fillText("×", margin, y + 37);
+                        drawVector(ctx, row, margin + labelWidth / 2, y + 29, vectorWidth - labelWidth / 2, 25, colors.blueSoft, colors.blue, true);
+                    });
+                    const resultY = Math.min(height - 52, 404);
+                    ctx.fillStyle = colors.ink;
+                    ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText("四份乘积逐 lane 相加", margin, resultY - 14);
+                    drawVector(ctx, result, margin, resultY, vectorWidth, laneHeight, colors.coralSoft, colors.coral);
+                } else {
+                    const xBroadcast = margin;
+                    const xRows = margin + vectorWidth + 64;
+                    const workWidth = width - xRows - margin;
+                    ctx.fillStyle = colors.muted;
+                    ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText("广播", xBroadcast, 103);
+                    ctx.fillText("并行乘 RHS 行", xRows, 103);
+
+                    rhs.forEach((row, index) => {
+                        const y = 119 + index * 56;
+                        const broadcast = [lhs[index], lhs[index], lhs[index], lhs[index]];
+                        drawVector(ctx, broadcast, xBroadcast, y, vectorWidth, 31, colors.goldSoft, colors.gold, true);
+                        ctx.fillStyle = colors.muted;
+                        ctx.font = "700 14px Consolas, monospace";
+                        ctx.textAlign = "center";
+                        ctx.fillText("×", xRows - 29, y + 15);
+                        drawVector(ctx, row, xRows, y, workWidth, 31, colors.blueSoft, colors.blue, true);
+                    });
+
+                    const resultY = height - 68;
+                    ctx.fillStyle = colors.ink;
+                    ctx.textAlign = "left";
+                    ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText("逐 lane 累加 = 结果行", xRows, resultY - 14);
+                    drawVector(ctx, result, xRows, resultY, workWidth, laneHeight, colors.coralSoft, colors.coral);
+                }
+            }
+
+            function redraw() {
+                drawRegister();
+                drawMatrix();
+            }
+
+            let resizeTimer = 0;
+            window.addEventListener("resize", () => {
+                window.clearTimeout(resizeTimer);
+                resizeTimer = window.setTimeout(redraw, 100);
+            });
+            redraw();
+
+            /* Canvas 初始化后重新定位，避免浏览器在布局稳定前处理深链接。 */
+            const anchorId = decodeURIComponent(window.location.hash.slice(1));
+            const anchorTarget = anchorId ? document.getElementById(anchorId) : null;
+            if (anchorTarget) {
+                window.requestAnimationFrame(() => anchorTarget.scrollIntoView({ block: "start" }));
+            }
+        })();
+    </script>
+</body>
+</html>

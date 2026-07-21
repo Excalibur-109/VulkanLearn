@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Math.hpp"
 #include "Renderer/RenderScene.hpp"
 
 #include <array>
@@ -16,7 +17,7 @@ enum class RenderFrustumResult : rhi::u8 {
 
 /// 平面方程 dot(normal, point) + distance = 0，法线统一指向视锥内部。
 struct RenderPlane {
-    glm::vec3 normal{0.0F};
+    float3 normal{0.0F};
     float distance = 0.0F;
 };
 
@@ -28,7 +29,7 @@ struct RenderPlane {
  */
 class RenderFrustum {
 public:
-    [[nodiscard]] static RenderFrustum FromViewProjectionZO(const glm::mat4& viewProjection) noexcept;
+    [[nodiscard]] static RenderFrustum FromViewProjectionZO(const float4x4& viewProjection) noexcept;
 
     [[nodiscard]] RenderFrustumResult Classify(const rhi::RHIBoundingSphere& sphere) const noexcept;
     [[nodiscard]] RenderFrustumResult Classify(const rhi::RHIBoundingBox& box) const noexcept;

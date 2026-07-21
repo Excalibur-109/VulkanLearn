@@ -1,0 +1,1816 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Quaternion、Matrix3x3 与 Matrix4x4 旋转转换的完整数学推导、数值稳定分支、缩放剪切处理和当前 C++ Math API 对照。">
+    <title>Quaternion 与 Matrix 转换 | 详细推导</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #58635e;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --blue: #246a8d;
+            --blue-soft: #e9f3f8;
+            --coral: #b94e3d;
+            --coral-soft: #faeeeb;
+            --gold: #8a6513;
+            --gold-soft: #f8f1dd;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: auto; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.72;
+            letter-spacing: 0;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+        code, kbd { font-family: Consolas, "Cascadia Code", monospace; }
+        code { overflow-wrap: anywhere; }
+
+        .masthead { color: #f5fbf8; background: var(--nav); border-bottom: 4px solid var(--coral); }
+        .masthead-inner {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+
+        .masthead-inner > div:first-child { min-width: 0; }
+        .eyebrow { margin: 0 0 6px; color: #f0afa4; font-size: 13px; font-weight: 700; }
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin: 28px 0 11px; font-size: 19px; }
+        h4 { margin: 20px 0 8px; font-size: 16px; }
+        .subtitle { margin: 0; color: #c6d5ce; max-width: 850px; overflow-wrap: anywhere; }
+
+        .doc-switch {
+            flex: 0 0 auto;
+            display: flex;
+            border: 1px solid #56645f;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .doc-switch a {
+            color: #dce9e3;
+            padding: 8px 12px;
+            text-decoration: none;
+            border-right: 1px solid #56645f;
+            font-size: 14px;
+        }
+
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #ffffff; background: var(--coral); }
+
+        .layout {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 292px minmax(0, 1fr);
+        }
+
+        .toc {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: auto;
+            padding: 30px 24px 50px;
+            background: var(--surface);
+            border-right: 1px solid var(--line);
+        }
+
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { list-style: none; margin: 0; padding: 0; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 8px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--coral); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        main > section { max-width: 1080px; margin: 0 auto; padding: 0 0 58px; scroll-margin-top: 24px; }
+        main > section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+        .lead { color: #34403b; font-size: 18px; max-width: 930px; }
+
+        .two-column, .three-column, .four-column {
+            display: grid;
+            gap: 18px;
+            margin: 22px 0;
+        }
+
+        .two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .four-column { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+        .fact {
+            padding: 16px;
+            background: var(--surface);
+            border-top: 3px solid var(--green);
+            border-radius: var(--radius);
+        }
+
+        .fact.blue { border-top-color: var(--blue); }
+        .fact.coral { border-top-color: var(--coral); }
+        .fact.gold { border-top-color: var(--gold); }
+        .fact strong { display: block; margin-bottom: 4px; }
+        .fact p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        .note, .warning, .important {
+            margin: 20px 0;
+            padding: 15px 17px;
+            border-left: 4px solid var(--blue);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            background: var(--blue-soft);
+        }
+
+        .warning { border-left-color: var(--coral); background: var(--coral-soft); }
+        .important { border-left-color: var(--green); background: var(--green-soft); }
+        .note strong, .warning strong, .important strong { display: block; margin-bottom: 4px; }
+
+        .formula {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow-x: auto;
+            color: #12241d;
+            background: var(--green-soft);
+            border-left: 4px solid var(--green);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.78;
+            white-space: pre-wrap;
+        }
+
+        .formula.blue { background: var(--blue-soft); border-left-color: var(--blue); }
+        .formula.coral { background: var(--coral-soft); border-left-color: var(--coral); }
+
+        .derivation {
+            margin: 22px 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--green);
+            border-radius: var(--radius);
+            background: #fbfcfb;
+        }
+
+        .derivation-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 16px;
+            background: var(--green-soft);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .derivation-kind { color: var(--green); font-size: 12px; font-weight: 800; }
+        .derivation-condition {
+            display: grid;
+            grid-template-columns: 72px minmax(0, 1fr);
+            gap: 12px;
+            padding: 11px 16px;
+            color: var(--muted);
+            background: #f6f8f6;
+            border-bottom: 1px solid var(--line);
+            font-size: 14px;
+        }
+
+        .derivation-condition strong { color: var(--ink); }
+        .derivation-row {
+            display: grid;
+            grid-template-columns: 32px minmax(260px, 1fr) minmax(190px, 0.72fr);
+            gap: 14px;
+            align-items: center;
+            padding: 14px 16px;
+        }
+
+        .derivation-row + .derivation-row { border-top: 1px solid var(--line); }
+        .derivation-index {
+            width: 27px;
+            height: 27px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--green);
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .derivation-expression { min-width: 0; font-family: Cambria, "Times New Roman", serif; font-size: 18px; line-height: 1.58; }
+        .derivation-reason { padding-left: 14px; color: var(--muted); border-left: 2px solid #cbd9d1; font-size: 14px; line-height: 1.55; }
+        .derivation-result { padding: 14px 16px; color: #103c2c; background: var(--green-soft); border-top: 1px solid var(--line); font-size: 17px; }
+        .therefore { margin-right: 12px; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 12px; font-weight: 800; }
+
+        .matrix-equation {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin: 22px 0;
+            padding: 22px;
+            overflow-x: auto;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+        }
+
+        .matrix-label { color: var(--green); font: 700 18px "Segoe UI", "Microsoft YaHei", sans-serif; }
+        .matrix-grid {
+            position: relative;
+            display: grid;
+            gap: 7px 14px;
+            min-width: max-content;
+            padding: 8px 16px;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 17px;
+            text-align: center;
+        }
+
+        .matrix-grid.m3 { grid-template-columns: repeat(3, minmax(112px, auto)); }
+        .matrix-grid.m4 { grid-template-columns: repeat(4, minmax(82px, auto)); }
+        .matrix-grid::before, .matrix-grid::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            border-top: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .matrix-grid::before { left: 0; border-left: 2px solid var(--ink); }
+        .matrix-grid::after { right: 0; border-right: 2px solid var(--ink); }
+
+        pre.code {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow: auto;
+            color: var(--code-ink);
+            background: var(--code);
+            border-radius: var(--radius);
+            font: 14px/1.62 Consolas, "Cascadia Code", monospace;
+            tab-size: 4;
+        }
+
+        pre.code code { overflow-wrap: normal; }
+        .comment { color: #89a99a; }
+        .keyword { color: #8ec9ff; }
+        .type { color: #a8dfbc; }
+        .literal { color: #f0c782; }
+        .function { color: #e7a9a0; }
+
+        .table-wrap { margin: 20px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+        table { width: 100%; min-width: 720px; border-collapse: collapse; }
+        th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+        th { color: #24312c; background: var(--surface); font-size: 14px; }
+        tr:last-child td { border-bottom: 0; }
+        td code { font-size: 13px; }
+
+        .conversion-map {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr) 72px minmax(0, 1fr);
+            align-items: stretch;
+            margin: 22px 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--line);
+            gap: 1px;
+        }
+
+        .conversion-map .node { padding: 18px 14px; background: #ffffff; text-align: center; }
+        .conversion-map .node strong { display: block; margin-bottom: 4px; }
+        .conversion-map .node span { color: var(--muted); font-size: 13px; }
+        .conversion-map .arrow { display: grid; place-items: center; color: var(--coral); background: var(--coral-soft); font-size: 20px; font-weight: 800; }
+
+        .interactive {
+            margin: 24px 0;
+            padding: 18px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fbfcfb;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: auto auto minmax(190px, 1fr) 72px;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .controls label { font-weight: 700; }
+        .controls input[type="range"] { width: 100%; accent-color: var(--coral); }
+        .controls output { color: var(--coral); font-family: Consolas, monospace; font-weight: 700; text-align: right; }
+        .segmented { width: fit-content; display: flex; overflow: hidden; border: 1px solid #b7c3bd; border-radius: var(--radius); }
+        .segmented button {
+            min-width: 48px;
+            min-height: 36px;
+            padding: 6px 12px;
+            color: #27342e;
+            background: #ffffff;
+            border: 0;
+            border-right: 1px solid #b7c3bd;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .segmented button:last-child { border-right: 0; }
+        .segmented button[aria-pressed="true"] { color: #ffffff; background: var(--coral); }
+        canvas { display: block; width: 100%; height: 510px; background: #ffffff; border: 1px solid var(--line); border-radius: 4px; }
+
+        .diagram { margin: 24px 0; }
+        .diagram figcaption {
+            margin-top: 9px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .diagram-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .diagram-controls strong { flex: 0 0 auto; }
+        .branch-selector { max-width: 100%; }
+        .layout-canvas { height: 430px; }
+        .branch-canvas { height: 460px; }
+        .contamination-canvas { height: 390px; }
+
+        .branch {
+            display: grid;
+            grid-template-columns: 150px minmax(0, 1fr);
+            margin: 18px 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .branch-title { padding: 14px; color: #ffffff; background: var(--blue); font-weight: 700; }
+        .branch-body { padding: 14px 16px; background: var(--blue-soft); font-family: Cambria, "Times New Roman", serif; font-size: 17px; }
+
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li { position: relative; padding: 10px 12px 10px 38px; border-top: 1px solid var(--line); }
+        .checklist li::before { content: "✓"; position: absolute; left: 12px; color: var(--green); font-weight: 800; }
+
+        .footer-nav {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            border-top: 1px solid var(--line);
+        }
+
+        footer { padding: 28px; color: #63706a; background: var(--surface); border-top: 1px solid var(--line); text-align: center; font-size: 13px; }
+
+        @media (max-width: 1080px) {
+            .layout { grid-template-columns: 235px minmax(0, 1fr); }
+            .four-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .three-column { grid-template-columns: 1fr; }
+            .conversion-map { grid-template-columns: 1fr; }
+            .conversion-map .arrow { min-height: 44px; }
+        }
+
+        @media (max-width: 760px) {
+            .masthead-inner { display: block; }
+            .doc-switch { margin-top: 20px; width: fit-content; max-width: 100%; flex-wrap: wrap; }
+            .layout { display: block; }
+            .toc { position: static; width: auto; height: auto; padding: 20px 24px; border-right: 0; border-bottom: 1px solid var(--line); }
+            .toc ol { columns: 2; column-gap: 24px; }
+            .toc li { break-inside: avoid; }
+            main { padding: 38px 20px 70px; }
+            h1 { font-size: 29px; }
+            .two-column, .four-column { grid-template-columns: 1fr; }
+            .derivation-row { grid-template-columns: 30px minmax(0, 1fr); }
+            .derivation-reason { grid-column: 2; padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+            .matrix-equation { justify-content: flex-start; }
+            .controls { grid-template-columns: 1fr; }
+            .controls output { text-align: left; }
+            canvas { height: 720px; }
+            .diagram-controls { align-items: flex-start; flex-direction: column; }
+            .branch-selector { overflow-x: auto; }
+            .layout-canvas { height: 650px; }
+            .branch-canvas { height: 650px; }
+            .contamination-canvas { height: 800px; }
+            .branch { grid-template-columns: 1fr; }
+            .footer-nav { flex-direction: column; }
+        }
+
+        @media (max-width: 500px) {
+            .toc ol { columns: 1; }
+            .doc-switch a { padding: 7px 9px; font-size: 13px; }
+            .matrix-grid { gap: 6px 10px; padding: 8px 13px; font-size: 15px; }
+            .matrix-grid.m3 { grid-template-columns: repeat(3, minmax(96px, auto)); }
+            .matrix-grid.m4 { grid-template-columns: repeat(4, minmax(68px, auto)); }
+            pre.code { padding: 15px; font-size: 13px; }
+            table { min-width: 640px; }
+        }
+
+        @media print {
+            .doc-switch, .toc, .controls { display: none; }
+            .layout { display: block; }
+            main { padding: 25px; }
+            main > section { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div>
+                <p class="eyebrow">Math Library Study Notes</p>
+                <h1>Quaternion 与 Matrix 转换详解</h1>
+                <p class="subtitle">从旋转基、qvq⁻¹ 和齐次坐标开始，完整推导 Quaternion、Matrix3x3、Matrix4x4 的双向转换与稳定实现。</p>
+            </div>
+            <nav class="doc-switch" aria-label="数学文档切换">
+                <a href="Matrix_Math_Guide.html">Matrix</a>
+                <a href="Quaternion_Math_Guide.html">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html" aria-current="page">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
+                <a href="Curves_Math_Guide.html">Curves</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="toc">
+            <strong>目录</strong>
+            <ol>
+                <li><a href="#convention">0. 约定与结论</a></li>
+                <li><a href="#prerequisite">1. 前置知识</a></li>
+                <li><a href="#conditions">2. 转换前提</a></li>
+                <li><a href="#quaternion-to-m3">3. Quaternion → 3x3</a></li>
+                <li><a href="#m3-m4">4. 3x3 与 4x4</a></li>
+                <li><a href="#m3-to-quaternion">5. 3x3 → Quaternion</a></li>
+                <li><a href="#m4-to-quaternion">6. 4x4 → Quaternion</a></li>
+                <li><a href="#contamination">7. 缩放、剪切与反射</a></li>
+                <li><a href="#examples">8. 完整数值算例</a></li>
+                <li><a href="#implementation">9. 当前 C++ 实现</a></li>
+                <li><a href="#validation">10. 验证与排错</a></li>
+                <li><a href="#summary">11. 公式速查</a></li>
+            </ol>
+        </aside>
+
+        <main>
+            <section id="convention">
+                <h2>0. 先固定约定，再谈公式</h2>
+                <p class="lead">Quaternion 与 Matrix 的转换最容易出错的地方不是乘法，而是把不同资料的分量顺序、向量方向和矩阵布局混在一起。本文只使用当前 Math 库的实际约定。</p>
+
+                <div class="four-column">
+                    <div class="fact"><strong>Quaternion</strong><p><code>(x,y,z,w)</code>，xyz 为虚部，w 为实部。</p></div>
+                    <div class="fact blue"><strong>Matrix 存储</strong><p>行主序，<code>matrix[row][column]</code>。</p></div>
+                    <div class="fact coral"><strong>向量约定</strong><p>列向量右乘：<code>p' = M * p</code>。</p></div>
+                    <div class="fact gold"><strong>世界坐标</strong><p>左手系，+X 右、+Y 上、+Z 前。</p></div>
+                </div>
+
+                <div class="formula">旋转组合：A · B 表示先执行 B，再执行 A
+四元数组合：q₁ · q₂ 表示先执行 q₂，再执行 q₁
+矩阵的列：R 的第 j 列 = 本地第 j 个基轴旋转后的坐标</div>
+
+                <div class="important">
+                    <strong>本文最重要的判断</strong>
+                    Quaternion 只能无损表示纯旋转。Matrix3x3 可以同时包含旋转、缩放、剪切和反射；Matrix4x4 还可包含平移与投影。因此从 Matrix 转 Quaternion 前，必须先证明或提取其中的纯旋转部分。
+                </div>
+
+                <div class="conversion-map" aria-label="转换关系总览">
+                    <div class="node"><strong>Quaternion</strong><span>4 个数，单位长度，3 个自由度</span></div>
+                    <div class="arrow">⇄</div>
+                    <div class="node"><strong>Matrix3x3</strong><span>纯旋转时为正交矩阵</span></div>
+                    <div class="arrow">⇄</div>
+                    <div class="node"><strong>Matrix4x4</strong><span>齐次旋转块，可再组合平移与缩放</span></div>
+                </div>
+            </section>
+
+            <section id="prerequisite">
+                <h2>1. 转换前必须掌握的知识</h2>
+
+                <h3>1.1 点积、叉积与单位向量</h3>
+                <div class="formula">a · b = aₓbₓ + aᵧbᵧ + a_zb_z = ||a|| ||b|| cosθ
+
+a × b = (aᵧb_z-a_zbᵧ,
+         a_zbₓ-aₓb_z,
+         aₓbᵧ-aᵧbₓ)
+
+normalize(a) = a / ||a||</div>
+                <p>点积判断长度和正交性；叉积产生垂直方向；归一化把长度变为 1。旋转矩阵的三个基轴必须两两点积为 0，且各自长度为 1。</p>
+
+                <h3>1.2 旋转矩阵其实在保存三个旋转后的基轴</h3>
+                <p>列向量约定下，矩阵乘单位基向量会直接取出对应列：</p>
+                <div class="derivation">
+                    <div class="derivation-head"><span class="derivation-kind">基向量</span><strong>为什么旋转矩阵的列就是局部坐标轴</strong></div>
+                    <div class="derivation-condition"><strong>定义</strong><span>eₓ=(1,0,0)ᵀ，eᵧ=(0,1,0)ᵀ，e_z=(0,0,1)ᵀ。</span></div>
+                    <div class="derivation-row"><span class="derivation-index">1</span><div class="derivation-expression">R eₓ = column₀(R)</div><div class="derivation-reason">eₓ 只让矩阵第 0 列的系数乘 1。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">2</span><div class="derivation-expression">R eᵧ = column₁(R)</div><div class="derivation-reason">第 1 列是本地 +Y 旋转后在目标空间中的方向。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">3</span><div class="derivation-expression">R e_z = column₂(R)</div><div class="derivation-reason">第 2 列是本地 +Z，也就是当前约定的前向轴。</div></div>
+                </div>
+
+                <div class="warning">
+                    <strong>行主序不等于基向量在行</strong>
+                    行主序只说明连续内存先保存一整行；基轴在行还是列由数学乘法约定决定。当前库使用列向量，所以旋转后的基轴在矩阵列中。
+                </div>
+
+                <h3>1.3 正交旋转矩阵</h3>
+                <p>纯旋转保持长度、夹角和空间朝向，因此矩阵必须满足：</p>
+                <div class="formula blue">RᵀR = I
+R⁻¹ = Rᵀ
+det(R) = +1
+
+||column₀|| = ||column₁|| = ||column₂|| = 1
+columnᵢ · columnⱼ = 0，i ≠ j</div>
+                <p><code>det(R)=-1</code> 虽然也可能满足 <code>RᵀR=I</code>，但它包含镜像反射，不是 Quaternion 能表示的 proper rotation。</p>
+
+                <h3>1.4 齐次坐标为什么需要 4x4</h3>
+                <p>3x3 能线性变换方向，却无法通过一次矩阵乘法表示平移。把三维点扩展为 <code>(x,y,z,1)</code>，把方向扩展为 <code>(x,y,z,0)</code> 后，4x4 才能统一旋转、缩放和平移：</p>
+                <div class="formula">[ R₃×₃  t ] [ p ]   [ Rp+t ]
+[ 0 0 0  1 ] [ 1 ] = [   1  ]
+
+[ R₃×₃  t ] [ d ]   [ Rd ]
+[ 0 0 0  1 ] [ 0 ] = [  0 ]   ← 方向不受平移影响</div>
+
+                <h3>1.5 单位 Quaternion</h3>
+                <div class="formula">q = (u,w) = (x,y,z,w)
+||q||² = x²+y²+z²+w² = 1
+q⁻¹ = q* = (-x,-y,-z,w)
+
+轴角：q = (n sin(θ/2), cos(θ/2))，||n||=1</div>
+                <p>单位条件使 <code>q(v,0)q⁻¹</code> 只旋转、不缩放。<code>q</code> 与 <code>-q</code> 表示同一个三维旋转，因此矩阵转回的 Quaternion 不保证与原值逐分量相等。</p>
+
+                <h3>1.6 叉积矩阵</h3>
+                <p>把 <code>u×p</code> 写成矩阵乘法，可把四元数旋转快速展开成 3x3：</p>
+                <div class="matrix-equation">
+                    <span class="matrix-label">[u]× =</span>
+                    <span class="matrix-grid m3"><span>0</span><span>-z</span><span>y</span><span>z</span><span>0</span><span>-x</span><span>-y</span><span>x</span><span>0</span></span>
+                    <span>，使得 [u]×p = u×p</span>
+                </div>
+            </section>
+
+            <section id="conditions">
+                <h2>2. 三种表示之间能转换的前提</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>转换</th><th>是否总能完成</th><th>必要前提</th><th>会丢失什么</th></tr></thead>
+                        <tbody>
+                            <tr><td>Quaternion → Matrix3x3</td><td>可以</td><td>当前实现会先 Normalize；零长度回退 Identity</td><td>无；但 q 与 -q 得到同一矩阵</td></tr>
+                            <tr><td>Quaternion → Matrix4x4</td><td>可以</td><td>先生成 3x3，再嵌入齐次矩阵</td><td>没有平移和缩放，默认只是纯旋转</td></tr>
+                            <tr><td>Matrix3x3 → Quaternion</td><td>有条件</td><td>矩阵应接近正交，且 determinant 接近 +1</td><td>矩阵中的缩放、剪切、反射无法保留</td></tr>
+                            <tr><td>Matrix4x4 → Quaternion</td><td>有条件</td><td>先排除投影，提取左上 3x3 的纯旋转</td><td>平移、缩放以及其他非旋转分量</td></tr>
+                            <tr><td>Matrix3x3 → Matrix4x4</td><td>可以</td><td>新增齐次对角元素为 1，其余新增元素为 0</td><td>无</td></tr>
+                            <tr><td>Matrix4x4 → Matrix3x3</td><td>可以提取</td><td>取左上角 3x3</td><td>平移、透视行列；提取结果可能仍含缩放/剪切</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="important">
+                    <strong>转换算法不能替代 Transform 分解</strong>
+                    若 4x4 来自任意层级矩阵，正确问题通常是“如何将 affine matrix 分解为 T、R、S、shear”，而不是直接把左上 3x3 交给 <code>QuaternionFromMatrix</code>。
+                </div>
+            </section>
+
+            <section id="quaternion-to-m3">
+                <h2>3. Quaternion 转 Matrix3x3 的完整推导</h2>
+                <p>令单位 Quaternion <code>q=(u,w)</code>，其中 <code>u=(x,y,z)</code>。把向量 <code>p</code> 嵌入纯虚四元数 <code>P=(p,0)</code>，旋转定义为：</p>
+                <div class="formula">P' = q P q⁻¹
+q = (u,w)，q⁻¹=(-u,w)</div>
+
+                <h3>3.1 两次 Hamilton 积整理为向量公式</h3>
+                <div class="derivation">
+                    <div class="derivation-head"><span class="derivation-kind">完整展开</span><strong>从 qPq⁻¹ 到矩阵形式</strong></div>
+                    <div class="derivation-condition"><strong>前提</strong><span>q 为单位 Quaternion；Hamilton 积写为 (v₁,s₁)(v₂,s₂)=(s₁v₂+s₂v₁+v₁×v₂, s₁s₂-v₁·v₂)。</span></div>
+                    <div class="derivation-row"><span class="derivation-index">1</span><div class="derivation-expression">qP = (wp + u×p, -u·p)</div><div class="derivation-reason">把 P=(p,0) 代入 Hamilton 积。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">2</span><div class="derivation-expression">p'=(w²-||u||²)p + 2(u·p)u + 2w(u×p)</div><div class="derivation-reason">再乘 (-u,w)，使用向量三重积并收集 p 的项。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">3</span><div class="derivation-expression">w²-||u||² = 1-2||u||²</div><div class="derivation-reason">单位条件 w²+||u||²=1。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">4</span><div class="derivation-expression">p'=[(1-2u·u)I + 2uuᵀ + 2w[u]×]p</div><div class="derivation-reason">点积项写成外积矩阵，叉积项写成叉积矩阵。</div></div>
+                    <div class="derivation-result"><span class="therefore">结论</span>R(q)=(1-2u·u)I + 2uuᵀ + 2w[u]×</div>
+                </div>
+
+                <h3>3.2 展开三个矩阵项</h3>
+                <div class="formula blue">(1-2u·u)I
+= diag(1-2x²-2y²-2z²,
+       1-2x²-2y²-2z²,
+       1-2x²-2y²-2z²)
+
+2uuᵀ = 2 [ x²  xy  xz ]
+            [ xy  y²  yz ]
+            [ xz  yz  z² ]
+
+2w[u]× = 2w [  0  -z   y ]
+                [  z   0  -x ]
+                [ -y   x   0 ]</div>
+
+                <p>把对应位置相加。例如第一行：</p>
+                <div class="formula">R₀₀ = 1-2(x²+y²+z²)+2x² = 1-2(y²+z²)
+R₀₁ = 2xy-2wz = 2(xy-zw)
+R₀₂ = 2xz+2wy = 2(xz+yw)</div>
+
+                <h3>3.3 最终 3x3 公式</h3>
+                <div class="matrix-equation">
+                    <span class="matrix-label">R(q) =</span>
+                    <span class="matrix-grid m3">
+                        <span>1-2(y²+z²)</span><span>2(xy-zw)</span><span>2(xz+yw)</span>
+                        <span>2(xy+zw)</span><span>1-2(x²+z²)</span><span>2(yz-xw)</span>
+                        <span>2(xz-yw)</span><span>2(yz+xw)</span><span>1-2(x²+y²)</span>
+                    </span>
+                </div>
+
+                <h3>3.4 为什么这个矩阵必然是纯旋转</h3>
+                <ul>
+                    <li><code>qPq⁻¹</code> 保持向量长度，因此 R 的每列长度为 1。</li>
+                    <li>旋转保持夹角，因此不同列仍互相正交。</li>
+                    <li>q 从 Identity 连续变化时不会穿过 determinant 0，因此 <code>det(R)=+1</code>。</li>
+                    <li>q 与 -q 的公式只有二次项和成对乘积，所有符号同时翻转后 R 不变。</li>
+                </ul>
+
+                <div class="interactive">
+                    <div class="controls">
+                        <label>旋转轴</label>
+                        <div class="segmented" role="group" aria-label="选择旋转轴">
+                            <button type="button" data-axis="x" aria-pressed="false">X</button>
+                            <button type="button" data-axis="y" aria-pressed="false">Y</button>
+                            <button type="button" data-axis="z" aria-pressed="true">Z</button>
+                        </div>
+                        <input id="angleRange" type="range" min="-180" max="180" value="90" step="1" aria-label="旋转角度">
+                        <output id="angleOutput" for="angleRange">90°</output>
+                    </div>
+                    <canvas id="conversionCanvas" aria-label="Quaternion、3x3 与 4x4 转换联动图"></canvas>
+                </div>
+            </section>
+
+            <section id="m3-m4">
+                <h2>4. Matrix3x3 与 Matrix4x4 如何转换</h2>
+
+                <h3>4.1 3x3 扩展为纯旋转 4x4</h3>
+                <p>对齐次点 <code>(p,1)</code>，纯旋转不能改变 w，也没有平移。因此把 3x3 放在左上角，新加的最后一行和最后一列只有右下角是 1：</p>
+                <div class="matrix-equation">
+                    <span class="matrix-label">R₄ =</span>
+                    <span class="matrix-grid m4">
+                        <span>R₀₀</span><span>R₀₁</span><span>R₀₂</span><span>0</span>
+                        <span>R₁₀</span><span>R₁₁</span><span>R₁₂</span><span>0</span>
+                        <span>R₂₀</span><span>R₂₁</span><span>R₂₂</span><span>0</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
+
+                <div class="formula">R₄ · (pₓ,pᵧ,p_z,1)ᵀ = (R₃p,1)ᵀ
+R₄ · (dₓ,dᵧ,d_z,0)ᵀ = (R₃d,0)ᵀ</div>
+
+                <h3>4.2 加入平移和缩放</h3>
+                <p>当前列向量约定下，对象变换使用：</p>
+                <div class="formula coral">M = T · R₄(q) · S
+p_world = T(R(S(p_local)))</div>
+                <p>平移写入最后一列 <code>M[0][3]、M[1][3]、M[2][3]</code>。若只有 Quaternion 转 4x4，当前 <code>Matrix4x4FromQuaternion</code> 不会凭空加入平移或缩放。</p>
+
+                <h3>4.3 4x4 提取 3x3</h3>
+                <p>取左上角九个元素即可得到线性部分 A，但不要立刻把 A 称为旋转矩阵：</p>
+                <div class="formula">A = upperLeft3x3(M)
+
+若 M=T·R·S，则 A=R·S
+若 M 还含 shear，则 A=R·S·H 或其他分解顺序
+若 M 是投影矩阵，则 A 根本不是对象旋转</div>
+
+                <figure class="diagram">
+                    <canvas id="matrixLayoutCanvas" class="layout-canvas" aria-label="Matrix3x3 与 Matrix4x4 区域关系图"></canvas>
+                    <figcaption>绿色是左上 3x3 线性块；红色是平移列；蓝色是齐次行；右下角的 1 让仿射点保持 w=1。3x3 扩展到 4x4 会补齐这些区域，反向提取则只复制绿色区域。</figcaption>
+                </figure>
+
+                <div class="warning">
+                    <strong>“提取 3x3”与“提取旋转”不是同一件事</strong>
+                    前者只是复制九个数；后者需要排除缩放、剪切和反射，确认结果满足正交旋转矩阵条件。
+                </div>
+            </section>
+
+            <section id="m3-to-quaternion">
+                <h2>5. Matrix3x3 转 Quaternion 的完整推导</h2>
+                <p>从上一节的九个矩阵元素反解 x、y、z、w。直接只使用 trace 的公式在 180° 附近会除以接近 0 的 w，因此实际代码必须选择数值最大的 Quaternion 分量作为主分量。</p>
+
+                <h3>5.1 trace 为什么能求 w</h3>
+                <div class="derivation">
+                    <div class="derivation-head"><span class="derivation-kind">迹推导</span><strong>由三个对角元素得到 w²</strong></div>
+                    <div class="derivation-condition"><strong>前提</strong><span>R 来自单位 q，因此 x²+y²+z²+w²=1。</span></div>
+                    <div class="derivation-row"><span class="derivation-index">1</span><div class="derivation-expression">trace = R₀₀+R₁₁+R₂₂</div><div class="derivation-reason">trace 是矩阵主对角线元素之和。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">2</span><div class="derivation-expression">trace = 3-4(x²+y²+z²)</div><div class="derivation-reason">代入三个对角公式，每个虚部分量平方出现两次。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">3</span><div class="derivation-expression">x²+y²+z² = 1-w²</div><div class="derivation-reason">来自单位 Quaternion 条件。</div></div>
+                    <div class="derivation-row"><span class="derivation-index">4</span><div class="derivation-expression">trace = 3-4(1-w²)=4w²-1</div><div class="derivation-reason">整理后得到只含 w² 的表达式。</div></div>
+                    <div class="derivation-result"><span class="therefore">结论</span>w = 1/2 √(trace+1)，符号可由矩阵反对称部分配合确定</div>
+                </div>
+
+                <h3>5.2 trace&gt;0 分支</h3>
+                <p>当前实现定义 <code>scale = 2√(trace+1) = 4|w|</code>。选择其中一个等价 Quaternion 符号后：</p>
+                <div class="branch">
+                    <div class="branch-title">w 为主分量</div>
+                    <div class="branch-body">S = 2√(trace+1)<br>w=S/4<br>x=(R₂₁-R₁₂)/S<br>y=(R₀₂-R₂₀)/S<br>z=(R₁₀-R₀₁)/S</div>
+                </div>
+
+                <p>差值来自矩阵的反对称部分：</p>
+                <div class="formula">R₂₁-R₁₂ = 2(yz+xw)-2(yz-xw) = 4xw
+R₀₂-R₂₀ = 2(xz+yw)-2(xz-yw) = 4yw
+R₁₀-R₀₁ = 2(xy+zw)-2(xy-zw) = 4zw</div>
+
+                <h3>5.3 为什么 180° 附近不能继续用 w 分支</h3>
+                <p>旋转角 θ 接近 180° 时 <code>w=cos(θ/2)</code> 接近 0，trace 接近 -1。此时 S 接近 0，再用差值除 S 会放大浮点误差。解决办法是找 x、y、z 中最大的那个先求。</p>
+
+                <h3>5.4 最大对角元素的三个分支</h3>
+                <p>类似地，由对角元素组合可得到：</p>
+                <div class="formula blue">1+R₀₀-R₁₁-R₂₂ = 4x²
+1+R₁₁-R₀₀-R₂₂ = 4y²
+1+R₂₂-R₀₀-R₁₁ = 4z²</div>
+
+                <div class="branch">
+                    <div class="branch-title">x 为主分量</div>
+                    <div class="branch-body">S=2√(1+R₀₀-R₁₁-R₂₂)<br>x=S/4<br>w=(R₂₁-R₁₂)/S<br>y=(R₀₁+R₁₀)/S<br>z=(R₀₂+R₂₀)/S</div>
+                </div>
+                <div class="branch">
+                    <div class="branch-title">y 为主分量</div>
+                    <div class="branch-body">S=2√(1+R₁₁-R₀₀-R₂₂)<br>y=S/4<br>w=(R₀₂-R₂₀)/S<br>x=(R₀₁+R₁₀)/S<br>z=(R₁₂+R₂₁)/S</div>
+                </div>
+                <div class="branch">
+                    <div class="branch-title">z 为主分量</div>
+                    <div class="branch-body">S=2√(1+R₂₂-R₀₀-R₁₁)<br>z=S/4<br>w=(R₁₀-R₀₁)/S<br>x=(R₀₂+R₂₀)/S<br>y=(R₁₂+R₂₁)/S</div>
+                </div>
+
+                <div class="interactive">
+                    <div class="diagram-controls">
+                        <strong>点击算例，观察代码为什么切换主分量</strong>
+                        <div class="segmented branch-selector" role="group" aria-label="选择矩阵转四元数算例">
+                            <button type="button" data-branch-demo="z90" aria-pressed="true">Z 90°</button>
+                            <button type="button" data-branch-demo="y135" aria-pressed="false">Y 135°</button>
+                            <button type="button" data-branch-demo="x180" aria-pressed="false">X 180°</button>
+                            <button type="button" data-branch-demo="z180" aria-pressed="false">Z 180°</button>
+                        </div>
+                    </div>
+                    <canvas id="branchCanvas" class="branch-canvas" aria-label="Matrix3x3 转 Quaternion 稳定分支图"></canvas>
+                </div>
+
+                <h3>5.5 分支选择逻辑</h3>
+                <pre class="code"><code><span class="keyword">if</span> (trace &gt; <span class="literal">0</span>) {
+    <span class="comment">// w 分支</span>
+} <span class="keyword">else if</span> (R00 &gt; R11 &amp;&amp; R00 &gt; R22) {
+    <span class="comment">// x 分支</span>
+} <span class="keyword">else if</span> (R11 &gt; R22) {
+    <span class="comment">// y 分支</span>
+} <span class="keyword">else</span> {
+    <span class="comment">// z 分支</span>
+}
+q = Normalize(q);</code></pre>
+
+                <p>“最大对角元素”与“最大虚部分量”对应，因为上面的三个对角组合分别等于 <code>4x²、4y²、4z²</code>。最后归一化用于吸收矩阵舍入误差，不是用来修复严重缩放或剪切。</p>
+
+                <div class="note">
+                    <strong>输出符号不是唯一的</strong>
+                    同一个矩阵可能恢复出 q 或 -q。若需要时间序列连续性，应与上一帧 Quaternion 做点积；若 dot&lt;0，则把当前结果整体取负。
+                </div>
+            </section>
+
+            <section id="m4-to-quaternion">
+                <h2>6. Matrix4x4 转 Quaternion 的正确流程</h2>
+
+                <h3>6.1 纯旋转 4x4</h3>
+                <ol>
+                    <li>确认最后一行接近 <code>(0,0,0,1)</code>，它不是投影矩阵。</li>
+                    <li>复制左上角 3x3 得到 R。</li>
+                    <li>验证 <code>RᵀR≈I</code>、<code>det(R)≈+1</code>。</li>
+                    <li>调用 <code>QuaternionFromMatrix(R)</code>。</li>
+                </ol>
+
+                <h3>6.2 含平移但不含缩放</h3>
+                <div class="matrix-equation">
+                    <span class="matrix-label">M =</span>
+                    <span class="matrix-grid m4">
+                        <span>R₀₀</span><span>R₀₁</span><span>R₀₂</span><span>tₓ</span>
+                        <span>R₁₀</span><span>R₁₁</span><span>R₁₂</span><span>tᵧ</span>
+                        <span>R₂₀</span><span>R₂₁</span><span>R₂₂</span><span>t_z</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
+                <p>平移只在最后一列，完全不影响左上 3x3，因此可直接提取 R。Quaternion 只保存旋转，<code>t</code> 必须另外保存。</p>
+
+                <h3>6.3 含正的非均匀缩放但没有剪切</h3>
+                <p>若 <code>M=T·R·S</code> 且 <code>S=diag(sx,sy,sz)</code>，则左上 A 的三列分别是 R 的列乘对应 scale：</p>
+                <div class="formula">A.column₀ = sx · R.column₀
+A.column₁ = sy · R.column₁
+A.column₂ = sz · R.column₂
+
+sx = ||A.column₀||，sy = ||A.column₁||，sz = ||A.column₂||
+R.columnᵢ = A.columnᵢ / sᵢ</div>
+
+                <p>只有在没有 shear、scale 不接近 0 且符号问题已处理时，逐列归一化才能恢复 R。恢复后仍应检查列之间点积和 determinant。</p>
+
+                <pre class="code"><code><span class="type">float3x3</span> linear = ResizeMatrix&lt;<span class="type">float</span>, <span class="literal">3</span>, <span class="literal">3</span>&gt;(matrix4x4);
+
+<span class="type">float3</span> xAxis = linear.Column(<span class="literal">0</span>);
+<span class="type">float3</span> yAxis = linear.Column(<span class="literal">1</span>);
+<span class="type">float3</span> zAxis = linear.Column(<span class="literal">2</span>);
+
+<span class="type">float3</span> scale(Length(xAxis), Length(yAxis), Length(zAxis));
+<span class="comment">// 先检查 scale 分量不接近 0，再归一化列。</span>
+xAxis /= scale.x;
+yAxis /= scale.y;
+zAxis /= scale.z;
+
+<span class="type">float3x3</span> rotation{};
+rotation.SetColumn(<span class="literal">0</span>, xAxis);
+rotation.SetColumn(<span class="literal">1</span>, yAxis);
+rotation.SetColumn(<span class="literal">2</span>, zAxis);
+
+<span class="type">floatQuaternion</span> q = QuaternionFromMatrix(rotation);</code></pre>
+
+                <div class="warning">
+                    <strong>这段列归一化代码不是完整矩阵分解器</strong>
+                    它只展示无 shear、正 scale 的简单情况。父子层级中的非均匀缩放与旋转组合可能产生 shear，此时必须使用更完整的 affine decomposition 或 polar decomposition。
+                </div>
+            </section>
+
+            <section id="contamination">
+                <h2>7. 缩放、剪切和反射为什么麻烦</h2>
+
+                <h3>7.1 缩放破坏单位长度</h3>
+                <p>纯旋转列长度为 1；缩放让列长度变成 scale。若把带 scale 的矩阵直接代入 trace 公式，<code>trace=4w²-1</code> 的推导前提已经不成立。</p>
+
+                <h3>7.2 剪切破坏正交性</h3>
+                <p>剪切会使基轴不再垂直。逐列 Normalize 只能修复长度，不能让两列重新正交：</p>
+                <div class="formula coral">normalize(c₀) · normalize(c₁) ≠ 0
+→ 仍然不是旋转矩阵
+→ QuaternionFromMatrix 得到的只是某个失真的近似结果</div>
+
+                <h3>7.3 Gram-Schmidt 的近似正交化</h3>
+                <p>对轻微数值漂移，可以按固定优先级正交化三个基轴：</p>
+                <div class="formula">x = normalize(c₀)
+y = normalize(c₁ - x·dot(x,c₁))
+z = cross(x,y)
+y = cross(z,x)   ← 再计算一次以减小误差</div>
+
+                <p>Gram-Schmidt 会偏向先处理的轴，不是距离原矩阵最近的旋转。适合清理轻微漂移，不适合一般 Transform 分解。</p>
+
+                <h3>7.4 Polar decomposition</h3>
+                <p>对可逆线性矩阵 A，可分为正交部分 R 与对称部分 S：</p>
+                <div class="formula blue">A = R S
+S = √(AᵀA)
+R = A S⁻¹ = A(AᵀA)⁻¹/²</div>
+                <p>R 是 Frobenius 范数意义下接近 A 的正交矩阵，S 吸收缩放和剪切。实现需要稳定的 3x3 对称矩阵平方根/逆平方根、奇异矩阵处理和 determinant 修正；成熟引擎通常使用经过测试的 decomposition 算法。</p>
+
+                <h3>7.5 负缩放与反射</h3>
+                <p>若 scale 有奇数个负轴，线性部分 determinant 为负。Quaternion 永远产生 <code>det=+1</code>，因此不能单独保存反射。分解器必须决定把负号放在哪个 scale 轴，同时让旋转部分恢复到 determinant +1。</p>
+
+                <figure class="diagram">
+                    <canvas id="contaminationCanvas" class="contamination-canvas" aria-label="纯旋转、缩放、剪切和反射的基轴对比图"></canvas>
+                    <figcaption>每个矩阵都画出三列基轴并计算长度、列间最大绝对点积和 determinant。只有列为单位长度、彼此正交且 determinant 为 +1 的矩阵，才能直接交给 Matrix3x3 → Quaternion。</figcaption>
+                </figure>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>输入情况</th><th>列长度</th><th>列点积</th><th>det</th><th>处理</th></tr></thead>
+                        <tbody>
+                            <tr><td>纯旋转</td><td>都约等于 1</td><td>都约等于 0</td><td>约 +1</td><td>直接转换</td></tr>
+                            <tr><td>正非均匀缩放</td><td>等于各轴 scale</td><td>仍约等于 0</td><td>正但不一定 1</td><td>列归一化后验证</td></tr>
+                            <tr><td>剪切</td><td>任意</td><td>至少一对非 0</td><td>任意</td><td>完整分解或 polar decomposition</td></tr>
+                            <tr><td>反射/奇数负 scale</td><td>非负长度看不出符号</td><td>可能仍为 0</td><td>负</td><td>保留负 scale，修正旋转 determinant</td></tr>
+                            <tr><td>某轴 scale=0</td><td>至少一列为 0</td><td>信息丢失</td><td>0</td><td>旋转不可唯一恢复</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="examples">
+                <h2>8. 三个完整数值算例</h2>
+
+                <h3>8.1 绕 +Z 旋转 +90°</h3>
+                <div class="formula">axis=(0,0,1)，θ=90°
+q=(0,0,sin45°,cos45°)
+ =(0,0,√2/2,√2/2)</div>
+                <p>代入公式，<code>x=0、y=0、z=w=√2/2</code>：</p>
+                <div class="matrix-equation">
+                    <span class="matrix-label">R₃ =</span>
+                    <span class="matrix-grid m3"><span>0</span><span>-1</span><span>0</span><span>1</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span>
+                    <span class="matrix-label">R₄ =</span>
+                    <span class="matrix-grid m4"><span>0</span><span>-1</span><span>0</span><span>0</span><span>1</span><span>0</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span>
+                </div>
+
+                <div class="formula">R₃(1,0,0)ᵀ = (0,1,0)ᵀ
+→ 当前正角约定下，+X 转到 +Y</div>
+
+                <h3>8.2 从绕 +Y 60° 的矩阵恢复 Quaternion</h3>
+                <div class="matrix-equation">
+                    <span class="matrix-label">R =</span>
+                    <span class="matrix-grid m3"><span>0.5</span><span>0</span><span>0.866025</span><span>0</span><span>1</span><span>0</span><span>-0.866025</span><span>0</span><span>0.5</span></span>
+                </div>
+                <div class="formula">trace = 0.5+1+0.5 = 2 &gt; 0
+S = 2√(trace+1) = 2√3 ≈ 3.464102
+
+w = S/4 ≈ 0.866025
+x = (R₂₁-R₁₂)/S = 0
+y = (R₀₂-R₂₀)/S = (0.866025-(-0.866025))/3.464102 = 0.5
+z = (R₁₀-R₀₁)/S = 0
+
+q=(0,0.5,0,0.866025)</div>
+
+                <h3>8.3 绕 +X 180°，为何进入 x 分支</h3>
+                <div class="matrix-equation">
+                    <span class="matrix-label">R =</span>
+                    <span class="matrix-grid m3"><span>1</span><span>0</span><span>0</span><span>0</span><span>-1</span><span>0</span><span>0</span><span>0</span><span>-1</span></span>
+                </div>
+                <div class="formula">trace = -1，w 分支的 S=0，不能使用
+R₀₀ 最大，进入 x 分支
+
+S = 2√(1+R₀₀-R₁₁-R₂₂)
+  = 2√(1+1-(-1)-(-1)) = 4
+x=S/4=1，y=z=w=0
+
+q=(1,0,0,0)，也可能得到 -q=(-1,0,0,0)</div>
+            </section>
+
+            <section id="implementation">
+                <h2>9. 当前 Math 库的 C++ 对照</h2>
+
+                <h3>9.1 Quaternion 转矩阵</h3>
+                <pre class="code"><code><span class="type">floatQuaternion</span> q = QuaternionFromAxisAngle(
+    <span class="type">float3</span>(<span class="literal">0.0F</span>, <span class="literal">1.0F</span>, <span class="literal">0.0F</span>),
+    Radians(<span class="literal">60.0F</span>));
+
+<span class="type">float3x3</span> rotation3 = Matrix3x3FromQuaternion(q);
+<span class="type">float4x4</span> rotation4 = Matrix4x4FromQuaternion(q);
+
+<span class="comment">// Matrix3x3FromQuaternion 内部先 Normalize(q)。</span>
+<span class="comment">// Matrix4x4FromQuaternion 再用 ResizeMatrix 扩展齐次维度。</span></code></pre>
+
+                <h3>9.2 3x3 与 4x4 转换</h3>
+                <pre class="code"><code><span class="type">float4x4</span> expanded = ResizeMatrix&lt;<span class="type">float</span>, <span class="literal">4</span>, <span class="literal">4</span>&gt;(rotation3);
+<span class="type">float3x3</span> extracted = ResizeMatrix&lt;<span class="type">float</span>, <span class="literal">3</span>, <span class="literal">3</span>&gt;(expanded);
+
+<span class="comment">// 扩展时新增对角线默认为 1，其余新增元素为 0。</span>
+<span class="comment">// 缩小时只复制左上共同区域。</span></code></pre>
+
+                <h3>9.3 矩阵转 Quaternion</h3>
+                <pre class="code"><code><span class="type">floatQuaternion</span> restored = QuaternionFromMatrix(rotation3);
+
+<span class="comment">// 不要逐分量比较 q == restored，因为 restored 可能等于 -q。</span>
+<span class="type">float</span> sameRotation = Abs(Dot(Normalize(q), Normalize(restored)));
+<span class="type">bool</span> equivalent = NearlyEqual(sameRotation, <span class="literal">1.0F</span>, <span class="literal">1.0e-5F</span>);</code></pre>
+
+                <h3>9.4 TRS 中 Quaternion 的位置</h3>
+                <pre class="code"><code><span class="type">float4x4</span> localToWorld = TRSMatrix(position, rotation, scale);
+<span class="comment">// 等价于 TranslationMatrix(position)</span>
+<span class="comment">//      * Matrix4x4FromQuaternion(rotation)</span>
+<span class="comment">//      * ScaleMatrix(scale);</span></code></pre>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>任务</th><th>当前 API</th><th>内部逻辑</th></tr></thead>
+                        <tbody>
+                            <tr><td>q → 3x3</td><td><code>Matrix3x3FromQuaternion(q)</code></td><td>Normalize 后缓存 xx、xy、wx 等并展开九项</td></tr>
+                            <tr><td>q → 4x4</td><td><code>Matrix4x4FromQuaternion(q)</code></td><td>先转 3x3，再 <code>ResizeMatrix&lt;T,4,4&gt;</code></td></tr>
+                            <tr><td>3x3 → q</td><td><code>QuaternionFromMatrix(m3)</code></td><td>trace / 最大对角元素稳定分支，最后 Normalize</td></tr>
+                            <tr><td>3x3 ↔ 4x4</td><td><code>ResizeMatrix</code></td><td>复制左上共同区域；扩展的新对角默认 1</td></tr>
+                            <tr><td>T、R、S → 4x4</td><td><code>TRSMatrix(t,q,s)</code></td><td><code>T*R*S</code>，实际对点先 S、再 R、最后 T</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="validation">
+                <h2>10. 验证转换和排查错误</h2>
+
+                <h3>10.1 Quaternion 等价性</h3>
+                <div class="formula">sameRotation(q₀,q₁) ⇔ |dot(normalize(q₀),normalize(q₁))| ≈ 1</div>
+                <p>绝对值同时接受 q 和 -q。也可以旋转三条单位基轴并比较结果，这比逐分量比较更符合真正目标。</p>
+
+                <h3>10.2 Matrix 合法性</h3>
+                <ul class="checklist">
+                    <li>检查三个列长度都接近 1。</li>
+                    <li>检查三对不同列的点积都接近 0。</li>
+                    <li>检查 <code>Transpose(R)*R</code> 接近 Identity。</li>
+                    <li>检查 determinant 接近 +1，而不是 -1 或 0。</li>
+                    <li>检查 R 与转换后的 q 对同一向量给出相同结果。</li>
+                </ul>
+
+                <h3>10.3 Round-trip 测试</h3>
+                <pre class="code"><code><span class="type">floatQuaternion</span> original = Normalize(input);
+<span class="type">float3x3</span> matrix = Matrix3x3FromQuaternion(original);
+<span class="type">floatQuaternion</span> restored = QuaternionFromMatrix(matrix);
+
+Check(
+    Abs(Dot(original, restored)) &gt; <span class="literal">1.0F</span> - epsilon,
+    <span class="literal">"Quaternion matrix round-trip failed"</span>);
+
+<span class="type">float3</span> probe = Normalize(<span class="type">float3</span>(<span class="literal">1.0F</span>, <span class="literal">2.0F</span>, <span class="literal">3.0F</span>));
+Check(Near(matrix * probe, Rotate(restored, probe), epsilon));</code></pre>
+
+                <h3>10.4 常见错误与症状</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>错误</th><th>典型症状</th><th>原因</th></tr></thead>
+                        <tbody>
+                            <tr><td>把 q 当成 (w,x,y,z)</td><td>Identity 和任意旋转都错误</td><td>当前构造顺序是 (x,y,z,w)</td></tr>
+                            <tr><td>矩阵公式被转置</td><td>旋转方向完全相反</td><td>混用了行向量公式</td></tr>
+                            <tr><td>把行当成本地基轴</td><td>提取 forward/right 不符合预期</td><td>当前列向量约定下基轴在列</td></tr>
+                            <tr><td>直接转换带 scale 的矩阵</td><td>Quaternion 角度漂移或跳变</td><td>trace 公式只对正交 R 成立</td></tr>
+                            <tr><td>逐分量比较 round-trip</td><td>偶尔得到“完全相反”的 q</td><td>q 与 -q 表示同一个旋转</td></tr>
+                            <tr><td>180° 只用 trace 分支</td><td>除零、NaN 或巨大误差</td><td>w 接近 0，必须改用最大对角分支</td></tr>
+                            <tr><td>把内存行主序等同 shader 乘法</td><td>CPU 与 shader 结果互为转置</td><td>存储顺序和数学向量约定是两个问题</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="summary">
+                <h2>11. 公式与流程速查</h2>
+
+                <h3>Quaternion → Matrix3x3</h3>
+                <div class="formula">先 normalize(q)
+
+R = [ 1-2(y²+z²)   2(xy-zw)     2(xz+yw)   ]
+    [ 2(xy+zw)     1-2(x²+z²)   2(yz-xw)   ]
+    [ 2(xz-yw)     2(yz+xw)     1-2(x²+y²) ]</div>
+
+                <h3>Matrix3x3 → Quaternion</h3>
+                <div class="formula blue">trace&gt;0：以 w 为主分量
+否则：比较 R₀₀、R₁₁、R₂₂，选择 x/y/z 主分量
+最后 normalize(q)
+
+切记：输入应满足 RᵀR≈I 且 det(R)≈+1</div>
+
+                <h3>Matrix4x4 → Quaternion</h3>
+                <div class="formula coral">1. 排除投影矩阵
+2. 提取左上 3x3 线性部分 A
+3. 若 A 含 scale/shear，先完成分解得到 R
+4. 验证 RᵀR≈I、det(R)≈+1
+5. QuaternionFromMatrix(R)</div>
+
+                <h3>选择哪种表示</h3>
+                <div class="three-column">
+                    <div class="fact"><strong>Quaternion</strong><p>保存对象旋转、组合、插值；紧凑且没有 Euler 万向节锁。</p></div>
+                    <div class="fact blue"><strong>Matrix3x3</strong><p>批量变换方向和法线、保存线性部分；可包含非旋转信息。</p></div>
+                    <div class="fact coral"><strong>Matrix4x4</strong><p>统一对象到世界、相机与投影变换，适合渲染管线传递。</p></div>
+                </div>
+            </section>
+
+            <nav class="footer-nav" aria-label="文档尾部导航">
+                <a href="Quaternion_Math_Guide.html">Quaternion 完整数学原理</a>
+                <a href="Matrix_Math_Guide.html">Matrix 完整数学原理</a>
+                <a href="#convention">返回顶部</a>
+            </nav>
+        </main>
+    </div>
+
+    <footer>Quaternion / Matrix Conversion Guide · 对应当前 Math 库左手坐标约定</footer>
+
+    <script>
+        (() => {
+            "use strict";
+
+            const colors = {
+                ink: "#18201d",
+                muted: "#58635e",
+                line: "#d9dfdb",
+                green: "#147a56",
+                greenSoft: "#e7f4ee",
+                blue: "#246a8d",
+                blueSoft: "#e9f3f8",
+                coral: "#b94e3d",
+                coralSoft: "#faeeeb",
+                gold: "#8a6513",
+                goldSoft: "#fff5d8"
+            };
+
+            const canvas = document.getElementById("conversionCanvas");
+            const matrixLayoutCanvas = document.getElementById("matrixLayoutCanvas");
+            const branchCanvas = document.getElementById("branchCanvas");
+            const contaminationCanvas = document.getElementById("contaminationCanvas");
+            const range = document.getElementById("angleRange");
+            const output = document.getElementById("angleOutput");
+            let selectedAxis = "z";
+            let selectedBranchDemo = "z90";
+
+            function prepareCanvas(target, minimumHeight = 420) {
+                const ratio = Math.max(1, window.devicePixelRatio || 1);
+                const rect = target.getBoundingClientRect();
+                const width = Math.max(320, Math.round(rect.width));
+                const height = Math.max(minimumHeight, Math.round(rect.height));
+                target.width = Math.round(width * ratio);
+                target.height = Math.round(height * ratio);
+                const context = target.getContext("2d");
+                context.setTransform(ratio, 0, 0, ratio, 0, 0);
+                context.clearRect(0, 0, width, height);
+                context.textBaseline = "middle";
+                return { context, width, height };
+            }
+
+            function quaternionForAxis(axis, radians) {
+                const sine = Math.sin(radians * 0.5);
+                const cosine = Math.cos(radians * 0.5);
+                return {
+                    x: axis === "x" ? sine : 0,
+                    y: axis === "y" ? sine : 0,
+                    z: axis === "z" ? sine : 0,
+                    w: cosine
+                };
+            }
+
+            function matrixFromQuaternion(q) {
+                const xx = q.x * q.x;
+                const yy = q.y * q.y;
+                const zz = q.z * q.z;
+                const xy = q.x * q.y;
+                const xz = q.x * q.z;
+                const yz = q.y * q.z;
+                const wx = q.w * q.x;
+                const wy = q.w * q.y;
+                const wz = q.w * q.z;
+                return [
+                    [1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy)],
+                    [2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx)],
+                    [2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy)]
+                ];
+            }
+
+            function format(value) {
+                const clean = Math.abs(value) < 0.00005 ? 0 : value;
+                return clean.toFixed(3);
+            }
+
+            function drawMatrix(ctx, matrix, x, y, cellWidth, cellHeight, title, color, soft) {
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(title, x, y - 16);
+                for (let row = 0; row < matrix.length; ++row) {
+                    for (let column = 0; column < matrix[row].length; ++column) {
+                        const cellX = x + column * cellWidth;
+                        const cellY = y + row * cellHeight;
+                        ctx.fillStyle = soft;
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 1;
+                        ctx.fillRect(cellX, cellY, cellWidth - 4, cellHeight - 4);
+                        ctx.strokeRect(cellX, cellY, cellWidth - 4, cellHeight - 4);
+                        ctx.fillStyle = color;
+                        ctx.font = "12px Consolas, monospace";
+                        ctx.textAlign = "center";
+                        ctx.fillText(format(matrix[row][column]), cellX + (cellWidth - 4) / 2, cellY + (cellHeight - 4) / 2);
+                    }
+                }
+            }
+
+            function project(vector, origin, scale) {
+                return {
+                    x: origin.x + (vector[0] - vector[2] * 0.55) * scale,
+                    y: origin.y - (vector[1] - vector[2] * 0.32) * scale
+                };
+            }
+
+            function drawArrow(ctx, origin, vector, scale, color, label) {
+                const end = project(vector, origin, scale);
+                const angle = Math.atan2(end.y - origin.y, end.x - origin.x);
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(origin.x, origin.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(end.x, end.y);
+                ctx.lineTo(end.x - 10 * Math.cos(angle - Math.PI / 6), end.y - 10 * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(end.x - 10 * Math.cos(angle + Math.PI / 6), end.y - 10 * Math.sin(angle + Math.PI / 6));
+                ctx.closePath();
+                ctx.fill();
+                ctx.font = '700 12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "center";
+                ctx.fillText(label, end.x + 13 * Math.cos(angle), end.y + 13 * Math.sin(angle));
+            }
+
+            function drawBasis(ctx, matrix, x, y, width, height) {
+                const origin = { x: x + width * 0.48, y: y + height * 0.58 };
+                const scale = Math.min(width, height) * 0.31;
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText("R 的三列 = 旋转后的局部基轴", x, y + 10);
+
+                ctx.strokeStyle = colors.line;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x + 10, origin.y);
+                ctx.lineTo(x + width - 10, origin.y);
+                ctx.moveTo(origin.x, y + 35);
+                ctx.lineTo(origin.x, y + height - 10);
+                ctx.stroke();
+
+                drawArrow(ctx, origin, [matrix[0][0], matrix[1][0], matrix[2][0]], scale, colors.coral, "X'");
+                drawArrow(ctx, origin, [matrix[0][1], matrix[1][1], matrix[2][1]], scale, colors.green, "Y'");
+                drawArrow(ctx, origin, [matrix[0][2], matrix[1][2], matrix[2][2]], scale, colors.blue, "Z'");
+
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText("红 X' = column 0", x + 8, y + height - 42);
+                ctx.fillText("绿 Y' = column 1", x + 8, y + height - 24);
+                ctx.fillText("蓝 Z' = column 2", x + 8, y + height - 6);
+            }
+
+            function drawFlatArrow(ctx, fromX, fromY, toX, toY, color, lineWidth = 2) {
+                const angle = Math.atan2(toY - fromY, toX - fromX);
+                const headLength = 10;
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.beginPath();
+                ctx.moveTo(fromX, fromY);
+                ctx.lineTo(toX, toY);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(toX, toY);
+                ctx.lineTo(
+                    toX - headLength * Math.cos(angle - Math.PI / 6),
+                    toY - headLength * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(
+                    toX - headLength * Math.cos(angle + Math.PI / 6),
+                    toY - headLength * Math.sin(angle + Math.PI / 6));
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            function semanticStyle(kind) {
+                if (kind === "translation") {
+                    return { fill: colors.coralSoft, stroke: colors.coral };
+                }
+                if (kind === "homogeneous") {
+                    return { fill: colors.blueSoft, stroke: colors.blue };
+                }
+                if (kind === "constant") {
+                    return { fill: colors.goldSoft, stroke: colors.gold };
+                }
+                return { fill: colors.greenSoft, stroke: colors.green };
+            }
+
+            function drawSemanticMatrix(ctx, cells, x, y, cellSize, title) {
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(title, x, y - 18);
+
+                for (let row = 0; row < cells.length; ++row) {
+                    for (let column = 0; column < cells[row].length; ++column) {
+                        const cell = cells[row][column];
+                        const style = semanticStyle(cell.kind);
+                        const cellX = x + column * cellSize;
+                        const cellY = y + row * cellSize;
+                        ctx.fillStyle = style.fill;
+                        ctx.strokeStyle = style.stroke;
+                        ctx.lineWidth = 1;
+                        ctx.fillRect(cellX, cellY, cellSize - 4, cellSize - 4);
+                        ctx.strokeRect(cellX, cellY, cellSize - 4, cellSize - 4);
+                        ctx.fillStyle = style.stroke;
+                        ctx.font = "12px Consolas, monospace";
+                        ctx.textAlign = "center";
+                        ctx.fillText(cell.label, cellX + (cellSize - 4) / 2, cellY + (cellSize - 4) / 2);
+                    }
+                }
+            }
+
+            function drawLegendItem(ctx, x, y, fill, stroke, label) {
+                ctx.fillStyle = fill;
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = 1;
+                ctx.fillRect(x, y - 7, 14, 14);
+                ctx.strokeRect(x, y - 7, 14, 14);
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(label, x + 21, y);
+            }
+
+            function drawMatrixLayout() {
+                const { context: ctx, width, height } = prepareCanvas(matrixLayoutCanvas, 430);
+                const matrix3 = [
+                    [{ label: "A00", kind: "linear" }, { label: "A01", kind: "linear" }, { label: "A02", kind: "linear" }],
+                    [{ label: "A10", kind: "linear" }, { label: "A11", kind: "linear" }, { label: "A12", kind: "linear" }],
+                    [{ label: "A20", kind: "linear" }, { label: "A21", kind: "linear" }, { label: "A22", kind: "linear" }]
+                ];
+                const matrix4 = [
+                    [...matrix3[0], { label: "tx", kind: "translation" }],
+                    [...matrix3[1], { label: "ty", kind: "translation" }],
+                    [...matrix3[2], { label: "tz", kind: "translation" }],
+                    [
+                        { label: "0", kind: "homogeneous" },
+                        { label: "0", kind: "homogeneous" },
+                        { label: "0", kind: "homogeneous" },
+                        { label: "1", kind: "constant" }
+                    ]
+                ];
+                const mobile = width < 660;
+
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 15px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText("3x3 线性块与 4x4 齐次矩阵的区域关系", 16, 24);
+
+                if (mobile) {
+                    const cellSize = Math.min(50, (width - 40) / 4);
+                    const matrix3Width = cellSize * 3;
+                    const matrix4Width = cellSize * 4;
+                    const matrix3X = (width - matrix3Width) / 2;
+                    const matrix4X = (width - matrix4Width) / 2;
+                    const matrix3Y = 72;
+                    const matrix4Y = 300;
+                    drawSemanticMatrix(ctx, matrix3, matrix3X, matrix3Y, cellSize, "Matrix3x3：A");
+                    drawSemanticMatrix(ctx, matrix4, matrix4X, matrix4Y, cellSize, "Matrix4x4：M");
+
+                    const upperY = matrix3Y + cellSize * 3 + 20;
+                    const lowerY = matrix4Y - 25;
+                    drawFlatArrow(ctx, width * 0.40, upperY, width * 0.40, lowerY, colors.coral);
+                    drawFlatArrow(ctx, width * 0.60, lowerY, width * 0.60, upperY, colors.blue);
+                    ctx.font = '700 11px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.textAlign = "center";
+                    ctx.fillStyle = colors.coral;
+                    ctx.fillText("扩展", width * 0.40 - 28, (upperY + lowerY) / 2);
+                    ctx.fillStyle = colors.blue;
+                    ctx.fillText("提取", width * 0.60 + 28, (upperY + lowerY) / 2);
+
+                    drawLegendItem(ctx, 16, 530, colors.greenSoft, colors.green, "左上 3x3：线性块");
+                    drawLegendItem(ctx, width / 2, 530, colors.coralSoft, colors.coral, "最后一列：平移");
+                    drawLegendItem(ctx, 16, 565, colors.blueSoft, colors.blue, "最后一行：齐次信息");
+                    drawLegendItem(ctx, width / 2, 565, colors.goldSoft, colors.gold, "右下角：仿射常量 1");
+                    ctx.fillStyle = colors.muted;
+                    ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.textAlign = "center";
+                    ctx.fillText("提取 A 只复制九个数，并不保证 A 是纯旋转。", width / 2, Math.min(height - 20, 620));
+                    return;
+                }
+
+                const cellSize = Math.min(54, Math.max(44, (width - 260) / 7));
+                const matrix3Width = cellSize * 3;
+                const matrix4Width = cellSize * 4;
+                const sideMargin = Math.max(24, (width - matrix3Width - matrix4Width - 210) / 2);
+                const matrix3X = sideMargin;
+                const matrix4X = width - sideMargin - matrix4Width;
+                const matrixY = 84;
+                drawSemanticMatrix(ctx, matrix3, matrix3X, matrixY, cellSize, "Matrix3x3：A");
+                drawSemanticMatrix(ctx, matrix4, matrix4X, matrixY, cellSize, "Matrix4x4：M");
+
+                const arrowStart = matrix3X + matrix3Width + 20;
+                const arrowEnd = matrix4X - 20;
+                drawFlatArrow(ctx, arrowStart, 142, arrowEnd, 142, colors.coral);
+                drawFlatArrow(ctx, arrowEnd, 210, arrowStart, 210, colors.blue);
+                ctx.font = '700 12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "center";
+                ctx.fillStyle = colors.coral;
+                ctx.fillText("扩展：嵌入 A，补平移、齐次行", (arrowStart + arrowEnd) / 2, 124);
+                ctx.fillStyle = colors.blue;
+                ctx.fillText("提取：只复制左上九个元素", (arrowStart + arrowEnd) / 2, 228);
+
+                const legendY = 342;
+                const legendWidth = width / 4;
+                drawLegendItem(ctx, 16, legendY, colors.greenSoft, colors.green, "左上 3x3：线性块");
+                drawLegendItem(ctx, legendWidth + 8, legendY, colors.coralSoft, colors.coral, "最后一列：平移");
+                drawLegendItem(ctx, legendWidth * 2 + 8, legendY, colors.blueSoft, colors.blue, "最后一行：齐次信息");
+                drawLegendItem(ctx, legendWidth * 3 + 4, legendY, colors.goldSoft, colors.gold, "右下角：仿射常量 1");
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "center";
+                ctx.fillText("注意：A 可能是 R、R·S 或包含 shear 的一般线性变换。", width / 2, Math.min(height - 24, 397));
+            }
+
+            function quaternionFromMatrix(matrix) {
+                const trace = matrix[0][0] + matrix[1][1] + matrix[2][2];
+                let x = 0;
+                let y = 0;
+                let z = 0;
+                let w = 1;
+                let branch = "w";
+
+                if (trace > 0) {
+                    const scale = 2 * Math.sqrt(trace + 1);
+                    w = 0.25 * scale;
+                    x = (matrix[2][1] - matrix[1][2]) / scale;
+                    y = (matrix[0][2] - matrix[2][0]) / scale;
+                    z = (matrix[1][0] - matrix[0][1]) / scale;
+                } else if (matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2]) {
+                    branch = "x";
+                    const scale = 2 * Math.sqrt(1 + matrix[0][0] - matrix[1][1] - matrix[2][2]);
+                    x = 0.25 * scale;
+                    y = (matrix[0][1] + matrix[1][0]) / scale;
+                    z = (matrix[0][2] + matrix[2][0]) / scale;
+                    w = (matrix[2][1] - matrix[1][2]) / scale;
+                } else if (matrix[1][1] > matrix[2][2]) {
+                    branch = "y";
+                    const scale = 2 * Math.sqrt(1 + matrix[1][1] - matrix[0][0] - matrix[2][2]);
+                    x = (matrix[0][1] + matrix[1][0]) / scale;
+                    y = 0.25 * scale;
+                    z = (matrix[1][2] + matrix[2][1]) / scale;
+                    w = (matrix[0][2] - matrix[2][0]) / scale;
+                } else {
+                    branch = "z";
+                    const scale = 2 * Math.sqrt(1 + matrix[2][2] - matrix[0][0] - matrix[1][1]);
+                    x = (matrix[0][2] + matrix[2][0]) / scale;
+                    y = (matrix[1][2] + matrix[2][1]) / scale;
+                    z = 0.25 * scale;
+                    w = (matrix[1][0] - matrix[0][1]) / scale;
+                }
+
+                const inverseLength = 1 / Math.hypot(x, y, z, w);
+                return {
+                    branch,
+                    trace,
+                    quaternion: {
+                        x: x * inverseLength,
+                        y: y * inverseLength,
+                        z: z * inverseLength,
+                        w: w * inverseLength
+                    }
+                };
+            }
+
+            function drawScoreBars(ctx, scores, selected, x, y, width, rowGap) {
+                const entries = [
+                    { key: "w", color: colors.gold },
+                    { key: "x", color: colors.coral },
+                    { key: "y", color: colors.green },
+                    { key: "z", color: colors.blue }
+                ];
+                const labelWidth = 82;
+                const valueWidth = 58;
+                const barWidth = Math.max(50, width - labelWidth - valueWidth);
+
+                entries.forEach((entry, index) => {
+                    const value = Math.max(0, scores[entry.key]);
+                    const rowY = y + index * rowGap;
+                    ctx.fillStyle = entry.key === selected ? colors.ink : colors.muted;
+                    ctx.font = `${entry.key === selected ? "700" : "400"} 12px Consolas, monospace`;
+                    ctx.textAlign = "left";
+                    ctx.fillText(`4${entry.key}²`, x, rowY);
+                    ctx.fillStyle = "#edf0ee";
+                    ctx.fillRect(x + labelWidth, rowY - 8, barWidth, 16);
+                    ctx.globalAlpha = entry.key === selected ? 1 : 0.58;
+                    ctx.fillStyle = entry.color;
+                    ctx.fillRect(x + labelWidth, rowY - 8, barWidth * Math.min(1, value / 4), 16);
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = entry.key === selected ? entry.color : colors.muted;
+                    ctx.textAlign = "right";
+                    ctx.fillText(format(value), x + width, rowY);
+                });
+            }
+
+            function branchReason(branch) {
+                if (branch === "w") {
+                    return "trace > 0";
+                }
+                if (branch === "x") {
+                    return "trace ≤ 0，且 R00 同时大于 R11、R22";
+                }
+                if (branch === "y") {
+                    return "trace ≤ 0，R00 不是最大，且 R11 > R22";
+                }
+                return "前三项均不成立，最终进入 z 分支";
+            }
+
+            function drawBranchDiagram() {
+                const { context: ctx, width, height } = prepareCanvas(branchCanvas, 440);
+                const demos = {
+                    z90: { label: "绕 +Z 旋转 90°", q: quaternionForAxis("z", Math.PI / 2) },
+                    y135: { label: "绕 +Y 旋转 135°", q: quaternionForAxis("y", 3 * Math.PI / 4) },
+                    x180: { label: "绕 +X 旋转 180°", q: quaternionForAxis("x", Math.PI) },
+                    z180: { label: "绕 +Z 旋转 180°", q: quaternionForAxis("z", Math.PI) }
+                };
+                const demo = demos[selectedBranchDemo];
+                const matrix = matrixFromQuaternion(demo.q);
+                const result = quaternionFromMatrix(matrix);
+                const scores = {
+                    w: 1 + result.trace,
+                    x: 1 + matrix[0][0] - matrix[1][1] - matrix[2][2],
+                    y: 1 + matrix[1][1] - matrix[0][0] - matrix[2][2],
+                    z: 1 + matrix[2][2] - matrix[0][0] - matrix[1][1]
+                };
+                const q = result.quaternion;
+                const mobile = width < 660;
+
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 15px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(demo.label, 18, 24);
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(`trace = R00 + R11 + R22 = ${format(result.trace)}`, 18, 49);
+
+                if (mobile) {
+                    const cellWidth = Math.min(86, (width - 36) / 3);
+                    drawMatrix(ctx, matrix, 18, 90, cellWidth, 42, "输入 Matrix3x3", colors.green, colors.greenSoft);
+                    ctx.fillStyle = colors.ink;
+                    ctx.font = '700 13px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.textAlign = "left";
+                    ctx.fillText("四个候选量（都等于对应分量平方的 4 倍）", 18, 250);
+                    drawScoreBars(ctx, scores, result.branch, 18, 282, width - 36, 43);
+
+                    ctx.fillStyle = colors.blueSoft;
+                    ctx.strokeStyle = colors.blue;
+                    ctx.fillRect(18, 475, width - 36, 62);
+                    ctx.strokeRect(18, 475, width - 36, 62);
+                    ctx.textAlign = "left";
+                    ctx.fillStyle = colors.blue;
+                    ctx.font = '700 13px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText(`选择 ${result.branch} 分支`, 30, 494);
+                    ctx.fillStyle = colors.ink;
+                    ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText(branchReason(result.branch), 30, 518);
+
+                    ctx.fillStyle = colors.ink;
+                    ctx.font = '700 13px Consolas, monospace';
+                    ctx.fillText(`q = (${format(q.x)}, ${format(q.y)}, ${format(q.z)}, ${format(q.w)})`, 18, 575);
+                    ctx.fillStyle = colors.muted;
+                    ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                    ctx.fillText("先求数值最大的主分量，可避免用接近 0 的数作除数。", 18, Math.min(height - 20, 610));
+                    return;
+                }
+
+                const matrixAreaWidth = Math.min(270, width * 0.34);
+                const cellWidth = Math.min(72, (matrixAreaWidth - 28) / 3);
+                drawMatrix(ctx, matrix, 18, 92, cellWidth, 46, "输入 Matrix3x3", colors.green, colors.greenSoft);
+                const barsX = matrixAreaWidth + 44;
+                const barsWidth = width - barsX - 24;
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 13px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText("候选主分量：4w²、4x²、4y²、4z²", barsX, 78);
+                drawScoreBars(ctx, scores, result.branch, barsX, 112, barsWidth, 47);
+
+                const boxY = 318;
+                ctx.fillStyle = colors.blueSoft;
+                ctx.strokeStyle = colors.blue;
+                ctx.fillRect(18, boxY, width - 36, 72);
+                ctx.strokeRect(18, boxY, width - 36, 72);
+                ctx.textAlign = "left";
+                ctx.fillStyle = colors.blue;
+                ctx.font = '700 13px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(`代码选择 ${result.branch} 分支`, 32, boxY + 22);
+                ctx.fillStyle = colors.ink;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(`${branchReason(result.branch)}；优先恢复当前数值稳定的分量。`, 32, boxY + 49);
+
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 13px Consolas, monospace';
+                ctx.fillText(`恢复结果 q = (${format(q.x)}, ${format(q.y)}, ${format(q.z)}, ${format(q.w)})`, 18, 421);
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText("注意：q 与 -q 表示同一个旋转，因此恢复结果不要求逐分量符号与输入完全一致。", 18, Math.min(height - 16, 445));
+            }
+
+            function multiplyMatrices3(lhs, rhs) {
+                const result = Array.from({ length: 3 }, () => [0, 0, 0]);
+                for (let row = 0; row < 3; ++row) {
+                    for (let column = 0; column < 3; ++column) {
+                        for (let shared = 0; shared < 3; ++shared) {
+                            result[row][column] += lhs[row][shared] * rhs[shared][column];
+                        }
+                    }
+                }
+                return result;
+            }
+
+            function matrixColumns(matrix) {
+                return [
+                    [matrix[0][0], matrix[1][0], matrix[2][0]],
+                    [matrix[0][1], matrix[1][1], matrix[2][1]],
+                    [matrix[0][2], matrix[1][2], matrix[2][2]]
+                ];
+            }
+
+            function vectorLength(vector) {
+                return Math.hypot(vector[0], vector[1], vector[2]);
+            }
+
+            function vectorDot(lhs, rhs) {
+                return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
+            }
+
+            function determinant3(matrix) {
+                return matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                     - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                     + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+            }
+
+            function matrixMetrics(matrix) {
+                const columns = matrixColumns(matrix);
+                const lengths = columns.map(vectorLength);
+                const normalized = columns.map((column, index) => column.map((value) => value / lengths[index]));
+                const maximumDot = Math.max(
+                    Math.abs(vectorDot(normalized[0], normalized[1])),
+                    Math.abs(vectorDot(normalized[0], normalized[2])),
+                    Math.abs(vectorDot(normalized[1], normalized[2])));
+                return { columns, lengths, maximumDot, determinant: determinant3(matrix) };
+            }
+
+            function drawContaminationPanel(ctx, item, x, y, width, height, compact) {
+                const metrics = matrixMetrics(item.matrix);
+                ctx.fillStyle = "#ffffff";
+                ctx.strokeStyle = colors.line;
+                ctx.lineWidth = 1;
+                ctx.fillRect(x, y, width, height);
+                ctx.strokeRect(x, y, width, height);
+                ctx.fillStyle = item.color;
+                ctx.fillRect(x, y, 5, height);
+
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 14px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(item.title, x + 14, y + 22);
+
+                const origin = compact
+                    ? { x: x + width * 0.28, y: y + height * 0.58 }
+                    : { x: x + width * 0.50, y: y + height * 0.43 };
+                const axisScale = compact ? Math.min(45, width * 0.15) : Math.min(50, width * 0.24);
+                ctx.strokeStyle = "#e5e9e6";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(origin.x - axisScale * 1.5, origin.y);
+                ctx.lineTo(origin.x + axisScale * 1.5, origin.y);
+                ctx.moveTo(origin.x, origin.y - axisScale * 1.5);
+                ctx.lineTo(origin.x, origin.y + axisScale * 1.5);
+                ctx.stroke();
+                drawArrow(ctx, origin, metrics.columns[0], axisScale, colors.coral, "X'");
+                drawArrow(ctx, origin, metrics.columns[1], axisScale, colors.green, "Y'");
+                drawArrow(ctx, origin, metrics.columns[2], axisScale, colors.blue, "Z'");
+
+                const textX = compact ? x + width * 0.53 : x + 14;
+                const textY = compact ? y + 70 : y + height - 104;
+                const lineGap = 20;
+                ctx.fillStyle = colors.muted;
+                ctx.font = '11px Consolas, monospace';
+                ctx.textAlign = "left";
+                ctx.fillText(`|c| = ${metrics.lengths.map((value) => format(value)).join(" / ")}`, textX, textY);
+                ctx.fillText(`max |ĉi·ĉj| = ${format(metrics.maximumDot)}`, textX, textY + lineGap);
+                ctx.fillText(`det = ${format(metrics.determinant)}`, textX, textY + lineGap * 2);
+                ctx.fillStyle = item.valid ? colors.green : colors.coral;
+                ctx.font = '700 11px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(item.result, textX, textY + lineGap * 3);
+            }
+
+            function drawContaminationDiagram() {
+                const { context: ctx, width, height } = prepareCanvas(contaminationCanvas, 370);
+                const rotation = matrixFromQuaternion(quaternionForAxis("z", -Math.PI / 6));
+                const items = [
+                    {
+                        title: "纯旋转",
+                        matrix: rotation,
+                        color: colors.green,
+                        valid: true,
+                        result: "可直接转 Quaternion"
+                    },
+                    {
+                        title: "非均匀缩放",
+                        matrix: multiplyMatrices3(rotation, [[1.55, 0, 0], [0, 0.72, 0], [0, 0, 1.15]]),
+                        color: colors.gold,
+                        valid: false,
+                        result: "否：先移除 scale"
+                    },
+                    {
+                        title: "剪切",
+                        matrix: multiplyMatrices3(rotation, [[1, 0.55, 0], [0, 1, 0], [0, 0, 1]]),
+                        color: colors.blue,
+                        valid: false,
+                        result: "否：需要正交化/分解"
+                    },
+                    {
+                        title: "反射",
+                        matrix: multiplyMatrices3(rotation, [[-1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                        color: colors.coral,
+                        valid: false,
+                        result: "否：需保留负 scale"
+                    }
+                ];
+                const compact = width < 660;
+
+                if (compact) {
+                    const margin = 10;
+                    const gap = 10;
+                    const panelHeight = (height - margin * 2 - gap * 3) / 4;
+                    items.forEach((item, index) => {
+                        drawContaminationPanel(
+                            ctx,
+                            item,
+                            margin,
+                            margin + index * (panelHeight + gap),
+                            width - margin * 2,
+                            panelHeight,
+                            true);
+                    });
+                    return;
+                }
+
+                const margin = 10;
+                const gap = 10;
+                const panelWidth = (width - margin * 2 - gap * 3) / 4;
+                items.forEach((item, index) => {
+                    drawContaminationPanel(
+                        ctx,
+                        item,
+                        margin + index * (panelWidth + gap),
+                        16,
+                        panelWidth,
+                        height - 32,
+                        false);
+                });
+            }
+
+            function draw() {
+                const { context: ctx, width, height } = prepareCanvas(canvas);
+                const degrees = Number(range.value);
+                const radians = degrees * Math.PI / 180;
+                const q = quaternionForAxis(selectedAxis, radians);
+                const matrix3 = matrixFromQuaternion(q);
+                const matrix4 = [
+                    [matrix3[0][0], matrix3[0][1], matrix3[0][2], 0],
+                    [matrix3[1][0], matrix3[1][1], matrix3[1][2], 0],
+                    [matrix3[2][0], matrix3[2][1], matrix3[2][2], 0],
+                    [0, 0, 0, 1]
+                ];
+                output.value = `${degrees}°`;
+
+                const mobile = width < 660;
+                ctx.fillStyle = colors.ink;
+                ctx.font = '700 15px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = "left";
+                ctx.fillText(`q = (${format(q.x)}, ${format(q.y)}, ${format(q.z)}, ${format(q.w)})`, 18, 24);
+                ctx.fillStyle = colors.muted;
+                ctx.font = '12px "Segoe UI", "Microsoft YaHei", sans-serif';
+                ctx.fillText(`axis=${selectedAxis.toUpperCase()}，halfAngle=${format(degrees * 0.5)}°`, 18, 47);
+
+                if (mobile) {
+                    const cell3 = Math.min(88, (width - 40) / 3);
+                    drawMatrix(ctx, matrix3, 18, 88, cell3, 43, "Matrix3x3", colors.green, colors.greenSoft);
+                    const cell4 = Math.min(68, (width - 40) / 4);
+                    drawMatrix(ctx, matrix4, 18, 260, cell4, 39, "Matrix4x4", colors.blue, colors.blueSoft);
+                    drawBasis(ctx, matrix3, 12, 447, width - 24, height - 466);
+                } else {
+                    const leftWidth = Math.min(420, width * 0.45);
+                    const cell3 = (leftWidth - 20) / 3;
+                    drawMatrix(ctx, matrix3, 18, 88, cell3, 45, "Matrix3x3", colors.green, colors.greenSoft);
+                    const cell4 = (leftWidth - 20) / 4;
+                    drawMatrix(ctx, matrix4, 18, 270, cell4, 40, "Matrix4x4", colors.blue, colors.blueSoft);
+                    drawBasis(ctx, matrix3, leftWidth + 35, 72, width - leftWidth - 52, height - 94);
+                }
+            }
+
+            document.querySelectorAll("[data-axis]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    selectedAxis = button.dataset.axis;
+                    document.querySelectorAll("[data-axis]").forEach((other) => {
+                        other.setAttribute("aria-pressed", String(other === button));
+                    });
+                    draw();
+                });
+            });
+            range.addEventListener("input", draw);
+
+            document.querySelectorAll("[data-branch-demo]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    selectedBranchDemo = button.dataset.branchDemo;
+                    document.querySelectorAll("[data-branch-demo]").forEach((other) => {
+                        other.setAttribute("aria-pressed", String(other === button));
+                    });
+                    drawBranchDiagram();
+                });
+            });
+
+            function drawAll() {
+                draw();
+                drawMatrixLayout();
+                drawBranchDiagram();
+                drawContaminationDiagram();
+            }
+
+            let resizeTimer = 0;
+            window.addEventListener("resize", () => {
+                window.clearTimeout(resizeTimer);
+                resizeTimer = window.setTimeout(drawAll, 100);
+            });
+            drawAll();
+        })();
+    </script>
+</body>
+</html>
