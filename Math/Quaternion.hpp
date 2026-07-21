@@ -62,31 +62,23 @@ constexpr Quaternion<T> operator-(const Quaternion<T>& value) noexcept {
 }
 
 template <FloatingScalar T>
-constexpr Quaternion<T> operator+(
-    const Quaternion<T>& lhs,
-    const Quaternion<T>& rhs) noexcept {
+constexpr Quaternion<T> operator+(const Quaternion<T>& lhs, const Quaternion<T>& rhs) noexcept {
     return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w};
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Quaternion<T> operator*(
-    const Quaternion<T>& value,
-    T scalar) noexcept {
+MATH_FORCE_INLINE constexpr Quaternion<T> operator*(const Quaternion<T>& value, T scalar) noexcept {
     return {value.x * scalar, value.y * scalar, value.z * scalar, value.w * scalar};
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Quaternion<T> operator/(
-    const Quaternion<T>& value,
-    T scalar) noexcept {
+MATH_FORCE_INLINE constexpr Quaternion<T> operator/(const Quaternion<T>& value, T scalar) noexcept {
     return {value.x / scalar, value.y / scalar, value.z / scalar, value.w / scalar};
 }
 
 /** Hamilton product：lhs * rhs 表示先应用 rhs 旋转，再应用 lhs 旋转。 */
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Quaternion<T> operator*(
-    const Quaternion<T>& lhs,
-    const Quaternion<T>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr Quaternion<T> operator*(const Quaternion<T>& lhs, const Quaternion<T>& rhs) noexcept {
     return {
         lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
         lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
@@ -95,9 +87,7 @@ MATH_FORCE_INLINE constexpr Quaternion<T> operator*(
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr T Dot(
-    const Quaternion<T>& lhs,
-    const Quaternion<T>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr T Dot(const Quaternion<T>& lhs, const Quaternion<T>& rhs) noexcept {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
 }
 
@@ -129,9 +119,7 @@ constexpr Quaternion<T> Inverse(const Quaternion<T>& value) noexcept {
 }
 
 template <FloatingScalar T>
-inline Quaternion<T> QuaternionFromAxisAngle(
-    const Vector<T, 3>& axis,
-    T radians) noexcept {
+inline Quaternion<T> QuaternionFromAxisAngle(const Vector<T, 3>& axis, T radians) noexcept {
     // 使用半角是因为四元数在四维单位球面上以两倍覆盖表示三维旋转。
     const Vector<T, 3> unitAxis = NormalizeSafe(axis, Vector<T, 3>(1, 0, 0));
     const T halfAngle = radians * static_cast<T>(0.5);
@@ -149,9 +137,7 @@ inline Quaternion<T> QuaternionFromEulerXYZ(const Vector<T, 3>& radians) noexcep
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Vector<T, 3> Rotate(
-    const Quaternion<T>& rotation,
-    const Vector<T, 3>& vector) noexcept {
+MATH_FORCE_INLINE constexpr Vector<T, 3> Rotate(const Quaternion<T>& rotation, const Vector<T, 3>& vector) noexcept {
     // DirectXMath 同样展开 q*v*q^-1。把两次叉积直接写成标量，避免多个 Vector 运算符
     // 在编译器拒绝内联时形成调用链；单位四元数的数学结果与原实现完全相同。
     const T twiceCrossX = static_cast<T>(2) *
@@ -170,8 +156,7 @@ MATH_FORCE_INLINE constexpr Vector<T, 3> Rotate(
 }
 
 template <FloatingScalar T>
-constexpr Matrix<T, 3, 3> Matrix3x3FromQuaternion(
-    const Quaternion<T>& input) noexcept {
+constexpr Matrix<T, 3, 3> Matrix3x3FromQuaternion(const Quaternion<T>& input) noexcept {
     // 先归一化可去掉累计误差，再展开 q*v*q^-1 得到旋转矩阵的九个元素。
     const Quaternion<T> q = Normalize(input);
     const T xx = q.x * q.x;
@@ -190,8 +175,7 @@ constexpr Matrix<T, 3, 3> Matrix3x3FromQuaternion(
 }
 
 template <FloatingScalar T>
-constexpr Matrix<T, 4, 4> Matrix4x4FromQuaternion(
-    const Quaternion<T>& rotation) noexcept {
+constexpr Matrix<T, 4, 4> Matrix4x4FromQuaternion(const Quaternion<T>& rotation) noexcept {
     return ResizeMatrix<T, 4, 4>(Matrix3x3FromQuaternion(rotation));
 }
 
@@ -235,20 +219,14 @@ inline Quaternion<T> QuaternionFromMatrix(const Matrix<T, 3, 3>& matrix) noexcep
 }
 
 template <FloatingScalar T>
-inline Quaternion<T> Nlerp(
-    const Quaternion<T>& start,
-    const Quaternion<T>& end,
-    T amount) noexcept {
+inline Quaternion<T> Nlerp(const Quaternion<T>& start, const Quaternion<T>& end, T amount) noexcept {
     // Nlerp 便宜且连续，但角速度不恒定。点积小于 0 时翻转 end，选择四维球面上的短弧。
     const Quaternion<T> adjustedEnd = Dot(start, end) < static_cast<T>(0) ? -end : end;
     return Normalize(start * (static_cast<T>(1) - amount) + adjustedEnd * amount);
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE Quaternion<T> Slerp(
-    const Quaternion<T>& start,
-    const Quaternion<T>& end,
-    T amount) noexcept {
+MATH_FORCE_INLINE Quaternion<T> Slerp(const Quaternion<T>& start, const Quaternion<T>& end, T amount) noexcept {
     // Slerp 沿四维单位球的大圆插值，三维旋转角速度恒定；夹角很小时退化为 Nlerp。
     Quaternion<T> adjustedEnd = end;
     T cosine = Dot(start, adjustedEnd);
@@ -277,10 +255,7 @@ MATH_FORCE_INLINE Quaternion<T> Slerp(
 }
 
 template <FloatingScalar T>
-constexpr Matrix<T, 4, 4> TRSMatrix(
-    const Vector<T, 3>& translation,
-    const Quaternion<T>& rotation,
-    const Vector<T, 3>& scale) noexcept {
+constexpr Matrix<T, 4, 4> TRSMatrix(const Vector<T, 3>& translation, const Quaternion<T>& rotation, const Vector<T, 3>& scale) noexcept {
     // 列向量约定下 T*R*S 表示顶点先缩放、再旋转、最后平移。
     return TranslationMatrix(translation) *
            Matrix4x4FromQuaternion(rotation) *

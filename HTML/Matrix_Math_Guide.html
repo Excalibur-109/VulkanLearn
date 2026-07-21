@@ -388,6 +388,55 @@
         .m4 { grid-template-columns: repeat(4, auto); }
         .operator { font: 20px Cambria, serif; }
 
+        .matrix-display {
+            white-space: normal;
+        }
+
+        .formula-matrix {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .formula-system {
+            display: grid;
+            gap: 16px;
+        }
+
+        .matrix-equation {
+            width: max-content;
+            max-width: 100%;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .matrix-name {
+            min-width: max-content;
+            font-weight: 700;
+        }
+
+        .matrix-caption {
+            color: var(--muted);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+            line-height: 1.55;
+            text-align: center;
+        }
+
+        .matrix.block-matrix {
+            gap: 8px 16px;
+            font-style: italic;
+        }
+
+        .matrix.augmented-matrix > span:first-child {
+            padding-right: 14px;
+            border-right: 1px solid currentColor;
+        }
+
         figure.diagram {
             margin: 24px 0;
             border: 1px solid var(--line);
@@ -449,6 +498,17 @@
             .derivation-reason { grid-column: 2; padding: 6px 0 0; border-top: 1px dashed #cbd9d1; border-left: 0; }
             .equation { grid-template-columns: minmax(52px, max-content) 18px minmax(90px, 1fr); column-gap: 4px; }
             .matrix.compact-matrix { font-size: 15px; }
+            .formula-matrix { gap: 7px; }
+            .formula-matrix.named-matrix {
+                display: grid;
+                grid-template-columns: auto auto;
+                align-items: center;
+                justify-content: center;
+            }
+            .formula-matrix.named-matrix > .matrix { grid-column: 1 / -1; justify-self: center; }
+            .matrix-equation { gap: 7px; font-size: 16px; }
+            .matrix-display .matrix { gap: 5px 9px; padding: 9px 14px; font-size: 15px; }
+            .matrix.block-matrix { gap: 6px 12px; }
             .footer-nav { display: block; }
             .footer-nav a { display: block; margin-top: 10px; }
         }
@@ -475,6 +535,8 @@
             <nav class="doc-switch" aria-label="数学文档切换">
                 <a href="Matrix_Math_Guide.html" aria-current="page">Matrix</a>
                 <a href="Quaternion_Math_Guide.html">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
             </nav>
         </div>
     </header>
@@ -501,13 +563,13 @@
         <main>
             <section id="convention">
                 <h2>0. 先固定所有约定</h2>
-                <p class="lead">矩阵公式本身没有 API 立场；真正制造混乱的是存储顺序、向量放左还是放右、坐标系手性和深度范围。本文只使用当前 Math 库的约定。</p>
+                <p class="lead">矩阵公式本身没有 API 立场；真正制造混乱的是存储顺序、向量放左还是放右、坐标系手性和深度范围。本文统一采用当前 Math 库的左手坐标约定。</p>
 
                 <div class="convention-grid">
                     <div class="fact"><strong>存储</strong><p>行主序，<code>matrix[row][column]</code></p></div>
                     <div class="fact"><strong>向量</strong><p>列向量右乘：<code>p' = M * p</code></p></div>
                     <div class="fact"><strong>组合</strong><p><code>A * B</code> 表示先应用 B，再应用 A</p></div>
-                    <div class="fact"><strong>主坐标系</strong><p>右手系函数与左手系函数明确分开</p></div>
+                    <div class="fact"><strong>主坐标系</strong><p>左手系：+X 向右、+Y 向上、+Z 向前</p></div>
                 </div>
 
                 <div class="note">
@@ -536,8 +598,17 @@ T(kv) = kT(v)</div>
 
                 <h3>1.1 每一列是基向量变换后的结果</h3>
                 <p>设二维标准基为 e₁=(1,0)、e₂=(0,1)。如果一个变换把 e₁ 变为 (a,c)，把 e₂ 变为 (b,d)，矩阵就是：</p>
-                <div class="formula">M = [ T(e₁)  T(e₂) ] = [ a  b ]
-                              [ c  d ]</div>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M</span>
+                        <span class="operator">=</span>
+                        <span class="matrix m2" aria-label="a b; c d">
+                            <span>a</span><span>b</span>
+                            <span>c</span><span>d</span>
+                        </span>
+                    </div>
+                    <div class="matrix-caption">第 0 列 T(e₁)=(a,c)，第 1 列 T(e₂)=(b,d)</div>
+                </div>
                 <p>任意向量 v = x e₁ + y e₂，根据线性条件：</p>
                 <div class="formula">T(v) = xT(e₁) + yT(e₂)
      = x(a,c) + y(b,d)
@@ -551,14 +622,23 @@ T(kv) = kT(v)</div>
 
                 <h3>1.2 为什么平移不是线性变换</h3>
                 <p>平移 T(v)=v+t 不满足 T(0)=0，所以普通 3×3 线性矩阵不能表达三维平移。解决办法是增加齐次分量 w：</p>
-                <div class="formula">点：      pₕ = (x, y, z, 1)
-方向：    vₕ = (x, y, z, 0)
-
-[ R  t ] [ p ] = [ Rp + t ]
-[ 0  1 ] [ 1 ]   [    1   ]
-
-[ R  t ] [ v ] = [ Rv ]
-[ 0  1 ] [ 0 ]   [  0 ]</div>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-caption">点使用 pₕ=(x,y,z,1)，方向使用 vₕ=(x,y,z,0)</div>
+                    <div class="matrix-equation" aria-label="齐次矩阵变换一个点">
+                        <span class="matrix m2 block-matrix"><span>R</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix"><span>p</span><span>1</span></span>
+                        <span class="operator">=</span>
+                        <span class="matrix"><span>Rp+t</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation" aria-label="齐次矩阵变换一个方向">
+                        <span class="matrix m2 block-matrix"><span>R</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix"><span>v</span><span>0</span></span>
+                        <span class="operator">=</span>
+                        <span class="matrix"><span>Rv</span><span>0</span></span>
+                    </div>
+                </div>
                 <p>同一个 4×4 矩阵因 w 不同自然区分点和方向，这就是 <code>TransformPoint</code> 与 <code>TransformVector</code> 的数学根源。</p>
             </section>
 
@@ -699,11 +779,21 @@ T(kv) = kT(v)</div>
 
                 <h3>3.1 二阶行列式为什么是 ad-bc</h3>
                 <p>二维矩阵的两列 u=(a,c)、v=(b,d) 张成平行四边形，其有向面积为：</p>
-                <div class="formula">det [ a  b ] = ad - bc
-    [ c  d ]
-
-例：[ 2  1 ] → det = 2×3 - 1×0 = 6
-    [ 0  3 ]</div>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span>det</span>
+                        <span class="matrix m2"><span>a</span><span>b</span><span>c</span><span>d</span></span>
+                        <span class="operator">=</span>
+                        <span>ad-bc</span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span>det</span>
+                        <span class="matrix m2"><span>2</span><span>1</span><span>0</span><span>3</span></span>
+                        <span class="operator">=</span>
+                        <span>2×3-1×0=6</span>
+                    </div>
+                    <div class="matrix-caption">第二行是数值回代：该变换把有向面积放大 6 倍。</div>
+                </div>
 
                 <h3>3.2 三阶行列式</h3>
                 <p>三维中 det([a b c]) = a·(b×c)，即一个向量与另外两个向量叉积的点积，得到平行六面体有向体积。</p>
@@ -805,7 +895,11 @@ det(A) = a₀₀M₀₀ - a₀₁M₀₁ + a₀₂M₀₂ - a₀₃M₀₃</div>
 
                 <h3>4.2 Gauss-Jordan 消元</h3>
                 <p>通用 <code>TryInverse&lt;T,N&gt;</code> 把 A 与 I 并排，通过初等行变换把左边变成 I，右边就成为 A⁻¹。</p>
-                <div class="formula">[ A | I ]  ──行变换──▶  [ I | A⁻¹ ]</div>
+                <div class="formula matrix-display formula-matrix">
+                    <span class="matrix m2 block-matrix augmented-matrix"><span>A</span><span>I</span></span>
+                    <span class="operator">── 行变换 ──▶</span>
+                    <span class="matrix m2 block-matrix augmented-matrix"><span>I</span><span>A⁻¹</span></span>
+                </div>
                 <ol class="step-list">
                     <li>当前列选择绝对值最大的主元，减少除以很小数造成的误差。</li>
                     <li>交换主元行到当前对角位置。</li>
@@ -841,25 +935,43 @@ r₂ = d × u + sw    r₃ = u × c - sz
                 <div class="two-column">
                     <div>
                         <h4>平移</h4>
-                        <div class="formula">T(t) = [ 1 0 0 tₓ ]
-       [ 0 1 0 tᵧ ]
-       [ 0 0 1 t_z ]
-       [ 0 0 0  1 ]</div>
+                        <div class="formula matrix-display formula-matrix named-matrix">
+                            <span class="matrix-name">T(t)</span>
+                            <span class="operator">=</span>
+                            <span class="matrix m4" aria-label="四乘四平移矩阵">
+                                <span>1</span><span>0</span><span>0</span><span>t<sub>x</sub></span>
+                                <span>0</span><span>1</span><span>0</span><span>t<sub>y</sub></span>
+                                <span>0</span><span>0</span><span>1</span><span>t<sub>z</sub></span>
+                                <span>0</span><span>0</span><span>0</span><span>1</span>
+                            </span>
+                        </div>
                     </div>
                     <div>
                         <h4>缩放</h4>
-                        <div class="formula">S(s) = [ sₓ 0  0  0 ]
-       [ 0  sᵧ 0  0 ]
-       [ 0  0  s_z 0 ]
-       [ 0  0  0  1 ]</div>
+                        <div class="formula matrix-display formula-matrix named-matrix">
+                            <span class="matrix-name">S(s)</span>
+                            <span class="operator">=</span>
+                            <span class="matrix m4" aria-label="四乘四缩放矩阵">
+                                <span>s<sub>x</sub></span><span>0</span><span>0</span><span>0</span>
+                                <span>0</span><span>s<sub>y</sub></span><span>0</span><span>0</span>
+                                <span>0</span><span>0</span><span>s<sub>z</sub></span><span>0</span>
+                                <span>0</span><span>0</span><span>0</span><span>1</span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
                 <p>绕 X 轴旋转时，X 坐标保持不变，YZ 平面按二维旋转：</p>
-                <div class="formula">Rₓ(θ) = [ 1    0       0    0 ]
-        [ 0  cosθ  -sinθ  0 ]
-        [ 0  sinθ   cosθ  0 ]
-        [ 0    0       0    1 ]</div>
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">R<sub>x</sub>(θ)</span>
+                    <span class="operator">=</span>
+                    <span class="matrix m4" aria-label="绕 X 轴旋转的四乘四矩阵">
+                        <span>1</span><span>0</span><span>0</span><span>0</span>
+                        <span>0</span><span>cosθ</span><span>-sinθ</span><span>0</span>
+                        <span>0</span><span>sinθ</span><span>cosθ</span><span>0</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
 
                 <h3>5.2 Rodrigues 任意轴旋转</h3>
                 <p>把向量 v 分解为沿单位轴 n 的平行分量和垂直分量。垂直分量在平面内旋转：</p>
@@ -870,14 +982,34 @@ R(v) = v cosθ + (n×v) sinθ + n(n·v)(1-cosθ)</div>
                 <p>把 v 的系数整理成矩阵，就得到 <code>RotationAxisMatrix</code>。</p>
 
                 <h3>5.3 仿射逆为什么更简单</h3>
-                <div class="formula">M = [ L  t ]
-    [ 0  1 ]
-
-M⁻¹ = [ L⁻¹  -L⁻¹t ]
-      [  0       1   ]</div>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M</span><span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>L</span><span>t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="matrix-name">M⁻¹</span><span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>L⁻¹</span><span>-L⁻¹t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-caption">L 是左上 3×3 线性部分，t 是三维平移列。</div>
+                </div>
                 <p>验证上式：</p>
-                <div class="formula">[ L  t ][ L⁻¹  -L⁻¹t ] = [ I  -t+t ] = [ I 0 ]
-[ 0  1 ][  0       1   ]   [ 0    1  ]   [ 0 1 ]</div>
+                <div class="formula matrix-display formula-system">
+                    <div class="matrix-equation">
+                        <span class="matrix m2 block-matrix"><span>L</span><span>t</span><span>0</span><span>1</span></span>
+                        <span class="operator">×</span>
+                        <span class="matrix m2 block-matrix"><span>L⁻¹</span><span>-L⁻¹t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>LL⁻¹</span><span>-LL⁻¹t+t</span><span>0</span><span>1</span></span>
+                    </div>
+                    <div class="matrix-equation">
+                        <span class="operator">=</span>
+                        <span class="matrix m2 block-matrix"><span>I</span><span>0</span><span>0</span><span>1</span></span>
+                        <span class="operator">= I₄</span>
+                    </div>
+                </div>
                 <p>因此标量回退会先检查最后一行是否为 (0,0,0,1)，若是，只求左上 3×3 的逆。</p>
             </section>
 
@@ -885,22 +1017,28 @@ M⁻¹ = [ L⁻¹  -L⁻¹t ]
                 <h2>6. 观察矩阵如何构造</h2>
                 <p>相机在世界里有位置和朝向。View 矩阵不是“把相机放进世界”，而是它的逆：把整个世界变换到相机局部空间。</p>
 
-                <h3>6.1 右手 LookAt</h3>
+                <h3>6.1 左手 LookAt</h3>
                 <ol class="step-list">
                     <li><strong>前向。</strong><code>forward = normalize(target - eye)</code>，相机观察方向。</li>
-                    <li><strong>右向。</strong><code>right = normalize(cross(forward, worldUp))</code>。</li>
-                    <li><strong>真实上向。</strong><code>up = cross(right, forward)</code>，保证三轴正交。</li>
+                    <li><strong>右向。</strong><code>right = normalize(cross(worldUp, forward))</code>。叉积顺序决定得到的是 +X，而不是 -X。</li>
+                    <li><strong>真实上向。</strong><code>up = cross(forward, right)</code>，重新构造与 right、forward 正交的 +Y。</li>
                     <li><strong>逆平移。</strong>每个轴与 <code>-eye</code> 点积，把相机位置移到原点。</li>
                 </ol>
 
-                <div class="formula">ViewRH = [ rₓ  rᵧ  r_z  -r·eye ]
-         [ uₓ  uᵧ  u_z  -u·eye ]
-         [-fₓ -fᵧ -f_z   f·eye ]
-         [  0   0    0      1   ]</div>
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">View<sub>LH</sub></span>
+                    <span class="operator">=</span>
+                    <span class="matrix m4" aria-label="左手观察矩阵">
+                        <span>r<sub>x</sub></span><span>r<sub>y</sub></span><span>r<sub>z</sub></span><span>-r·eye</span>
+                        <span>u<sub>x</sub></span><span>u<sub>y</sub></span><span>u<sub>z</sub></span><span>-u·eye</span>
+                        <span>f<sub>x</sub></span><span>f<sub>y</sub></span><span>f<sub>z</sub></span><span>-f·eye</span>
+                        <span>0</span><span>0</span><span>0</span><span>1</span>
+                    </span>
+                </div>
 
                 <figure class="diagram">
                     <canvas id="viewCanvas" aria-label="世界坐标变换到相机坐标图解"></canvas>
-                    <figcaption>观察矩阵把相机眼点移动到原点，并把相机 right/up/forward 基投影到标准坐标轴。</figcaption>
+                    <figcaption>观察矩阵把相机眼点移动到原点，并把相机 right/up/forward 基投影到标准坐标轴；左手相机空间中的 forward 就是 +Z。</figcaption>
                 </figure>
 
                 <div class="warning">
@@ -913,17 +1051,17 @@ M⁻¹ = [ L⁻¹  -L⁻¹t ]
                 <h2>7. 投影矩阵的原理</h2>
 
                 <h3>7.1 透视来自相似三角形</h3>
-                <p>右手相机看向 -Z。点 (x,y,z) 投到距离相机为 n 的近平面，根据相似三角形：</p>
-                <div class="formula">xₙ / n = x / (-z)  →  xₙ = n·x/(-z)
-yₙ / n = y / (-z)  →  yₙ = n·y/(-z)</div>
-                <p>除以 -z 不是线性的，不能直接写入普通矩阵。齐次坐标先让裁剪空间 w=-z，之后 GPU 做 perspective divide：</p>
+                <p>左手相机看向 +Z，所以相机前方的点满足 z&gt;0。点 (x,y,z) 投到距离相机为 n 的近平面，根据相似三角形：</p>
+                <div class="formula">xₙ / n = x / z  →  xₙ = n·x/z
+yₙ / n = y / z  →  yₙ = n·y/z</div>
+                <p>除以 z 不是线性的，不能直接写入普通矩阵。齐次坐标先让裁剪空间 w=z，之后 GPU 做 perspective divide：</p>
                 <div class="formula">clip = P · viewPosition
 ndc = clip.xyz / clip.w
 
 clip.x = xScale·x
 clip.y = yScale·y
-clip.w = -z
-→ ndc.x = xScale·x/(-z)</div>
+clip.w = z
+→ ndc.x = xScale·x/z</div>
 
                 <h3>7.2 FOV 如何决定缩放</h3>
                 <div class="formula">yScale = 1 / tan(fovY/2)
@@ -940,7 +1078,7 @@ xScale = yScale / aspect</div>
                 </figure>
 
                 <h3>7.3 深度映射如何求系数</h3>
-                <p>透视除法后深度形如 A + B/z。以 RH、ZO 深度 [0,1] 为例，要求 z=-n 映射 0，z=-f 映射 1：</p>
+                <p>透视除法后深度形如 A + B/z。以 LH、ZO 深度 [0,1] 为例，要求 z=n 映射 0，z=f 映射 1：</p>
                 <div class="derivation">
                     <div class="derivation-head">
                         <span class="derivation-kind">联立求解</span>
@@ -948,49 +1086,49 @@ xScale = yScale / aspect</div>
                     </div>
                     <div class="derivation-condition">
                         <strong>约定</strong>
-                        <span>右手相机看向 -Z；0&lt;n&lt;f；近平面 z=-n 映射 0，远平面 z=-f 映射 1。</span>
+                        <span>左手相机看向 +Z；0&lt;n&lt;f；近平面 z=n 映射 0，远平面 z=f 映射 1。</span>
                     </div>
                     <div class="derivation-row">
                         <span class="derivation-index">1</span>
                         <div class="derivation-expression equation">
-                            <span class="lhs">ndc.z</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">Az+B</span><span class="denominator">-z</span></span></span>
+                            <span class="lhs">ndc.z</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">Az+B</span><span class="denominator">z</span></span></span>
                         </div>
-                        <div class="derivation-reason">投影矩阵先生成 clip.z=Az+B、clip.w=-z，再由 GPU 做透视除法。</div>
+                        <div class="derivation-reason">投影矩阵先生成 clip.z=Az+B、clip.w=z，再由 GPU 做透视除法。</div>
                     </div>
                     <div class="derivation-row">
                         <span class="derivation-index">2</span>
                         <div class="derivation-expression">
-                            <div class="equation"><span class="lhs">0</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">-An+B</span><span class="denominator">n</span></span></span></div>
-                            <div class="equation"><span class="lhs">B</span><span class="relation">=</span><span>An</span></div>
+                            <div class="equation"><span class="lhs">0</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">An+B</span><span class="denominator">n</span></span></span></div>
+                            <div class="equation"><span class="lhs">B</span><span class="relation">=</span><span>-An</span></div>
                         </div>
-                        <div class="derivation-reason">代入近平面 z=-n；分母 n 非零，所以分子必须为 0。</div>
+                        <div class="derivation-reason">代入近平面 z=n；分母 n 非零，所以分子 An+B 必须为 0。</div>
                     </div>
                     <div class="derivation-row">
                         <span class="derivation-index">3</span>
                         <div class="derivation-expression equation">
-                            <span class="lhs">1</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">-Af+B</span><span class="denominator">f</span></span> ⇒ -Af+B=f</span>
+                            <span class="lhs">1</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">Af+B</span><span class="denominator">f</span></span> ⇒ Af+B=f</span>
                         </div>
-                        <div class="derivation-reason">代入远平面 z=-f，并把等式两边乘以 f。</div>
+                        <div class="derivation-reason">代入远平面 z=f，并把等式两边乘以 f。</div>
                     </div>
                     <div class="derivation-row">
                         <span class="derivation-index">4</span>
                         <div class="derivation-expression">
-                            <div class="equation"><span class="lhs">-Af+An</span><span class="relation">=</span><span>f</span></div>
-                            <div class="equation"><span class="lhs">A(n-f)</span><span class="relation">=</span><span>f</span></div>
+                            <div class="equation"><span class="lhs">Af-An</span><span class="relation">=</span><span>f</span></div>
+                            <div class="equation"><span class="lhs">A(f-n)</span><span class="relation">=</span><span>f</span></div>
                         </div>
-                        <div class="derivation-reason">把 B=An 代入远平面方程，然后提取公因子 A。</div>
+                        <div class="derivation-reason">把 B=-An 代入远平面方程，然后提取公因子 A。</div>
                     </div>
                     <div class="derivation-row">
                         <span class="derivation-index">5</span>
                         <div class="derivation-expression">
-                            <div class="equation"><span class="lhs">A</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">f</span><span class="denominator">n-f</span></span></span></div>
-                            <div class="equation"><span class="lhs">B=An</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">fn</span><span class="denominator">n-f</span></span></span></div>
+                            <div class="equation"><span class="lhs">A</span><span class="relation">=</span><span><span class="fraction"><span class="numerator">f</span><span class="denominator">f-n</span></span></span></div>
+                            <div class="equation"><span class="lhs">B=-An</span><span class="relation">=</span><span>-<span class="fraction"><span class="numerator">fn</span><span class="denominator">f-n</span></span></span></div>
                         </div>
-                        <div class="derivation-reason">先解出 A，再回代近平面关系求 B。由于 n-f&lt;0，两者均为负。</div>
+                        <div class="derivation-reason">先解出 A，再回代近平面关系求 B。由于 f-n&gt;0，所以 A 为正、B 为负。</div>
                     </div>
                     <div class="derivation-result">
                         <span class="therefore">结果</span>
-                        <span>clip.z = <span class="fraction"><span class="numerator">f</span><span class="denominator">n-f</span></span>z + <span class="fraction"><span class="numerator">fn</span><span class="denominator">n-f</span></span>，clip.w=-z</span>
+                        <span>clip.z = <span class="fraction"><span class="numerator">f</span><span class="denominator">f-n</span></span>z - <span class="fraction"><span class="numerator">fn</span><span class="denominator">f-n</span></span>，clip.w=z</span>
                     </div>
                 </div>
                 <p>这说明深度不是线性分布，精度大量集中在近平面附近；near 设得过小会严重损失远处深度精度。</p>
@@ -998,10 +1136,11 @@ xScale = yScale / aspect</div>
                 <table>
                     <thead><tr><th>函数</th><th>手性</th><th>NDC 深度</th><th>附加处理</th></tr></thead>
                     <tbody>
-                        <tr><td><code>PerspectiveRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>Vulkan/D3D 常用深度</td></tr>
-                        <tr><td><code>PerspectiveLH_ZO</code></td><td>左手</td><td>[0,1]</td><td>+Z 向前</td></tr>
+                        <tr><td><code>PerspectiveLH_ZO</code></td><td>左手</td><td>[0,1]</td><td>本文主路径，+Z 向前</td></tr>
+                        <tr><td><code>OrthographicLH_ZO</code></td><td>左手</td><td>[0,1]</td><td>左手正交投影</td></tr>
+                        <tr><td><code>PerspectiveRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>保留用于右手系对照</td></tr>
                         <tr><td><code>PerspectiveRH_NO</code></td><td>右手</td><td>[-1,1]</td><td>传统 OpenGL</td></tr>
-                        <tr><td><code>PerspectiveVulkanRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>在 RH_ZO 基础上翻转 Y</td></tr>
+                        <tr><td><code>PerspectiveVulkanRH_ZO</code></td><td>右手</td><td>[0,1]</td><td>现有 Vulkan 右手辅助函数</td></tr>
                     </tbody>
                 </table>
 
@@ -1080,6 +1219,7 @@ b = -(r+l)/(r-l)</div>
             <section id="simd">
                 <h2>9. 当前 SIMD 乘法为什么快</h2>
                 <p>普通通用模板通过动态索引循环访问 4×4 元素，MSVC 不一定展开。优化路径模仿 DirectXMath：一个矩阵行放进一个 128 位 SSE 寄存器。</p>
+                <p>寄存器 lane、intrinsic、数据布局、运行时分派与基准测试的系统讲解见 <a href="SIMD_Usage_Guide.html">SIMD 详细使用手册</a>。</p>
 
                 <h3>9.1 矩阵乘矩阵</h3>
                 <div class="formula">输出第 i 行 =
@@ -1121,7 +1261,9 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
                         <tr><td>安全求逆</td><td><code>TryInverse(matrix, &out)</code></td><td>行列式/主元不能接近 0</td></tr>
                         <tr><td>可选求逆</td><td><code>Inverse(matrix)</code></td><td>失败返回 <code>std::nullopt</code></td></tr>
                         <tr><td>对象矩阵</td><td><code>TRSMatrix(t, q, s)</code></td><td>执行顺序 S→R→T</td></tr>
-                        <tr><td>相机观察</td><td><code>LookAtRH/LH</code></td><td>eye、target、worldUp</td></tr>
+                        <tr><td>相机观察</td><td><code>LookAtLH</code></td><td>左手系，+Z 向前</td></tr>
+                        <tr><td>透视投影</td><td><code>PerspectiveLH_ZO</code></td><td>左手系，NDC.z∈[0,1]</td></tr>
+                        <tr><td>正交投影</td><td><code>OrthographicLH_ZO</code></td><td>左手系，NDC.z∈[0,1]</td></tr>
                         <tr><td>点变换</td><td><code>TransformPoint</code></td><td>w=1，投影后除 w</td></tr>
                         <tr><td>方向变换</td><td><code>TransformVector</code></td><td>w=0，不受平移影响</td></tr>
                         <tr><td>法线变换</td><td><code>NormalMatrix</code></td><td>逆转置，矩阵不能奇异</td></tr>
@@ -1131,13 +1273,18 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
                 <pre class="code"><code><span class="keyword">#include</span> <span class="type">"Math.hpp"</span>
 
 <span class="type">float4x4</span> world = TRSMatrix(position, rotation, scale);
-<span class="type">float4x4</span> view = LookAtRH(eye, target, up);
-<span class="type">float4x4</span> projection = PerspectiveVulkanRH_ZO(
+<span class="type">float4x4</span> view = LookAtLH(eye, target, up);
+<span class="type">float4x4</span> projection = PerspectiveLH_ZO(
     Radians(60.0F), width / height, 0.1F, 1000.0F);
 
 <span class="type">float4x4</span> worldViewProjection = projection * view * world;
 <span class="type">float4</span> clip = worldViewProjection * <span class="type">float4</span>(localPosition, 1.0F);
 <span class="type">float3</span> ndc = clip.xyz() / clip.w;</code></pre>
+
+                <div class="note">
+                    <strong>Vulkan 的 Y 翻转与左右手无关</strong>
+                    Vulkan 路径若沿用本文的视口方向约定，可在 <code>PerspectiveLH_ZO</code> 结果上执行 <code>projection[1][1] = -projection[1][1]</code>。这只翻转裁剪空间 Y，不会把左手坐标系改成右手坐标系。
+                </div>
             </section>
 
             <section id="checklist">
@@ -1149,7 +1296,7 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
                             <li>先写清向量在左还是右。</li>
                             <li>确认矩阵元素是 <code>[row][column]</code>。</li>
                             <li>组合矩阵从实际执行顺序的反方向阅读。</li>
-                            <li>检查 RH/LH 与相机前向符号。</li>
+                            <li>确认使用左手系：+X 向右、+Y 向上、+Z 向前。</li>
                             <li>检查 NDC 深度是 ZO 还是 NO。</li>
                         </ul>
                     </div>
@@ -1278,7 +1425,7 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
             context.arc(target.x, target.y, 8, 0, Math.PI * 2);
             context.fill();
             context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
-            context.fillText("target", target.x + 12, target.y + 4);
+            context.fillText("target", target.x + 12, target.y + 22);
 
             context.save();
             context.translate(eye.x, eye.y);
@@ -1293,7 +1440,7 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
             context.fill();
             context.restore();
 
-            arrow(context, eye.x, eye.y, target.x, target.y, colors.green, "forward");
+            arrow(context, eye.x, eye.y, target.x, target.y, colors.green, "forward (+Z)");
             const dx = target.x - eye.x;
             const dy = target.y - eye.y;
             const length = Math.hypot(dx, dy);
@@ -1370,6 +1517,7 @@ cmake -S . -B build_math_scalar -DMATH_ENABLE_SIMD=OFF</code></pre>
             context.fillText("far", farX - 25, Math.max(20, eyeY - farHalf - 10));
             context.fillStyle = colors.green;
             context.fillText(`yScale = ${(1 / Math.tan(halfAngle)).toFixed(3)}`, width * 0.5, height - 24);
+            arrow(context, eyeX + 18, eyeY, nearX - 12, eyeY, colors.green, "+Z / camera forward");
         }
 
         function drawAll() {

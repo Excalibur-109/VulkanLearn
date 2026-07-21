@@ -64,24 +64,19 @@ constexpr T Luminance(const Vector<T, 3>& linearColor) noexcept {
 }
 
 template <FloatingScalar T>
-inline Vector<T, 3> ApplyExposure(
-    const Vector<T, 3>& linearColor,
-    T exposureStops) noexcept {
+inline Vector<T, 3> ApplyExposure(const Vector<T, 3>& linearColor, T exposureStops) noexcept {
     // 摄影中的 1 stop 表示光量乘 2，因此乘数为 2^exposureStops。
     return linearColor * std::exp2(exposureStops);
 }
 
 /// Reinhard: c/(1+c)，把无限 HDR 压入 [0,1)，实现简单但高光容易失去色彩与对比。
 template <FloatingScalar T>
-constexpr Vector<T, 3> ToneMapReinhard(
-    const Vector<T, 3>& hdrColor) noexcept {
+constexpr Vector<T, 3> ToneMapReinhard(const Vector<T, 3>& hdrColor) noexcept {
     return hdrColor / (Vector<T, 3>(static_cast<T>(1)) + hdrColor);
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> ToneMapReinhardExtended(
-    const Vector<T, 3>& hdrColor,
-    T whitePoint) noexcept {
+constexpr Vector<T, 3> ToneMapReinhardExtended(const Vector<T, 3>& hdrColor, T whitePoint) noexcept {
     const T whiteSquared = Max(whitePoint * whitePoint, std::numeric_limits<T>::epsilon());
     return (hdrColor * (Vector<T, 3>(static_cast<T>(1)) + hdrColor / whiteSquared)) /
            (Vector<T, 3>(static_cast<T>(1)) + hdrColor);

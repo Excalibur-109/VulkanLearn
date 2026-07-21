@@ -35,20 +35,14 @@ constexpr Value CurveLerp(const Value& start, const Value& end, T amount) noexce
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Vector<T, 2> CurveLerp(
-    const Vector<T, 2>& start,
-    const Vector<T, 2>& end,
-    T amount) noexcept {
+MATH_FORCE_INLINE constexpr Vector<T, 2> CurveLerp(const Vector<T, 2>& start, const Vector<T, 2>& end, T amount) noexcept {
     return {
         start.x + (end.x - start.x) * amount,
         start.y + (end.y - start.y) * amount};
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Vector<T, 3> CurveLerp(
-    const Vector<T, 3>& start,
-    const Vector<T, 3>& end,
-    T amount) noexcept {
+MATH_FORCE_INLINE constexpr Vector<T, 3> CurveLerp(const Vector<T, 3>& start, const Vector<T, 3>& end, T amount) noexcept {
     return {
         start.x + (end.x - start.x) * amount,
         start.y + (end.y - start.y) * amount,
@@ -56,10 +50,7 @@ MATH_FORCE_INLINE constexpr Vector<T, 3> CurveLerp(
 }
 
 template <FloatingScalar T>
-MATH_FORCE_INLINE constexpr Vector<T, 4> CurveLerp(
-    const Vector<T, 4>& start,
-    const Vector<T, 4>& end,
-    T amount) noexcept {
+MATH_FORCE_INLINE constexpr Vector<T, 4> CurveLerp(const Vector<T, 4>& start, const Vector<T, 4>& end, T amount) noexcept {
     return {
         start.x + (end.x - start.x) * amount,
         start.y + (end.y - start.y) * amount,
@@ -68,10 +59,7 @@ MATH_FORCE_INLINE constexpr Vector<T, 4> CurveLerp(
 }
 
 template <typename Value, FloatingScalar T>
-MATH_FORCE_INLINE constexpr Value EvaluateBezierLevel(
-    Value* level,
-    std::size_t count,
-    T amount) noexcept {
+MATH_FORCE_INLINE constexpr Value EvaluateBezierLevel(Value* level, std::size_t count, T amount) noexcept {
     for (std::size_t activeCount = count; activeCount > 1; --activeCount) {
         for (std::size_t index = 0; index + 1 < activeCount; ++index) {
             level[index] = CurveLerp(level[index], level[index + 1], amount);
@@ -91,12 +79,7 @@ inline auto CurveDistance(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noex
 }
 
 template <typename Value, FloatingScalar T>
-constexpr Value KnotLerp(
-    const Value& start,
-    const Value& end,
-    T startKnot,
-    T endKnot,
-    T knot) noexcept {
+constexpr Value KnotLerp(const Value& start, const Value& end, T startKnot, T endKnot, T knot) noexcept {
     const T range = endKnot - startKnot;
     return Abs(range) <= std::numeric_limits<T>::epsilon()
                ? start
@@ -111,10 +94,7 @@ constexpr Value KnotLerp(
 
 /// 一次 Bezier 就是线段：B(t)=(1-t)P0+tP1。
 template <typename Value, FloatingScalar T>
-constexpr Value LinearBezier(
-    const Value& point0,
-    const Value& point1,
-    T amount) noexcept {
+constexpr Value LinearBezier(const Value& point0, const Value& point1, T amount) noexcept {
     return detail::CurveLerp(point0, point1, amount);
 }
 
@@ -123,11 +103,7 @@ constexpr Value LinearBezier(
  * P0/P2 是端点；P1 通常不在曲线上，它决定两个端点的切线方向。
  */
 template <typename Value, FloatingScalar T>
-constexpr Value QuadraticBezier(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    T amount) noexcept {
+constexpr Value QuadraticBezier(const Value& point0, const Value& point1, const Value& point2, T amount) noexcept {
     const T inverse = static_cast<T>(1) - amount;
     return point0 * (inverse * inverse) +
            point1 * (static_cast<T>(2) * inverse * amount) +
@@ -139,12 +115,7 @@ constexpr Value QuadraticBezier(
  * B(t)=(1-t)^3P0 + 3(1-t)^2tP1 + 3(1-t)t^2P2 + t^3P3。
  */
 template <typename Value, FloatingScalar T>
-constexpr Value CubicBezier(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3,
-    T amount) noexcept {
+constexpr Value CubicBezier(const Value& point0, const Value& point1, const Value& point2, const Value& point3, T amount) noexcept {
     const T inverse = static_cast<T>(1) - amount;
     const T inverseSquared = inverse * inverse;
     const T amountSquared = amount * amount;
@@ -156,32 +127,20 @@ constexpr Value CubicBezier(
 
 /// 二次 Bezier 一阶导数；t=0 时为 2(P1-P0)，t=1 时为 2(P2-P1)。
 template <typename Value, FloatingScalar T>
-constexpr Value QuadraticBezierDerivative(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    T amount) noexcept {
+constexpr Value QuadraticBezierDerivative(const Value& point0, const Value& point1, const Value& point2, T amount) noexcept {
     return ((point1 - point0) * (static_cast<T>(1) - amount) +
             (point2 - point1) * amount) *
            static_cast<T>(2);
 }
 
 template <typename Value>
-constexpr auto QuadraticBezierSecondDerivative(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2) noexcept {
+constexpr auto QuadraticBezierSecondDerivative(const Value& point0, const Value& point1, const Value& point2) noexcept {
     return (point2 - point1 * 2 + point0) * 2;
 }
 
 /// 三次 Bezier 的导数本身是一条由三个差分控制点构成的二次 Bezier。
 template <typename Value, FloatingScalar T>
-constexpr Value CubicBezierDerivative(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3,
-    T amount) noexcept {
+constexpr Value CubicBezierDerivative(const Value& point0, const Value& point1, const Value& point2, const Value& point3, T amount) noexcept {
     const T inverse = static_cast<T>(1) - amount;
     return ((point1 - point0) * (inverse * inverse) +
             (point2 - point1) * (static_cast<T>(2) * inverse * amount) +
@@ -190,12 +149,7 @@ constexpr Value CubicBezierDerivative(
 }
 
 template <typename Value, FloatingScalar T>
-constexpr Value CubicBezierSecondDerivative(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3,
-    T amount) noexcept {
+constexpr Value CubicBezierSecondDerivative(const Value& point0, const Value& point1, const Value& point2, const Value& point3, T amount) noexcept {
     return ((point2 - point1 * static_cast<T>(2) + point0) *
                 (static_cast<T>(1) - amount) +
             (point3 - point2 * static_cast<T>(2) + point1) * amount) *
@@ -203,11 +157,7 @@ constexpr Value CubicBezierSecondDerivative(
 }
 
 template <typename Value>
-constexpr auto CubicBezierThirdDerivative(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3) noexcept {
+constexpr auto CubicBezierThirdDerivative(const Value& point0, const Value& point1, const Value& point2, const Value& point3) noexcept {
     return (point3 - point2 * 3 + point1 * 3 - point0) * 6;
 }
 
@@ -270,10 +220,7 @@ inline T BernsteinBasis(std::size_t degree, std::size_t index, T amount) noexcep
  * B(t)=sum(Bi*wi*Pi)/sum(Bi*wi)。普通 Bezier 等价于所有权重均为 1。
  */
 template <typename Value, FloatingScalar T>
-inline Value RationalBezier(
-    std::span<const Value> controlPoints,
-    std::span<const T> weights,
-    T amount) noexcept {
+inline Value RationalBezier(std::span<const Value> controlPoints, std::span<const T> weights, T amount) noexcept {
     if (controlPoints.empty() || controlPoints.size() != weights.size()) {
         return Value{};
     }
@@ -293,14 +240,7 @@ inline Value RationalBezier(
 
 /// 二次 Rational Bezier 常用于精确表示圆弧；90 度圆弧的中间权重为 sqrt(2)/2。
 template <typename Value, FloatingScalar T>
-constexpr Value RationalQuadraticBezier(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    T weight0,
-    T weight1,
-    T weight2,
-    T amount) noexcept {
+constexpr Value RationalQuadraticBezier(const Value& point0, const Value& point1, const Value& point2, T weight0, T weight1, T weight2, T amount) noexcept {
     const T inverse = static_cast<T>(1) - amount;
     const T basis0 = inverse * inverse * weight0;
     const T basis1 = static_cast<T>(2) * inverse * amount * weight1;
@@ -315,11 +255,7 @@ constexpr Value RationalQuadraticBezier(
  * 在 t 处把二次 Bezier 精确切为左右两段。两段连接点相同，形状合并后与原曲线完全一致。
  */
 template <typename Value, FloatingScalar T>
-constexpr std::array<std::array<Value, 3>, 2> SplitQuadraticBezier(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    T amount) noexcept {
+constexpr std::array<std::array<Value, 3>, 2> SplitQuadraticBezier(const Value& point0, const Value& point1, const Value& point2, T amount) noexcept {
     const Value point01 = detail::CurveLerp(point0, point1, amount);
     const Value point12 = detail::CurveLerp(point1, point2, amount);
     const Value middle = detail::CurveLerp(point01, point12, amount);
@@ -352,12 +288,7 @@ constexpr std::array<std::array<Value, 4>, 2> SplitCubicBezier(
  * 影响曲线形状。Bezier 与 Hermite 可以互转：m0=3(P1-P0)，m1=3(P3-P2)。
  */
 template <typename Value, FloatingScalar T>
-constexpr Value CubicHermite(
-    const Value& point0,
-    const Value& tangent0,
-    const Value& point1,
-    const Value& tangent1,
-    T amount) noexcept {
+constexpr Value CubicHermite(const Value& point0, const Value& tangent0, const Value& point1, const Value& tangent1, T amount) noexcept {
     const T amountSquared = amount * amount;
     const T amountCubed = amountSquared * amount;
     const T h00 = static_cast<T>(2) * amountCubed - static_cast<T>(3) * amountSquared +
@@ -369,12 +300,7 @@ constexpr Value CubicHermite(
 }
 
 template <typename Value, FloatingScalar T>
-constexpr Value CubicHermiteDerivative(
-    const Value& point0,
-    const Value& tangent0,
-    const Value& point1,
-    const Value& tangent1,
-    T amount) noexcept {
+constexpr Value CubicHermiteDerivative(const Value& point0, const Value& tangent0, const Value& point1, const Value& tangent1, T amount) noexcept {
     const T amountSquared = amount * amount;
     const T h00 = static_cast<T>(6) * amountSquared - static_cast<T>(6) * amount;
     const T h10 = static_cast<T>(3) * amountSquared - static_cast<T>(4) * amount +
@@ -404,12 +330,7 @@ constexpr Value CardinalSpline(
 
 /// 标准均匀 Catmull-Rom 段经过 point1 和 point2，point0/point3 用于估计两端切线。
 template <typename Value, FloatingScalar T>
-constexpr Value CatmullRom(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3,
-    T amount) noexcept {
+constexpr Value CatmullRom(const Value& point0, const Value& point1, const Value& point2, const Value& point3, T amount) noexcept {
     return CardinalSpline(point0, point1, point2, point3, amount, static_cast<T>(0));
 }
 
@@ -477,12 +398,7 @@ constexpr Value KochanekBartels(
  * 获得 C2 连续性，适合相机轨迹和需要平滑加速度的路径。
  */
 template <typename Value, FloatingScalar T>
-constexpr Value CubicBSpline(
-    const Value& point0,
-    const Value& point1,
-    const Value& point2,
-    const Value& point3,
-    T amount) noexcept {
+constexpr Value CubicBSpline(const Value& point0, const Value& point1, const Value& point2, const Value& point3, T amount) noexcept {
     const T amountSquared = amount * amount;
     const T amountCubed = amountSquared * amount;
     const T basis0 = -amountCubed + static_cast<T>(3) * amountSquared -
@@ -502,9 +418,7 @@ constexpr Value CubicBSpline(
 
 /// 平面参数曲线曲率 k=|x'y''-y'x''|/|P'|^3；直线曲率为 0，单位圆曲率为 1。
 template <FloatingScalar T>
-inline T Curvature(
-    const Vector<T, 2>& firstDerivative,
-    const Vector<T, 2>& secondDerivative) noexcept {
+inline T Curvature(const Vector<T, 2>& firstDerivative, const Vector<T, 2>& secondDerivative) noexcept {
     const T speedSquared = LengthSquared(firstDerivative);
     if (speedSquared <= std::numeric_limits<T>::epsilon()) {
         return static_cast<T>(0);
@@ -516,9 +430,7 @@ inline T Curvature(
 
 /// 三维参数曲线曲率 k=|P' x P''|/|P'|^3。
 template <FloatingScalar T>
-inline T Curvature(
-    const Vector<T, 3>& firstDerivative,
-    const Vector<T, 3>& secondDerivative) noexcept {
+inline T Curvature(const Vector<T, 3>& firstDerivative, const Vector<T, 3>& secondDerivative) noexcept {
     const T speedSquared = LengthSquared(firstDerivative);
     if (speedSquared <= std::numeric_limits<T>::epsilon()) {
         return static_cast<T>(0);

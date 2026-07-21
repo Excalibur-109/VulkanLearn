@@ -101,12 +101,7 @@ constexpr T InverseLerp(T start, T end, T value) noexcept {
 }
 
 template <FloatingScalar T>
-constexpr T Remap(
-    T inputMinimum,
-    T inputMaximum,
-    T outputMinimum,
-    T outputMaximum,
-    T value) noexcept {
+constexpr T Remap(T inputMinimum, T inputMaximum, T outputMinimum, T outputMaximum, T value) noexcept {
     return Lerp(
         outputMinimum,
         outputMaximum,

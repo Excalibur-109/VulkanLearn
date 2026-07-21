@@ -122,12 +122,7 @@ MATH_FORCE_INLINE void StoreFloat4(Vector<float, 4>& destination, __m128 value) 
     _mm_storeu_ps(&destination.x, value);
 }
 
-MATH_FORCE_INLINE __m128 MultiplyMatrixRow(
-    __m128 lhsRow,
-    __m128 rhsRow0,
-    __m128 rhsRow1,
-    __m128 rhsRow2,
-    __m128 rhsRow3) noexcept {
+MATH_FORCE_INLINE __m128 MultiplyMatrixRow(__m128 lhsRow, __m128 rhsRow0, __m128 rhsRow1, __m128 rhsRow2, __m128 rhsRow3) noexcept {
     const __m128 xxxx = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(0, 0, 0, 0));
     const __m128 yyyy = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(1, 1, 1, 1));
     const __m128 zzzz = _mm_shuffle_ps(lhsRow, lhsRow, _MM_SHUFFLE(2, 2, 2, 2));
@@ -158,10 +153,7 @@ MATH_FORCE_INLINE float DotFloat3(__m128 lhs, __m128 rhs) noexcept {
     return _mm_cvtss_f32(sum);
 }
 
-MATH_FORCE_INLINE bool TryInverseFloat4x4(
-    const Matrix<float, 4, 4>& matrix,
-    Matrix<float, 4, 4>* output,
-    float epsilon) noexcept {
+MATH_FORCE_INLINE bool TryInverseFloat4x4(const Matrix<float, 4, 4>& matrix, Matrix<float, 4, 4>* output, float epsilon) noexcept {
     // 把 M 的四行看作 M^T 的四列。下面通过 3D 外积构造 inverse(M^T) 的四列，
     // 它们正好就是 inverse(M) 的四行。整个过程只在最后做一次标量除法。
     const __m128 a = LoadFloat4(matrix.rows[0]);
@@ -214,9 +206,7 @@ MATH_FORCE_INLINE bool TryInverseFloat4x4(
     return true;
 }
 
-MATH_FORCE_INLINE Vector<float, 4> MultiplyFloat4x4Vector(
-    const Matrix<float, 4, 4>& matrix,
-    const Vector<float, 4>& vector) noexcept {
+MATH_FORCE_INLINE Vector<float, 4> MultiplyFloat4x4Vector(const Matrix<float, 4, 4>& matrix, const Vector<float, 4>& vector) noexcept {
     // 转置四个行寄存器得到四列，再按 vector.x/y/z/w 广播并线性组合。
     __m128 column0 = LoadFloat4(matrix.rows[0]);
     __m128 column1 = LoadFloat4(matrix.rows[1]);
@@ -240,9 +230,7 @@ MATH_FORCE_INLINE Vector<float, 4> MultiplyFloat4x4Vector(
     return output;
 }
 
-MATH_FORCE_INLINE Matrix<float, 4, 4> MultiplyFloat4x4(
-    const Matrix<float, 4, 4>& lhs,
-    const Matrix<float, 4, 4>& rhs) noexcept {
+MATH_FORCE_INLINE Matrix<float, 4, 4> MultiplyFloat4x4(const Matrix<float, 4, 4>& lhs, const Matrix<float, 4, 4>& rhs) noexcept {
     const __m128 rhsRow0 = LoadFloat4(rhs.rows[0]);
     const __m128 rhsRow1 = LoadFloat4(rhs.rows[1]);
     const __m128 rhsRow2 = LoadFloat4(rhs.rows[2]);
@@ -268,9 +256,7 @@ MATH_FORCE_INLINE Matrix<float, 4, 4> MultiplyFloat4x4(
 #endif
 
 template <Scalar T, std::size_t R, std::size_t C>
-constexpr bool operator==(
-    const Matrix<T, R, C>& lhs,
-    const Matrix<T, R, C>& rhs) noexcept {
+constexpr bool operator==(const Matrix<T, R, C>& lhs, const Matrix<T, R, C>& rhs) noexcept {
     for (std::size_t row = 0; row < R; ++row) {
         if (lhs[row] != rhs[row]) {
             return false;
@@ -280,23 +266,28 @@ constexpr bool operator==(
 }
 
 template <Scalar T, std::size_t R, std::size_t C>
-constexpr bool operator!=(
-    const Matrix<T, R, C>& lhs,
-    const Matrix<T, R, C>& rhs) noexcept {
+constexpr bool operator!=(const Matrix<T, R, C>& lhs, const Matrix<T, R, C>& rhs) noexcept {
     return !(lhs == rhs);
 }
 
-#define MATH_DEFINE_MATRIX_BINARY_OPERATOR(OPERATOR)                                                    \
-    template <ArithmeticScalar L, ArithmeticScalar Rhs, std::size_t R, std::size_t C>                   \
-    constexpr auto operator OPERATOR(                                                                   \
-        const Matrix<L, R, C>& lhs,                                                                     \
-        const Matrix<Rhs, R, C>& rhs) noexcept {                                                        \
-        using Result = std::common_type_t<L, Rhs>;                                                      \
-        Matrix<Result, R, C> output{};                                                                  \
-        for (std::size_t row = 0; row < R; ++row) {                                                     \
-            output[row] = lhs[row] OPERATOR rhs[row];                                                   \
-        }                                                                                               \
-        return output;                                                                                  \
+/**
+ * 矩阵二元运算的模板命名约定：
+ * - Lhs 是 Left-Hand Side，表示运算符左侧矩阵的元素类型。
+ * - Rhs 是 Right-Hand Side，表示运算符右侧矩阵或向量的元素类型。
+ * - hs 是 Hand Side 的缩写；L/R 分别补全为 Left/Right。
+ *
+ * 左右操作数可以使用不同标量类型。例如 Matrix<float> + Matrix<double> 会通过
+ * std::common_type_t<Lhs, Rhs> 推导出 double，避免把右侧结果截断回 float。
+ */
+#define MATH_DEFINE_MATRIX_BINARY_OPERATOR(OPERATOR)                                                         \
+    template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t C>                      \
+    constexpr auto operator OPERATOR(const Matrix<Lhs, R, C>& lhs, const Matrix<Rhs, R, C>& rhs) noexcept {  \
+        using Result = std::common_type_t<Lhs, Rhs>;                                                         \
+        Matrix<Result, R, C> output{};                                                                       \
+        for (std::size_t row = 0; row < R; ++row) {                                                          \
+            output[row] = lhs[row] OPERATOR rhs[row];                                                        \
+        }                                                                                                    \
+        return output;                                                                                       \
     }
 
 MATH_DEFINE_MATRIX_BINARY_OPERATOR(+)
@@ -370,12 +361,11 @@ constexpr Matrix<T, R, C>& operator/=(Matrix<T, R, C>& lhs, U scalar) noexcept {
     return lhs;
 }
 
-template <ArithmeticScalar L, ArithmeticScalar Rhs, std::size_t R, std::size_t C>
-constexpr auto operator*(
-    const Matrix<L, R, C>& matrix,
-    const Vector<Rhs, C>& vector) noexcept {
-    // 结果的第 row 项就是该行与列向量的点积。
-    using Result = std::common_type_t<L, Rhs>;
+template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t C>
+constexpr auto operator*(const Matrix<Lhs, R, C>& matrix, const Vector<Rhs, C>& vector) noexcept {
+    // matrix 是左侧操作数，vector 是右侧操作数，因此元素类型分别命名为 Lhs 和 Rhs。
+    // R x C 矩阵乘 C 维列向量得到 R 维列向量；结果第 row 项是矩阵该行与向量的点积。
+    using Result = std::common_type_t<Lhs, Rhs>;
     Vector<Result, R> output{};
     for (std::size_t row = 0; row < R; ++row) {
         output[row] = Dot(matrix[row], vector);
@@ -383,17 +373,11 @@ constexpr auto operator*(
     return output;
 }
 
-template <
-    ArithmeticScalar L,
-    ArithmeticScalar Rhs,
-    std::size_t R,
-    std::size_t Shared,
-    std::size_t C>
-constexpr auto operator*(
-    const Matrix<L, R, Shared>& lhs,
-    const Matrix<Rhs, Shared, C>& rhs) noexcept {
-    // 矩阵乘法要求 lhs 列数 == rhs 行数；每个输出元素是 lhs 行与 rhs 列的点积。
-    using Result = std::common_type_t<L, Rhs>;
+template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t Shared, std::size_t C>
+constexpr auto operator*(const Matrix<Lhs, R, Shared>& lhs, const Matrix<Rhs, Shared, C>& rhs) noexcept {
+    // 维度关系：(R x Shared) * (Shared x C) = (R x C)。Shared 是两矩阵必须相等的共享维度。
+    // Lhs/Rhs 只描述左右矩阵的元素类型，不描述维度；每个输出元素是 lhs 行与 rhs 列的点积。
+    using Result = std::common_type_t<Lhs, Rhs>;
     // 旧实现对每个输出元素都调用一次 Column，RxC 次重复组装相同列。先转置一次后，
     // 每列只复制一次，随后每个输出元素就是两个连续 Vector 的点积。
     Matrix<Rhs, C, Shared> rhsColumns{};
@@ -416,9 +400,7 @@ constexpr auto operator*(
  * DirectXMath 的核心做法是让一个 4 分量行向量常驻一个 SIMD 寄存器。这里保留普通
  * float4x4 存储，只在计算入口加载到寄存器，因此不会改变顶点、常量缓冲或序列化布局。
  */
-MATH_FORCE_INLINE constexpr Vector<float, 4> operator*(
-    const Matrix<float, 4, 4>& matrix,
-    const Vector<float, 4>& vector) noexcept {
+MATH_FORCE_INLINE constexpr Vector<float, 4> operator*(const Matrix<float, 4, 4>& matrix, const Vector<float, 4>& vector) noexcept {
 #if MATH_MATRIX_HAS_SSE2
     if (!std::is_constant_evaluated()) {
         return detail::MultiplyFloat4x4Vector(matrix, vector);
@@ -435,9 +417,7 @@ MATH_FORCE_INLINE constexpr Vector<float, 4> operator*(
             matrix.rows[3].z * vector.z + matrix.rows[3].w * vector.w};
 }
 
-MATH_FORCE_INLINE constexpr Matrix<float, 4, 4> operator*(
-    const Matrix<float, 4, 4>& lhs,
-    const Matrix<float, 4, 4>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr Matrix<float, 4, 4> operator*(const Matrix<float, 4, 4>& lhs, const Matrix<float, 4, 4>& rhs) noexcept {
 #if MATH_MATRIX_HAS_SSE2
     if (!std::is_constant_evaluated()) {
         return detail::MultiplyFloat4x4(lhs, rhs);
@@ -490,11 +470,10 @@ constexpr Matrix<T, C, R> Transpose(const Matrix<T, R, C>& matrix) noexcept {
     return output;
 }
 
-template <ArithmeticScalar L, ArithmeticScalar Rhs, std::size_t R, std::size_t C>
-constexpr auto Hadamard(
-    const Matrix<L, R, C>& lhs,
-    const Matrix<Rhs, R, C>& rhs) noexcept {
-    using Result = std::common_type_t<L, Rhs>;
+template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t C>
+constexpr auto Hadamard(const Matrix<Lhs, R, C>& lhs, const Matrix<Rhs, R, C>& rhs) noexcept {
+    // Hadamard 是对应元素相乘，要求两侧维度完全相同；它不是“行乘列”的普通矩阵乘法。
+    using Result = std::common_type_t<Lhs, Rhs>;
     Matrix<Result, R, C> output{};
     for (std::size_t row = 0; row < R; ++row) {
         output[row] = lhs[row] * rhs[row];
@@ -554,10 +533,7 @@ constexpr T Determinant(const Matrix<T, 4, 4>& matrix) noexcept {
  * 且不会修改 output，调用方不会无意得到 NaN/Inf 矩阵。
  */
 template <FloatingScalar T, std::size_t N>
-inline bool TryInverse(
-    const Matrix<T, N, N>& matrix,
-    Matrix<T, N, N>* output,
-    T epsilon = std::numeric_limits<T>::epsilon() * static_cast<T>(16)) noexcept {
+inline bool TryInverse(const Matrix<T, N, N>& matrix, Matrix<T, N, N>* output, T epsilon = std::numeric_limits<T>::epsilon() * static_cast<T>(16)) noexcept {
     if (output == nullptr) {
         return false;
     }
@@ -757,9 +733,7 @@ MATH_FORCE_INLINE bool TryInverse(
 }
 
 template <FloatingScalar T, std::size_t N>
-inline std::optional<Matrix<T, N, N>> Inverse(
-    const Matrix<T, N, N>& matrix,
-    T epsilon = std::numeric_limits<T>::epsilon() * static_cast<T>(16)) noexcept {
+inline std::optional<Matrix<T, N, N>> Inverse(const Matrix<T, N, N>& matrix, T epsilon = std::numeric_limits<T>::epsilon() * static_cast<T>(16)) noexcept {
     Matrix<T, N, N> output{};
     if (!TryInverse(matrix, &output, epsilon)) {
         return std::nullopt;
@@ -772,16 +746,8 @@ constexpr Matrix<To, R, C> MatrixCast(const Matrix<From, R, C>& matrix) noexcept
     return Matrix<To, R, C>(matrix);
 }
 
-template <
-    Scalar To,
-    std::size_t NewRows,
-    std::size_t NewColumns,
-    Scalar From,
-    std::size_t OldRows,
-    std::size_t OldColumns>
-constexpr Matrix<To, NewRows, NewColumns> ResizeMatrix(
-    const Matrix<From, OldRows, OldColumns>& matrix,
-    To addedDiagonal = static_cast<To>(1)) noexcept {
+template <Scalar To, std::size_t NewRows, std::size_t NewColumns, Scalar From, std::size_t OldRows, std::size_t OldColumns>
+constexpr Matrix<To, NewRows, NewColumns> ResizeMatrix(const Matrix<From, OldRows, OldColumns>& matrix, To addedDiagonal = static_cast<To>(1)) noexcept {
     // 扩展 3x3 旋转到 4x4 时，新对角元素设 1，齐次坐标 w 才能保持不变。
     Matrix<To, NewRows, NewColumns> output{};
     for (std::size_t index = 0; index < Min(NewRows, NewColumns); ++index) {
@@ -849,9 +815,7 @@ inline Matrix<T, 4, 4> RotationZMatrix(T radians) noexcept {
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> RotationAxisMatrix(
-    const Vector<T, 3>& axis,
-    T radians) noexcept {
+inline Matrix<T, 4, 4> RotationAxisMatrix(const Vector<T, 3>& axis, T radians) noexcept {
     // Rodrigues 旋转公式把“单位轴 + 角度”直接展开为 3x3 旋转块。
     const Vector<T, 3> unitAxis = NormalizeSafe(axis, Vector<T, 3>(1, 0, 0));
     const T x = unitAxis.x;
@@ -880,10 +844,7 @@ inline Matrix<T, 4, 4> RotationAxisMatrix(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> LookAtRH(
-    const Vector<T, 3>& eye,
-    const Vector<T, 3>& target,
-    const Vector<T, 3>& worldUp) noexcept {
+inline Matrix<T, 4, 4> LookAtRH(const Vector<T, 3>& eye, const Vector<T, 3>& target, const Vector<T, 3>& worldUp) noexcept {
     // View 矩阵不是相机世界矩阵，而是其逆：先投影到相机 right/up/forward 基，再消除 eye 平移。
     const Vector<T, 3> forward = NormalizeSafe(target - eye, Vector<T, 3>(0, 0, -1));
     const Vector<T, 3> right = NormalizeSafe(Cross(forward, worldUp), Vector<T, 3>(1, 0, 0));
@@ -896,10 +857,7 @@ inline Matrix<T, 4, 4> LookAtRH(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> LookAtLH(
-    const Vector<T, 3>& eye,
-    const Vector<T, 3>& target,
-    const Vector<T, 3>& worldUp) noexcept {
+inline Matrix<T, 4, 4> LookAtLH(const Vector<T, 3>& eye, const Vector<T, 3>& target, const Vector<T, 3>& worldUp) noexcept {
     const Vector<T, 3> forward = NormalizeSafe(target - eye, Vector<T, 3>(0, 0, 1));
     const Vector<T, 3> right = NormalizeSafe(Cross(worldUp, forward), Vector<T, 3>(1, 0, 0));
     const Vector<T, 3> up = Cross(forward, right);
@@ -911,11 +869,7 @@ inline Matrix<T, 4, 4> LookAtLH(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> PerspectiveRH_ZO(
-    T verticalFovRadians,
-    T aspectRatio,
-    T nearPlane,
-    T farPlane) noexcept {
+inline Matrix<T, 4, 4> PerspectiveRH_ZO(T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
     // ZO 表示透视除法后 NDC.z 属于 [0,1]；RH 相机前方在 view space 的 -Z。
     // focalLength=cot(fov/2)，它把视锥边界映射到 NDC 的 +/-1。
     const T focalLength = static_cast<T>(1) / std::tan(verticalFovRadians * static_cast<T>(0.5));
@@ -930,11 +884,7 @@ inline Matrix<T, 4, 4> PerspectiveRH_ZO(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> PerspectiveLH_ZO(
-    T verticalFovRadians,
-    T aspectRatio,
-    T nearPlane,
-    T farPlane) noexcept {
+inline Matrix<T, 4, 4> PerspectiveLH_ZO(T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
     const T focalLength = static_cast<T>(1) / std::tan(verticalFovRadians * static_cast<T>(0.5));
     const T inverseDepth = static_cast<T>(1) / (farPlane - nearPlane);
     Matrix<T, 4, 4> output{};
@@ -947,11 +897,7 @@ inline Matrix<T, 4, 4> PerspectiveLH_ZO(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> PerspectiveRH_NO(
-    T verticalFovRadians,
-    T aspectRatio,
-    T nearPlane,
-    T farPlane) noexcept {
+inline Matrix<T, 4, 4> PerspectiveRH_NO(T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
     // NO 表示 NDC.z 属于 [-1,1]，是传统 OpenGL 的深度范围。
     const T focalLength = static_cast<T>(1) / std::tan(verticalFovRadians * static_cast<T>(0.5));
     const T inverseDepth = static_cast<T>(1) / (nearPlane - farPlane);
@@ -965,11 +911,7 @@ inline Matrix<T, 4, 4> PerspectiveRH_NO(
 }
 
 template <FloatingScalar T>
-inline Matrix<T, 4, 4> PerspectiveVulkanRH_ZO(
-    T verticalFovRadians,
-    T aspectRatio,
-    T nearPlane,
-    T farPlane) noexcept {
+inline Matrix<T, 4, 4> PerspectiveVulkanRH_ZO(T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
     // Vulkan 深度同样是 [0,1]；这里额外翻转 clip-space Y 以匹配本库采用的视口方向。
     Matrix<T, 4, 4> output =
         PerspectiveRH_ZO(verticalFovRadians, aspectRatio, nearPlane, farPlane);
@@ -978,13 +920,7 @@ inline Matrix<T, 4, 4> PerspectiveVulkanRH_ZO(
 }
 
 template <FloatingScalar T>
-constexpr Matrix<T, 4, 4> OrthographicRH_ZO(
-    T left,
-    T right,
-    T bottom,
-    T top,
-    T nearPlane,
-    T farPlane) noexcept {
+constexpr Matrix<T, 4, 4> OrthographicRH_ZO(T left, T right, T bottom, T top, T nearPlane, T farPlane) noexcept {
     return Matrix<T, 4, 4>(
         static_cast<T>(2) / (right - left),
         0,
@@ -1005,13 +941,7 @@ constexpr Matrix<T, 4, 4> OrthographicRH_ZO(
 }
 
 template <FloatingScalar T>
-constexpr Matrix<T, 4, 4> OrthographicLH_ZO(
-    T left,
-    T right,
-    T bottom,
-    T top,
-    T nearPlane,
-    T farPlane) noexcept {
+constexpr Matrix<T, 4, 4> OrthographicLH_ZO(T left, T right, T bottom, T top, T nearPlane, T farPlane) noexcept {
     return Matrix<T, 4, 4>(
         static_cast<T>(2) / (right - left),
         0,
@@ -1032,9 +962,7 @@ constexpr Matrix<T, 4, 4> OrthographicLH_ZO(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> TransformPoint(
-    const Matrix<T, 4, 4>& matrix,
-    const Vector<T, 3>& point) noexcept {
+constexpr Vector<T, 3> TransformPoint(const Matrix<T, 4, 4>& matrix, const Vector<T, 3>& point) noexcept {
     // 点使用齐次 w=1，所以平移生效；投影矩阵后还要除以 w 完成 perspective divide。
     const Vector<T, 4> homogeneous = matrix * Vector<T, 4>(point, static_cast<T>(1));
     return homogeneous.w == static_cast<T>(0)
@@ -1043,9 +971,7 @@ constexpr Vector<T, 3> TransformPoint(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> TransformVector(
-    const Matrix<T, 4, 4>& matrix,
-    const Vector<T, 3>& vector) noexcept {
+constexpr Vector<T, 3> TransformVector(const Matrix<T, 4, 4>& matrix, const Vector<T, 3>& vector) noexcept {
     // 方向使用齐次 w=0，平移列对结果没有贡献。
     return (matrix * Vector<T, 4>(vector, static_cast<T>(0))).xyz();
 }

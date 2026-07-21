@@ -47,9 +47,7 @@ inline TangentFrame<T> BuildTangentFrame(const Vector<T, 3>& inputNormal) noexce
 }
 
 template <FloatingScalar T>
-inline TangentFrame<T> BuildTangentFrame(
-    const Vector<T, 3>& inputNormal,
-    const Vector<T, 4>& tangentAndSign) noexcept {
+inline TangentFrame<T> BuildTangentFrame(const Vector<T, 3>& inputNormal, const Vector<T, 4>& tangentAndSign) noexcept {
     const Vector<T, 3> normal =
         NormalizeSafe(inputNormal, Vector<T, 3>(0, 0, 1));
     const Vector<T, 3> tangent = NormalizeSafe(
@@ -62,9 +60,7 @@ inline TangentFrame<T> BuildTangentFrame(
 }
 
 template <FloatingScalar T>
-inline Vector<T, 3> TangentToWorld(
-    const TangentFrame<T>& frame,
-    const Vector<T, 3>& tangentSpaceVector) noexcept {
+inline Vector<T, 3> TangentToWorld(const TangentFrame<T>& frame, const Vector<T, 3>& tangentSpaceVector) noexcept {
     return NormalizeSafe(
         frame.tangent * tangentSpaceVector.x +
             frame.bitangent * tangentSpaceVector.y +
@@ -73,9 +69,7 @@ inline Vector<T, 3> TangentToWorld(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> WorldToTangent(
-    const TangentFrame<T>& frame,
-    const Vector<T, 3>& worldVector) noexcept {
+constexpr Vector<T, 3> WorldToTangent(const TangentFrame<T>& frame, const Vector<T, 3>& worldVector) noexcept {
     return {
         Dot(worldVector, frame.tangent),
         Dot(worldVector, frame.bitangent),
@@ -84,10 +78,7 @@ constexpr Vector<T, 3> WorldToTangent(
 
 /// 普通法线贴图通常存储 [0,1]，先解码到 [-1,1]，再通过 TBN 转到世界空间。
 template <FloatingScalar T>
-inline Vector<T, 3> DecodeNormalMap(
-    const Vector<T, 3>& encodedNormal,
-    const TangentFrame<T>& frame,
-    T normalScale = static_cast<T>(1)) noexcept {
+inline Vector<T, 3> DecodeNormalMap(const Vector<T, 3>& encodedNormal, const TangentFrame<T>& frame, T normalScale = static_cast<T>(1)) noexcept {
     Vector<T, 3> tangentNormal = encodedNormal * static_cast<T>(2) - static_cast<T>(1);
     tangentNormal.x *= normalScale;
     tangentNormal.y *= normalScale;
@@ -132,8 +123,7 @@ inline Vector<T, 3> DecodeNormalOctahedral(const Vector<T, 2>& encoded) noexcept
 }
 
 template <FloatingScalar T>
-inline std::optional<Matrix<T, 3, 3>> NormalMatrix(
-    const Matrix<T, 4, 4>& localToWorld) noexcept {
+inline std::optional<Matrix<T, 3, 3>> NormalMatrix(const Matrix<T, 4, 4>& localToWorld) noexcept {
     // 法线必须乘线性变换的 inverse-transpose，才能在非均匀缩放后继续垂直于切平面。
     // 平移不影响方向，因此只提取 localToWorld 左上角 3x3。
     Matrix<T, 3, 3> upper{};
@@ -149,9 +139,7 @@ inline std::optional<Matrix<T, 3, 3>> NormalMatrix(
 }
 
 template <FloatingScalar T>
-inline Vector<T, 3> TransformNormal(
-    const Matrix<T, 4, 4>& localToWorld,
-    const Vector<T, 3>& normal) noexcept {
+inline Vector<T, 3> TransformNormal(const Matrix<T, 4, 4>& localToWorld, const Vector<T, 3>& normal) noexcept {
     const std::optional<Matrix<T, 3, 3>> matrix = NormalMatrix(localToWorld);
     return matrix.has_value()
                ? NormalizeSafe(*matrix * normal, Vector<T, 3>(0, 0, 1))
@@ -165,9 +153,7 @@ constexpr Vector<T, 3> LambertDiffuse(const Vector<T, 3>& albedo) noexcept {
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> FresnelSchlick(
-    T cosineTheta,
-    const Vector<T, 3>& reflectanceAtNormal) noexcept {
+constexpr Vector<T, 3> FresnelSchlick(T cosineTheta, const Vector<T, 3>& reflectanceAtNormal) noexcept {
     // Schlick 近似 F=F0+(1-F0)(1-cosTheta)^5：掠射角反射趋近 1。
     // 常见非金属 F0 约为 0.04；金属 F0 带颜色，通常直接来自 baseColor。
     const T factor = static_cast<T>(1) - Saturate(cosineTheta);
@@ -177,10 +163,7 @@ constexpr Vector<T, 3> FresnelSchlick(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> FresnelSchlickRoughness(
-    T cosineTheta,
-    const Vector<T, 3>& reflectanceAtNormal,
-    T roughness) noexcept {
+constexpr Vector<T, 3> FresnelSchlickRoughness(T cosineTheta, const Vector<T, 3>& reflectanceAtNormal, T roughness) noexcept {
     const Vector<T, 3> grazing = Max(
         Vector<T, 3>(static_cast<T>(1) - Saturate(roughness)),
         reflectanceAtNormal);
@@ -204,10 +187,7 @@ constexpr T DistributionGGX(T normalDotHalf, T roughness) noexcept {
 
 /// Schlick-GGX 几何遮蔽项。directLighting=true 使用直接光 k，false 使用 IBL k。
 template <FloatingScalar T>
-constexpr T GeometrySchlickGGX(
-    T normalDotDirection,
-    T roughness,
-    bool directLighting = true) noexcept {
+constexpr T GeometrySchlickGGX(T normalDotDirection, T roughness, bool directLighting = true) noexcept {
     const T r = directLighting ? roughness + static_cast<T>(1) : roughness;
     const T k = directLighting
                     ? r * r / static_cast<T>(8)
@@ -218,11 +198,7 @@ constexpr T GeometrySchlickGGX(
 }
 
 template <FloatingScalar T>
-constexpr T GeometrySmith(
-    T normalDotView,
-    T normalDotLight,
-    T roughness,
-    bool directLighting = true) noexcept {
+constexpr T GeometrySmith(T normalDotView, T normalDotLight, T roughness, bool directLighting = true) noexcept {
     // Smith G 项把视线和光线两个方向上的微表面遮蔽概率相乘。
     return GeometrySchlickGGX(normalDotView, roughness, directLighting) *
            GeometrySchlickGGX(normalDotLight, roughness, directLighting);
@@ -342,8 +318,7 @@ constexpr T SmoothDistanceAttenuation(T distance, T range) noexcept {
 }
 
 template <FloatingScalar T>
-inline LightSample<T> SampleLight(
-    const DirectionalLightData<T>& light) noexcept {
+inline LightSample<T> SampleLight(const DirectionalLightData<T>& light) noexcept {
     return {
         NormalizeSafe(light.directionToLight, Vector<T, 3>(0, 1, 0)),
         light.color * Max(light.illuminance, static_cast<T>(0)),
@@ -351,9 +326,7 @@ inline LightSample<T> SampleLight(
 }
 
 template <FloatingScalar T>
-inline LightSample<T> SampleLight(
-    const PointLightData<T>& light,
-    const Vector<T, 3>& surfacePosition) noexcept {
+inline LightSample<T> SampleLight(const PointLightData<T>& light, const Vector<T, 3>& surfacePosition) noexcept {
     const Vector<T, 3> toLight = light.position - surfacePosition;
     const T distance = Length(toLight);
     return {
@@ -364,11 +337,7 @@ inline LightSample<T> SampleLight(
 }
 
 template <FloatingScalar T>
-inline T SpotConeAttenuation(
-    const Vector<T, 3>& lightToSurfaceDirection,
-    const Vector<T, 3>& spotDirection,
-    T innerConeRadians,
-    T outerConeRadians) noexcept {
+inline T SpotConeAttenuation(const Vector<T, 3>& lightToSurfaceDirection, const Vector<T, 3>& spotDirection, T innerConeRadians, T outerConeRadians) noexcept {
     // 角度比较改在 cosine 空间完成，inner 内为 1，outer 外为 0，中间用 SmoothStep 过渡。
     const T cosine = Dot(
         NormalizeSafe(lightToSurfaceDirection, Vector<T, 3>(0, 0, -1)),
@@ -379,9 +348,7 @@ inline T SpotConeAttenuation(
 }
 
 template <FloatingScalar T>
-inline LightSample<T> SampleLight(
-    const SpotLightData<T>& light,
-    const Vector<T, 3>& surfacePosition) noexcept {
+inline LightSample<T> SampleLight(const SpotLightData<T>& light, const Vector<T, 3>& surfacePosition) noexcept {
     const Vector<T, 3> toLight = light.position - surfacePosition;
     const T distance = Length(toLight);
     const Vector<T, 3> directionToLight =
@@ -410,11 +377,7 @@ inline Vector<T, 3> EvaluatePBRLight(
 }
 
 template <FloatingScalar T>
-constexpr T ShadowBias(
-    T normalDotLight,
-    T constantBias,
-    T slopeBias,
-    T maximumBias) noexcept {
+constexpr T ShadowBias(T normalDotLight, T constantBias, T slopeBias, T maximumBias) noexcept {
     // 表面越背离光线，深度误差越大，因此斜率 bias 随 1-NdotL 增长，并限制最大值。
     return Min(
         Max(constantBias, slopeBias * (static_cast<T>(1) - Saturate(normalDotLight))),
@@ -459,28 +422,20 @@ inline T FogTransmittanceExponentialSquared(T distance, T density) noexcept {
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> ApplyFog(
-    const Vector<T, 3>& sceneColor,
-    const Vector<T, 3>& fogColor,
-    T transmittance) noexcept {
+constexpr Vector<T, 3> ApplyFog(const Vector<T, 3>& sceneColor, const Vector<T, 3>& fogColor, T transmittance) noexcept {
     return Lerp(fogColor, sceneColor, Saturate(transmittance));
 }
 
 /// 通用投影矩阵深度反解，兼容 RH/LH、ZO/NO 和 reversed-Z，只要求传入对应 NDC z。
 template <FloatingScalar T>
-constexpr T ReconstructViewZ(
-    T ndcDepth,
-    const Matrix<T, 4, 4>& projection) noexcept {
+constexpr T ReconstructViewZ(T ndcDepth, const Matrix<T, 4, 4>& projection) noexcept {
     const T numerator = projection[2][3] - ndcDepth * projection[3][3];
     const T denominator = ndcDepth * projection[3][2] - projection[2][2];
     return numerator / denominator;
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> ReconstructViewPosition(
-    const Vector<T, 2>& ndc,
-    T ndcDepth,
-    const Matrix<T, 4, 4>& inverseProjection) noexcept {
+constexpr Vector<T, 3> ReconstructViewPosition(const Vector<T, 2>& ndc, T ndcDepth, const Matrix<T, 4, 4>& inverseProjection) noexcept {
     // 把屏幕 NDC 点乘逆投影返回齐次 view space，再除 w。延迟渲染可只存深度重建位置。
     const Vector<T, 4> homogeneous =
         inverseProjection * Vector<T, 4>(ndc.x, ndc.y, ndcDepth, static_cast<T>(1));
@@ -488,18 +443,12 @@ constexpr Vector<T, 3> ReconstructViewPosition(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> ReconstructWorldPosition(
-    const Vector<T, 2>& ndc,
-    T ndcDepth,
-    const Matrix<T, 4, 4>& inverseViewProjection) noexcept {
+constexpr Vector<T, 3> ReconstructWorldPosition(const Vector<T, 2>& ndc, T ndcDepth, const Matrix<T, 4, 4>& inverseViewProjection) noexcept {
     return ReconstructViewPosition(ndc, ndcDepth, inverseViewProjection);
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 2> PixelCenterToNDC(
-    const Vector<T, 2>& pixel,
-    const Vector<T, 2>& viewportSize,
-    bool flipY = false) noexcept {
+constexpr Vector<T, 2> PixelCenterToNDC(const Vector<T, 2>& pixel, const Vector<T, 2>& viewportSize, bool flipY = false) noexcept {
     Vector<T, 2> ndc =
         ((pixel + static_cast<T>(0.5)) / viewportSize) * static_cast<T>(2) -
         static_cast<T>(1);
@@ -523,9 +472,7 @@ constexpr float RadicalInverseVanDerCorput(std::uint32_t index) noexcept {
     return static_cast<float>(ReverseBits32(index)) * 2.3283064365386963e-10F;
 }
 
-constexpr float2 Hammersley2D(
-    std::uint32_t index,
-    std::uint32_t sampleCount) noexcept {
+constexpr float2 Hammersley2D(std::uint32_t index, std::uint32_t sampleCount) noexcept {
     return {
         sampleCount == 0 ? 0.0F : static_cast<float>(index) / static_cast<float>(sampleCount),
         RadicalInverseVanDerCorput(index)};
@@ -542,10 +489,7 @@ inline Vector<T, 3> CosineSampleHemisphere(const Vector<T, 2>& sample) noexcept 
 }
 
 template <FloatingScalar T>
-inline Vector<T, 3> ImportanceSampleGGX(
-    const Vector<T, 2>& sample,
-    T roughness,
-    const Vector<T, 3>& normal) noexcept {
+inline Vector<T, 3> ImportanceSampleGGX(const Vector<T, 2>& sample, T roughness, const Vector<T, 3>& normal) noexcept {
     // 按 GGX NDF 的高概率区域采样半程向量，可用于预过滤环境贴图和 split-sum IBL。
     const T alpha = Max(roughness * roughness, static_cast<T>(0.001));
     const T phi = TwoPi<T> * sample.x;
@@ -567,8 +511,7 @@ using SH9Color = std::array<Vector<T, 3>, 9>;
 
 /// 二阶实球谐基函数，系数顺序固定为 L00,L1-1,L10,L11,L2-2,L2-1,L20,L21,L22。
 template <FloatingScalar T>
-constexpr std::array<T, 9> SphericalHarmonicsBasis9(
-    const Vector<T, 3>& direction) noexcept {
+constexpr std::array<T, 9> SphericalHarmonicsBasis9(const Vector<T, 3>& direction) noexcept {
     const T x = direction.x;
     const T y = direction.y;
     const T z = direction.z;
@@ -585,9 +528,7 @@ constexpr std::array<T, 9> SphericalHarmonicsBasis9(
 }
 
 template <FloatingScalar T>
-constexpr Vector<T, 3> EvaluateSphericalHarmonics9(
-    const SH9Color<T>& coefficients,
-    const Vector<T, 3>& direction) noexcept {
+constexpr Vector<T, 3> EvaluateSphericalHarmonics9(const SH9Color<T>& coefficients, const Vector<T, 3>& direction) noexcept {
     // SH 求值是九个“RGB 系数 * 标量基函数”的线性组合，适合低频漫反射环境光。
     const std::array<T, 9> basis = SphericalHarmonicsBasis9(direction);
     Vector<T, 3> result{};

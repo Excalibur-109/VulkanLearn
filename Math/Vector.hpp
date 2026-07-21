@@ -594,21 +594,15 @@ constexpr auto Dot(const Vector<L, N>& lhs, const Vector<R, N>& rhs) noexcept {
 
 // 高频 float 点积直接展开。DirectXMath 的 SIMD 接口同样为固定维度提供专门实现；这里的
 // 标量展开能让 MSVC 合并乘加并消除动态 operator[] 分支，同时保持 float3 的 12 字节布局。
-MATH_FORCE_INLINE constexpr float Dot(
-    const Vector<float, 2>& lhs,
-    const Vector<float, 2>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr float Dot(const Vector<float, 2>& lhs, const Vector<float, 2>& rhs) noexcept {
     return lhs.x * rhs.x + lhs.y * rhs.y;
 }
 
-MATH_FORCE_INLINE constexpr float Dot(
-    const Vector<float, 3>& lhs,
-    const Vector<float, 3>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr float Dot(const Vector<float, 3>& lhs, const Vector<float, 3>& rhs) noexcept {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
 
-MATH_FORCE_INLINE constexpr float Dot(
-    const Vector<float, 4>& lhs,
-    const Vector<float, 4>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr float Dot(const Vector<float, 4>& lhs, const Vector<float, 4>& rhs) noexcept {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
 }
 
@@ -625,9 +619,7 @@ constexpr auto Cross(const Vector<L, 3>& lhs, const Vector<R, 3>& rhs) noexcept 
             static_cast<Result>(lhs.y) * static_cast<Result>(rhs.x));
 }
 
-MATH_FORCE_INLINE constexpr Vector<float, 3> Cross(
-    const Vector<float, 3>& lhs,
-    const Vector<float, 3>& rhs) noexcept {
+MATH_FORCE_INLINE constexpr Vector<float, 3> Cross(const Vector<float, 3>& lhs, const Vector<float, 3>& rhs) noexcept {
     return {
         lhs.y * rhs.z - lhs.z * rhs.y,
         lhs.z * rhs.x - lhs.x * rhs.z,
@@ -650,15 +642,12 @@ MATH_FORCE_INLINE float Length(const Vector<float, 3>& value) noexcept {
 }
 
 template <ArithmeticScalar T, std::size_t N>
-inline detail::FloatingResult<T> Distance(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs) noexcept {
+inline detail::FloatingResult<T> Distance(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noexcept {
     return Length(lhs - rhs);
 }
 
 template <ArithmeticScalar T, std::size_t N>
-inline Vector<detail::FloatingResult<T>, N> Normalize(
-    const Vector<T, N>& value) noexcept {
+inline Vector<detail::FloatingResult<T>, N> Normalize(const Vector<T, N>& value) noexcept {
     // 单位化 v/|v| 只保留方向。零向量没有方向，因此这里返回零而不是制造 NaN。
     using Result = detail::FloatingResult<T>;
     const Result length = Length(value);
@@ -720,9 +709,7 @@ constexpr Vector<T, N> Abs(const Vector<T, N>& value) noexcept {
 }
 
 template <ArithmeticScalar T, std::size_t N>
-constexpr Vector<T, N> Min(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs) noexcept {
+constexpr Vector<T, N> Min(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noexcept {
     Vector<T, N> output{};
     for (std::size_t index = 0; index < N; ++index) {
         output[index] = Min(lhs[index], rhs[index]);
@@ -731,9 +718,7 @@ constexpr Vector<T, N> Min(
 }
 
 template <ArithmeticScalar T, std::size_t N>
-constexpr Vector<T, N> Max(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs) noexcept {
+constexpr Vector<T, N> Max(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noexcept {
     Vector<T, N> output{};
     for (std::size_t index = 0; index < N; ++index) {
         output[index] = Max(lhs[index], rhs[index]);
@@ -742,10 +727,7 @@ constexpr Vector<T, N> Max(
 }
 
 template <ArithmeticScalar T, std::size_t N>
-constexpr Vector<T, N> Clamp(
-    const Vector<T, N>& value,
-    const Vector<T, N>& minimum,
-    const Vector<T, N>& maximum) noexcept {
+constexpr Vector<T, N> Clamp(const Vector<T, N>& value, const Vector<T, N>& minimum, const Vector<T, N>& maximum) noexcept {
     return Min(Max(value, minimum), maximum);
 }
 
@@ -755,10 +737,7 @@ constexpr Vector<T, N> Saturate(const Vector<T, N>& value) noexcept {
 }
 
 template <ArithmeticScalar T, ArithmeticScalar U, std::size_t N>
-constexpr auto Lerp(
-    const Vector<T, N>& start,
-    const Vector<T, N>& end,
-    U amount) noexcept {
+constexpr auto Lerp(const Vector<T, N>& start, const Vector<T, N>& end, U amount) noexcept {
     return start + (end - start) * amount;
 }
 
@@ -795,10 +774,7 @@ inline Vector<T, N> Fract(const Vector<T, N>& value) noexcept {
 }
 
 template <FloatingScalar T, std::size_t N>
-constexpr Vector<T, N> SmoothStep(
-    const Vector<T, N>& edge0,
-    const Vector<T, N>& edge1,
-    const Vector<T, N>& value) noexcept {
+constexpr Vector<T, N> SmoothStep(const Vector<T, N>& edge0, const Vector<T, N>& edge1, const Vector<T, N>& value) noexcept {
     Vector<T, N> output{};
     for (std::size_t index = 0; index < N; ++index) {
         output[index] = SmoothStep(edge0[index], edge1[index], value[index]);
@@ -807,18 +783,13 @@ constexpr Vector<T, N> SmoothStep(
 }
 
 template <FloatingScalar T, std::size_t N>
-constexpr Vector<T, N> Reflect(
-    const Vector<T, N>& incident,
-    const Vector<T, N>& normal) noexcept {
+constexpr Vector<T, N> Reflect(const Vector<T, N>& incident, const Vector<T, N>& normal) noexcept {
     // 镜面反射：从入射向量中减去两倍法线投影。normal 应为单位向量。
     return incident - static_cast<T>(2) * Dot(incident, normal) * normal;
 }
 
 template <FloatingScalar T, std::size_t N>
-inline Vector<T, N> Refract(
-    const Vector<T, N>& incident,
-    const Vector<T, N>& normal,
-    T eta) noexcept {
+inline Vector<T, N> Refract(const Vector<T, N>& incident, const Vector<T, N>& normal, T eta) noexcept {
     // Snell 定律的向量形式，eta=n1/n2。判别式小于 0 表示全反射，此时返回零向量。
     const T normalDotIncident = Dot(normal, incident);
     const T discriminant = static_cast<T>(1) -
@@ -832,9 +803,7 @@ inline Vector<T, N> Refract(
 }
 
 template <FloatingScalar T, std::size_t N>
-constexpr Vector<T, N> Project(
-    const Vector<T, N>& value,
-    const Vector<T, N>& onto) noexcept {
+constexpr Vector<T, N> Project(const Vector<T, N>& value, const Vector<T, N>& onto) noexcept {
     // value 在 onto 上的投影：(value·onto / onto·onto) * onto。
     const T denominator = Dot(onto, onto);
     return denominator == static_cast<T>(0)
@@ -843,16 +812,12 @@ constexpr Vector<T, N> Project(
 }
 
 template <FloatingScalar T, std::size_t N>
-constexpr Vector<T, N> Reject(
-    const Vector<T, N>& value,
-    const Vector<T, N>& from) noexcept {
+constexpr Vector<T, N> Reject(const Vector<T, N>& value, const Vector<T, N>& from) noexcept {
     return value - Project(value, from);
 }
 
 template <FloatingScalar T, std::size_t N>
-inline T AngleBetween(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs) noexcept {
+inline T AngleBetween(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noexcept {
     const T denominator = Length(lhs) * Length(rhs);
     if (denominator <= std::numeric_limits<T>::epsilon()) {
         return static_cast<T>(0);

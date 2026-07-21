@@ -29,10 +29,7 @@ inline Vector<T, N> Map(const Vector<T, N>& value, Function&& function) noexcept
 }
 
 template <FloatingScalar T, std::size_t N, typename Function>
-inline Vector<T, N> Map(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs,
-    Function&& function) noexcept {
+inline Vector<T, N> Map(const Vector<T, N>& lhs, const Vector<T, N>& rhs, Function&& function) noexcept {
     Vector<T, N> output{};
     for (std::size_t index = 0; index < N; ++index) {
         output[index] = static_cast<T>(function(lhs[index], rhs[index]));
@@ -74,9 +71,7 @@ inline Vector<T, N> Atan(const Vector<T, N>& value) noexcept {
 }
 
 template <FloatingScalar T, std::size_t N>
-inline Vector<T, N> Atan2(
-    const Vector<T, N>& y,
-    const Vector<T, N>& x) noexcept {
+inline Vector<T, N> Atan2(const Vector<T, N>& y, const Vector<T, N>& x) noexcept {
     return detail::Map(y, x, [](T yComponent, T xComponent) {
         return std::atan2(yComponent, xComponent);
     });
@@ -120,9 +115,7 @@ inline Vector<T, N> Log10(const Vector<T, N>& value) noexcept {
 }
 
 template <FloatingScalar T, std::size_t N>
-inline Vector<T, N> Pow(
-    const Vector<T, N>& base,
-    const Vector<T, N>& exponent) noexcept {
+inline Vector<T, N> Pow(const Vector<T, N>& base, const Vector<T, N>& exponent) noexcept {
     return detail::Map(base, exponent, [](T baseComponent, T exponentComponent) {
         return std::pow(baseComponent, exponentComponent);
     });
@@ -139,9 +132,7 @@ inline Vector<T, N> Trunc(const Vector<T, N>& value) noexcept {
 }
 
 template <FloatingScalar T, std::size_t N>
-inline Vector<T, N> Mod(
-    const Vector<T, N>& value,
-    const Vector<T, N>& divisor) noexcept {
+inline Vector<T, N> Mod(const Vector<T, N>& value, const Vector<T, N>& divisor) noexcept {
     return detail::Map(value, divisor, [](T component, T divisorComponent) {
         return std::fmod(component, divisorComponent);
     });
@@ -204,17 +195,12 @@ constexpr T MaxComponent(const Vector<T, N>& value) noexcept {
 }
 
 template <ArithmeticScalar T, std::size_t N>
-constexpr auto DistanceSquared(
-    const Vector<T, N>& lhs,
-    const Vector<T, N>& rhs) noexcept {
+constexpr auto DistanceSquared(const Vector<T, N>& lhs, const Vector<T, N>& rhs) noexcept {
     return LengthSquared(lhs - rhs);
 }
 
 template <Scalar T, std::size_t N>
-constexpr Vector<T, N> Select(
-    const Vector<bool, N>& condition,
-    const Vector<T, N>& whenTrue,
-    const Vector<T, N>& whenFalse) noexcept {
+constexpr Vector<T, N> Select(const Vector<bool, N>& condition, const Vector<T, N>& whenTrue, const Vector<T, N>& whenFalse) noexcept {
     Vector<T, N> output{};
     for (std::size_t index = 0; index < N; ++index) {
         output[index] = condition[index] ? whenTrue[index] : whenFalse[index];
@@ -223,10 +209,7 @@ constexpr Vector<T, N> Select(
 }
 
 template <FloatingScalar T, std::size_t N>
-constexpr Vector<T, N> FaceForward(
-    const Vector<T, N>& normal,
-    const Vector<T, N>& incident,
-    const Vector<T, N>& referenceNormal) noexcept {
+constexpr Vector<T, N> FaceForward(const Vector<T, N>& normal, const Vector<T, N>& incident, const Vector<T, N>& referenceNormal) noexcept {
     // 让 normal 朝向 incident 的反方向，常用于双面材质和着色法线朝向修正。
     return Dot(referenceNormal, incident) < static_cast<T>(0) ? normal : -normal;
 }
@@ -244,10 +227,7 @@ inline Vector<T, 2> Rotate(const Vector<T, 2>& value, T radians) noexcept {
 }
 
 template <FloatingScalar T>
-inline Vector<T, 3> SphericalToCartesian(
-    T radius,
-    T inclination,
-    T azimuth) noexcept {
+inline Vector<T, 3> SphericalToCartesian(T radius, T inclination, T azimuth) noexcept {
     // 本库约定 inclination 从 +Y 轴向下量，azimuth 绕 Y 轴从 +X 朝 +Z 旋转。
     const T sinInclination = std::sin(inclination);
     return {

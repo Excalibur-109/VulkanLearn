@@ -272,6 +272,40 @@
         .keyword { color: #7cc7e8; }
         .type { color: #f1c675; }
 
+        .matrix {
+            display: grid;
+            gap: 7px 14px;
+            position: relative;
+            padding: 12px 17px;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 17px;
+            white-space: nowrap;
+        }
+
+        .matrix::before, .matrix::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            border-top: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .matrix::before { left: 0; border-left: 2px solid var(--ink); }
+        .matrix::after { right: 0; border-right: 2px solid var(--ink); }
+        .m3 { grid-template-columns: repeat(3, auto); }
+        .operator { font: 20px Cambria, serif; }
+
+        .matrix-display { white-space: normal; }
+        .formula-matrix {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .matrix-name { min-width: max-content; font-weight: 700; }
+
         figure.diagram { margin: 24px 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fbfcfb; }
         figure.diagram canvas { display: block; width: 100%; height: 340px; }
         figure.diagram figcaption { padding: 11px 15px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
@@ -314,6 +348,15 @@
             .derivation-expression { font-size: 16px; overflow-x: auto; }
             .derivation-reason { grid-column: 2; padding: 6px 0 0; border-top: 1px dashed #decac5; border-left: 0; }
             .equation { grid-template-columns: minmax(52px, max-content) 18px minmax(90px, 1fr); column-gap: 4px; }
+            .formula-matrix { gap: 7px; }
+            .formula-matrix.named-matrix {
+                display: grid;
+                grid-template-columns: auto auto;
+                align-items: center;
+                justify-content: center;
+            }
+            .formula-matrix.named-matrix > .matrix { grid-column: 1 / -1; justify-self: center; }
+            .matrix-display .matrix { gap: 5px 8px; padding: 9px 13px; font-size: 14px; }
             .footer-nav { display: block; }
             .footer-nav a { display: block; margin-top: 10px; }
         }
@@ -340,6 +383,8 @@
             <nav class="doc-switch" aria-label="数学文档切换">
                 <a href="Matrix_Math_Guide.html">Matrix</a>
                 <a href="Quaternion_Math_Guide.html" aria-current="page">Quaternion</a>
+                <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+                <a href="SIMD_Usage_Guide.html">SIMD</a>
             </nav>
         </div>
     </header>
@@ -366,7 +411,7 @@
         <main>
             <section id="convention">
                 <h2>0. 当前实现的表示约定</h2>
-                <p class="lead">四元数不是“四个欧拉角”，而是一个实部加三个虚部。当前类型按 <code>(x,y,z,w)</code> 存储，其中 xyz 是虚部向量，w 是实部。</p>
+                <p class="lead">四元数不是“四个欧拉角”，而是一个实部加三个虚部。当前类型按 <code>(x,y,z,w)</code> 存储，其中 xyz 是虚部向量，w 是实部。本文世界坐标统一采用左手系：+X 向右、+Y 向上、+Z 向前。</p>
 
                 <div class="four-column">
                     <div class="fact"><strong>存储顺序</strong><p>Quaternion(x, y, z, w)</p></div>
@@ -379,6 +424,11 @@
   = (v, w)，其中 v=(x,y,z)
 
 旋转四元数必须满足：||q|| = √(x²+y²+z²+w²) = 1</div>
+
+                <div class="note">
+                    <strong>坐标系手性不会改写四元数代数</strong>
+                    左手系不会改变 Hamilton 积、<code>q·(v,0)·q⁻¹</code>、共轭或逆的公式。手性主要决定哪个方向被解释为相机前方，以及 View/Projection 如何构造；不能因为改用左手 View/Projection 就随意取反四元数或旋转角。
+                </div>
 
                 <div class="warning">
                     <strong>Quaternion 的分量本身不是旋转轴和角度</strong>
@@ -427,6 +477,8 @@ x = nₓ sin(θ/2)
 y = nᵧ sin(θ/2)
 z = n_z sin(θ/2)
 w = cos(θ/2)</div>
+
+                <p>本文沿用 <code>Quaternion.hpp</code> 的正角定义：<code>axis=(0,0,1)</code>、<code>θ=+90°</code> 时，<code>+X</code> 会旋转到 <code>+Y</code>。左手系的 <code>+Z</code> 同时是默认前向，但这不要求把轴角公式改成负半角。</p>
 
                 <h3>2.1 单位长度验证</h3>
                 <div class="derivation">
@@ -478,7 +530,7 @@ cos²(θ/2)-sin²(θ/2) = cosθ</div>
                 </div>
                 <figure class="diagram">
                     <canvas id="axisAngleCanvas" aria-label="轴角四元数图解"></canvas>
-                    <figcaption>绿色箭头是原向量，橙色箭头是旋转结果；下方实时列出 q=(0,0,sin(θ/2),cos(θ/2))。</figcaption>
+                    <figcaption>绿色箭头是 +X 原向量，橙色箭头是旋转结果；绕 +Z 旋转 +90° 时结果为 +Y。下方实时列出 q=(0,0,sin(θ/2),cos(θ/2))。</figcaption>
                 </figure>
 
                 <h3>2.3 90° 绕 Z 轴的具体数值</h3>
@@ -689,13 +741,19 @@ p' = (1,0,0)+(0,1,0)+(-1,0,0) = (0,1,0)</div>
 
             <section id="matrix">
                 <h2>6. 四元数与旋转矩阵互转</h2>
+                <p>Quaternion、Matrix3x3、Matrix4x4 的双向转换、稳定分支与缩放/剪切处理，见 <a href="Quaternion_Matrix_Conversion_Guide.html">Quaternion 与 Matrix 转换详解</a>。</p>
 
                 <h3>6.1 从 qpq⁻¹ 收集 p 的系数</h3>
                 <p>把上一节公式完全展开，并分别收集 pₓ、pᵧ、p_z 的系数，可得到：</p>
-                <div class="formula">R(q) =
-[ 1-2(y²+z²)   2(xy-zw)     2(xz+yw)   ]
-[   2(xy+zw)   1-2(x²+z²)   2(yz-xw)   ]
-[   2(xz-yw)     2(yz+xw)   1-2(x²+y²) ]</div>
+                <div class="formula matrix-display formula-matrix named-matrix">
+                    <span class="matrix-name">R(q)</span>
+                    <span class="operator">=</span>
+                    <span class="matrix m3" aria-label="四元数对应的三乘三旋转矩阵">
+                        <span>1-2(y²+z²)</span><span>2(xy-zw)</span><span>2(xz+yw)</span>
+                        <span>2(xy+zw)</span><span>1-2(x²+z²)</span><span>2(yz-xw)</span>
+                        <span>2(xz-yw)</span><span>2(yz+xw)</span><span>1-2(x²+y²)</span>
+                    </span>
+                </div>
                 <p><code>Matrix3x3FromQuaternion</code> 先归一化 q，再缓存 xx、xy、wx 等乘积，避免重复计算。</p>
 
                 <h3>6.2 为什么旋转矩阵是正交矩阵</h3>
@@ -855,11 +913,17 @@ q_childWorld = q_parentWorld · q_childLocal
 p_childWorld = p_parentWorld + Rotate(q_parentWorld, scaledLocalPosition)</div>
                 <p>如果父节点包含非均匀缩放，单独组合 position/rotation/scale 可能产生剪切，此时矩阵层级比分量级组合更可靠。</p>
 
-                <pre class="code"><code><span class="type">floatQuaternion</span> rotation = QuaternionFromEulerXYZ(eulerRadians);
-<span class="type">float4x4</span> localToWorld = TRSMatrix(position, rotation, scale);
+                <pre class="code"><code><span class="type">floatQuaternion</span> rotation =
+    QuaternionFromEulerXYZ(eulerRadians);
+<span class="type">float4x4</span> localToWorld =
+    TRSMatrix(position, rotation, scale);
 
-<span class="type">float3</span> forward = math::Rotate(rotation, <span class="type">float3</span>(0.0F, 0.0F, -1.0F));
-<span class="type">float3</span> up      = math::Rotate(rotation, <span class="type">float3</span>(0.0F, 1.0F,  0.0F));</code></pre>
+<span class="type">float3</span> forward = math::Rotate(
+    rotation,
+    <span class="type">float3</span>(0.0F, 0.0F, 1.0F));
+<span class="type">float3</span> up = math::Rotate(
+    rotation,
+    <span class="type">float3</span>(0.0F, 1.0F, 0.0F));</code></pre>
             </section>
 
             <section id="stability">
@@ -888,6 +952,7 @@ p_childWorld = p_parentWorld + Rotate(q_parentWorld, scaledLocalPosition)</div>
                     <li>对 q 的四个分量分别做 Euler 意义上的解释。</li>
                     <li>忽略 q 与 -q 的双覆盖，导致插值绕远路。</li>
                     <li>对非单位 q 直接使用共轭作为逆。</li>
+                    <li>误以为改成左手坐标系后，所有四元数角度或虚部都必须取反。</li>
                 </ul>
             </section>
 
@@ -1053,7 +1118,7 @@ p_childWorld = p_parentWorld + Rotate(q_parentWorld, scaledLocalPosition)</div>
             context.arc(centerX, centerY, 6, 0, Math.PI * 2);
             context.fill();
             context.font = "600 13px Segoe UI, Microsoft YaHei, sans-serif";
-            context.fillText("Z axis", centerX + 10, centerY + 20);
+            context.fillText("axis = +Z (LH forward)", centerX + 10, centerY + 20);
 
             const sine = Math.sin(radians * 0.5);
             const cosine = Math.cos(radians * 0.5);
