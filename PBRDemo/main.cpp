@@ -59,8 +59,8 @@ struct alignas(16) UniformBufferObject {
     float4 lightDirection{};
     float4 lightColor{};
     float4 cameraPosition{};
-    float4 baseColor{};          // rgb = albedo，a = metallic。
-    float4 materialParameters{}; // x = roughness，y = AO。
+    float4 baseColor{};           // rgb = albedo，a = metallic。
+    float4 materialParameters{};  // x = roughness，y = AO。
 
     // 把世界空间位置变换到“光源相机”的裁剪空间，是生成和查询 Shadow Map 的共同坐标系。
     float4x4 lightViewProjection{1.0F};

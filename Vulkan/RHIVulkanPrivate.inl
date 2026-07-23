@@ -706,10 +706,10 @@ static VkDeviceSize toVkWholeSize(u64 size) {
 
 /// 记录每类 Vulkan 队列对应的 queue family index。
 struct VulkanQueueFamilies {
-    u32 graphics = RHI_INVALID_INDEX; ///< 图形队列族，必须支持 VK_QUEUE_GRAPHICS_BIT。
-    u32 compute = RHI_INVALID_INDEX; ///< 计算队列族，优先选择独立 compute 队列。
-    u32 transfer = RHI_INVALID_INDEX; ///< 传输队列族，优先选择独立 transfer 队列。
-    u32 present = RHI_INVALID_INDEX; ///< 呈现队列族，需要 surface 支持。
+    u32 graphics = RHI_INVALID_INDEX;  ///< 图形队列族，必须支持 VK_QUEUE_GRAPHICS_BIT。
+    u32 compute = RHI_INVALID_INDEX;   ///< 计算队列族，优先选择独立 compute 队列。
+    u32 transfer = RHI_INVALID_INDEX;  ///< 传输队列族，优先选择独立 transfer 队列。
+    u32 present = RHI_INVALID_INDEX;   ///< 呈现队列族，需要 surface 支持。
 };
 
 // Impl 是 RHIVulkan 的后端状态仓库。

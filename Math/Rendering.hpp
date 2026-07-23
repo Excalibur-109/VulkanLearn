@@ -27,9 +27,9 @@ namespace math {
 
 template <FloatingScalar T>
 struct TangentFrame {
-    Vector<T, 3> tangent{1, 0, 0};   ///< T：纹理 U 增大方向。
-    Vector<T, 3> bitangent{0, 1, 0}; ///< B：纹理 V 增大方向，可能受镜像 UV 符号影响。
-    Vector<T, 3> normal{0, 0, 1};    ///< N：几何表面朝外方向。
+    Vector<T, 3> tangent{1, 0, 0};    ///< T：纹理 U 增大方向。
+    Vector<T, 3> bitangent{0, 1, 0};  ///< B：纹理 V 增大方向，可能受镜像 UV 符号影响。
+    Vector<T, 3> normal{0, 0, 1};     ///< N：几何表面朝外方向。
 };
 
 /// Frisvad 风格的稳定基构造。输入接近零时退化为世界坐标基。
@@ -206,11 +206,11 @@ constexpr T GeometrySmith(T normalDotView, T normalDotLight, T roughness, bool d
 
 template <FloatingScalar T>
 struct PBRMaterialSample {
-    Vector<T, 3> baseColor{1, 1, 1};           ///< 线性 RGB；金属时也是有色 F0。
-    T metallic = static_cast<T>(0);            ///< 0=电介质，1=金属，中间值用于纹理过渡。
-    T roughness = static_cast<T>(0.5);         ///< 感知粗糙度；内部会限制到稳定范围。
-    Vector<T, 3> emissive{0, 0, 0};            ///< 材质自发光，不受 NdotL 和阴影影响。
-    T ambientOcclusion = static_cast<T>(1);    ///< 通常只衰减间接光，不应直接压暗直接光。
+    Vector<T, 3> baseColor{1, 1, 1};         ///< 线性 RGB；金属时也是有色 F0。
+    T metallic = static_cast<T>(0);          ///< 0=电介质，1=金属，中间值用于纹理过渡。
+    T roughness = static_cast<T>(0.5);       ///< 感知粗糙度；内部会限制到稳定范围。
+    Vector<T, 3> emissive{0, 0, 0};          ///< 材质自发光，不受 NdotL 和阴影影响。
+    T ambientOcclusion = static_cast<T>(1);  ///< 通常只衰减间接光，不应直接压暗直接光。
 };
 
 /**
@@ -274,30 +274,30 @@ inline Vector<T, 3> EvaluateBlinnPhong(
 
 template <FloatingScalar T>
 struct LightSample {
-    Vector<T, 3> directionToLight{0, 1, 0}; ///< 从着色点指向光源，供 NdotL 使用。
-    Vector<T, 3> radiance{0, 0, 0};         ///< 到达表面的线性 RGB 辐亮度，已含距离/锥形衰减。
-    T distance = std::numeric_limits<T>::infinity(); ///< 阴影射线最大距离；方向光为无穷。
+    Vector<T, 3> directionToLight{0, 1, 0};           ///< 从着色点指向光源，供 NdotL 使用。
+    Vector<T, 3> radiance{0, 0, 0};                   ///< 到达表面的线性 RGB 辐亮度，已含距离/锥形衰减。
+    T distance = std::numeric_limits<T>::infinity();  ///< 阴影射线最大距离；方向光为无穷。
 };
 
 template <FloatingScalar T>
 struct DirectionalLightData {
-    Vector<T, 3> directionToLight{0, 1, 0}; ///< 所有表面共享的“指向光源”方向。
-    Vector<T, 3> color{1, 1, 1};            ///< 线性 RGB 光色。
-    T illuminance = static_cast<T>(1);      ///< 本实现作为辐射强度缩放使用。
+    Vector<T, 3> directionToLight{0, 1, 0};  ///< 所有表面共享的“指向光源”方向。
+    Vector<T, 3> color{1, 1, 1};             ///< 线性 RGB 光色。
+    T illuminance = static_cast<T>(1);       ///< 本实现作为辐射强度缩放使用。
 };
 
 template <FloatingScalar T>
 struct PointLightData {
-    Vector<T, 3> position{0, 0, 0}; ///< 世界空间位置。
-    Vector<T, 3> color{1, 1, 1};    ///< 线性 RGB 光色。
-    T intensity = static_cast<T>(1); ///< 点源强度缩放，进入 inverse-square 衰减。
-    T range = static_cast<T>(10);    ///< 平滑衰减到 0 的最大影响距离；<=0 表示不截断。
+    Vector<T, 3> position{0, 0, 0};   ///< 世界空间位置。
+    Vector<T, 3> color{1, 1, 1};      ///< 线性 RGB 光色。
+    T intensity = static_cast<T>(1);  ///< 点源强度缩放，进入 inverse-square 衰减。
+    T range = static_cast<T>(10);     ///< 平滑衰减到 0 的最大影响距离；<=0 表示不截断。
 };
 
 template <FloatingScalar T>
 struct SpotLightData {
     Vector<T, 3> position{0, 0, 0};
-    Vector<T, 3> direction{0, 0, -1}; ///< 光从灯向外传播的方向。
+    Vector<T, 3> direction{0, 0, -1};  ///< 光从灯向外传播的方向。
     Vector<T, 3> color{1, 1, 1};
     T intensity = static_cast<T>(1);
     T range = static_cast<T>(10);

@@ -31,12 +31,12 @@ RenderFrustum RenderFrustum::FromViewProjectionZO(const float4x4& viewProjection
     const float4 row3 = viewProjection[3];
 
     RenderFrustum result{};
-    result.planes_[0] = NormalizePlane(row3 + row0); // left:   x + w >= 0
-    result.planes_[1] = NormalizePlane(row3 - row0); // right: -x + w >= 0
-    result.planes_[2] = NormalizePlane(row3 + row1); // bottom:  y + w >= 0
-    result.planes_[3] = NormalizePlane(row3 - row1); // top:    -y + w >= 0
-    result.planes_[4] = NormalizePlane(row2);        // near:    z     >= 0 (ZO)
-    result.planes_[5] = NormalizePlane(row3 - row2); // far:    -z + w >= 0
+    result.planes_[0] = NormalizePlane(row3 + row0);  // left:   x + w >= 0
+    result.planes_[1] = NormalizePlane(row3 - row0);  // right: -x + w >= 0
+    result.planes_[2] = NormalizePlane(row3 + row1);  // bottom:  y + w >= 0
+    result.planes_[3] = NormalizePlane(row3 - row1);  // top:    -y + w >= 0
+    result.planes_[4] = NormalizePlane(row2);         // near:    z     >= 0 (ZO)
+    result.planes_[5] = NormalizePlane(row3 - row2);  // far:    -z + w >= 0
     return result;
 }
 

@@ -19,11 +19,11 @@ layout(set = 0, binding = 0) uniform PBRUBO {
     mat4 model;
     mat4 view;
     mat4 proj;
-    vec4 lightDir;       // xyz=光线在世界空间中的传播方向
-    vec4 lightColor;     // rgb=光强，a=unused
-    vec4 cameraPos;      // xyz=世界空间相机位置
-    vec4 baseColor;      // rgb=albedo，a=metallic
-    vec4 materialParams; // x=roughness, y=ao, zw=unused
+    vec4 lightDir;        // xyz=光线在世界空间中的传播方向
+    vec4 lightColor;      // rgb=光强，a=unused
+    vec4 cameraPos;       // xyz=世界空间相机位置
+    vec4 baseColor;       // rgb=albedo，a=metallic
+    vec4 materialParams;  // x=roughness, y=ao, zw=unused
     // 世界空间 -> 光源裁剪空间。Fragment Shader 用它查询当前片元在阴影图中的位置。
     mat4 lightViewProjection;
     // xy=1/ShadowMapSize，z=最小 bias，w=法线斜率 bias。

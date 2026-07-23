@@ -16,36 +16,36 @@ namespace rhi {
 /// Vulkan surface 由平台层创建，例如 GLFW、Win32、SDL 或 Android。
 /// 渲染后端只接收已经创建好的 VkSurfaceKHR，避免把窗口系统代码混进通用后端。
 struct RHIVulkanSurfaceDesc {
-    VkSurfaceKHR surface = VK_NULL_HANDLE; ///< 外部传入的 Vulkan surface。
-    std::function<VkSurfaceKHR(VkInstance)> createSurface; ///< 可选 surface 工厂；用于 GLFW 这类必须拿到 VkInstance 后才能创建 surface 的窗口库。
-    bool ownsSurface = false; ///< true 表示 RHIVulkan::Shutdown 时会销毁 surface。
+    VkSurfaceKHR surface = VK_NULL_HANDLE;                  ///< 外部传入的 Vulkan surface。
+    std::function<VkSurfaceKHR(VkInstance)> createSurface;  ///< 可选 surface 工厂；用于 GLFW 这类必须拿到 VkInstance 后才能创建 surface 的窗口库。
+    bool ownsSurface = false;                               ///< true 表示 RHIVulkan::Shutdown 时会销毁 surface。
 };
 
 /// Vulkan 后端初始化描述，组合通用 RHIBackendDesc 和 Vulkan 专用扩展需求。
 struct RHIVulkanDesc {
-    RHIBackendDesc backend{}; ///< 通用后端初始化参数。
-    RHIVulkanSurfaceDesc surface{}; ///< 可选 surface；没有 surface 时仍可做离屏渲染和计算。
-    std::vector<const char*> requiredInstanceExtensions; ///< 平台必须启用的 instance extensions。
-    std::vector<const char*> optionalInstanceExtensions; ///< 可选 instance extensions，支持则启用。
-    std::vector<const char*> requiredDeviceExtensions; ///< 必须启用的 device extensions。
-    std::vector<const char*> optionalDeviceExtensions; ///< 可选 device extensions，支持则启用。
-    std::vector<RHIQueueDesc> queues; ///< 期望队列；为空时默认请求 graphics/compute/transfer/present。
+    RHIBackendDesc backend{};                             ///< 通用后端初始化参数。
+    RHIVulkanSurfaceDesc surface{};                       ///< 可选 surface；没有 surface 时仍可做离屏渲染和计算。
+    std::vector<const char*> requiredInstanceExtensions;  ///< 平台必须启用的 instance extensions。
+    std::vector<const char*> optionalInstanceExtensions;  ///< 可选 instance extensions，支持则启用。
+    std::vector<const char*> requiredDeviceExtensions;    ///< 必须启用的 device extensions。
+    std::vector<const char*> optionalDeviceExtensions;    ///< 可选 device extensions，支持则启用。
+    std::vector<RHIQueueDesc> queues;                     ///< 期望队列；为空时默认请求 graphics/compute/transfer/present。
 };
 
 /// 暴露给上层调试或和现有 Vulkan 教程代码互操作的底层 Vulkan 句柄。
 struct RHIVulkanNativeHandles {
-    VkInstance instance = VK_NULL_HANDLE; ///< Vulkan instance。
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; ///< 选中的物理设备。
-    VkDevice device = VK_NULL_HANDLE; ///< Vulkan logical device。
-    VkSurfaceKHR surface = VK_NULL_HANDLE; ///< 当前 surface，可能为空。
-    VkQueue graphicsQueue = VK_NULL_HANDLE; ///< graphics queue。
-    VkQueue computeQueue = VK_NULL_HANDLE; ///< compute queue。
-    VkQueue transferQueue = VK_NULL_HANDLE; ///< transfer queue。
-    VkQueue presentQueue = VK_NULL_HANDLE; ///< present queue。
-    u32 graphicsQueueFamily = RHI_INVALID_INDEX; ///< graphics queue family index。
-    u32 computeQueueFamily = RHI_INVALID_INDEX; ///< compute queue family index。
-    u32 transferQueueFamily = RHI_INVALID_INDEX; ///< transfer queue family index。
-    u32 presentQueueFamily = RHI_INVALID_INDEX; ///< present queue family index。
+    VkInstance instance = VK_NULL_HANDLE;              ///< Vulkan instance。
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;  ///< 选中的物理设备。
+    VkDevice device = VK_NULL_HANDLE;                  ///< Vulkan logical device。
+    VkSurfaceKHR surface = VK_NULL_HANDLE;             ///< 当前 surface，可能为空。
+    VkQueue graphicsQueue = VK_NULL_HANDLE;            ///< graphics queue。
+    VkQueue computeQueue = VK_NULL_HANDLE;             ///< compute queue。
+    VkQueue transferQueue = VK_NULL_HANDLE;            ///< transfer queue。
+    VkQueue presentQueue = VK_NULL_HANDLE;             ///< present queue。
+    u32 graphicsQueueFamily = RHI_INVALID_INDEX;       ///< graphics queue family index。
+    u32 computeQueueFamily = RHI_INVALID_INDEX;        ///< compute queue family index。
+    u32 transferQueueFamily = RHI_INVALID_INDEX;       ///< transfer queue family index。
+    u32 presentQueueFamily = RHI_INVALID_INDEX;        ///< present queue family index。
 };
 
 /// 基于 RHIDefinitions.hpp 的 Vulkan 后端。
