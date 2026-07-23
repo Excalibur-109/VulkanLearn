@@ -1261,7 +1261,7 @@ static VulkanDeviceSupport queryVulkanDeviceSupport(VkPhysicalDevice device) {
 // 这里不要只看 Vulkan 是否暴露 feature，还要看本后端是否真的实现了对应资源模型和命令路径；
 // 例如硬件可能支持光追，但当前 renderer 没有 AS、SBT、ray pipeline，所以仍要返回 false。
 static bool supportsRequiredRenderFeatures(const VulkanDeviceSupport& support, const VulkanQueueFamilies& queues, RHIRenderFeature required) {
-    if (RHIHasAny(required, RHIRenderFeature::Compute)                 && queues.compute == RHI_INVALID_INDEX)                                        return false;
+    if (RHIHasAny(required, RHIRenderFeature::Compute)                 && queues.compute == RHI_INVALID_INDEX)                                    return false;
     if (RHIHasAny(required, RHIRenderFeature::SamplerAnisotropy)       && support.features.samplerAnisotropy != VK_TRUE)                          return false;
     if (RHIHasAny(required, RHIRenderFeature::GeometryShader)          && support.features.geometryShader != VK_TRUE)                             return false;
     if (RHIHasAny(required, RHIRenderFeature::Tessellation)            && support.features.tessellationShader != VK_TRUE)                         return false;

@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>RenderGraph 流程脑图</title>
+    <style>
+        :root {
+            --paper: #f4f6f3;
+            --surface: #ffffff;
+            --surface-alt: #eef1ee;
+            --ink: #1e2522;
+            --muted: #5e6963;
+            --line: #cfd7d2;
+            --line-strong: #9caaa2;
+            --green: #176b50;
+            --green-soft: #e3f1e9;
+            --blue: #285f8f;
+            --blue-soft: #e6eff7;
+            --rust: #a4472c;
+            --rust-soft: #f6e8e2;
+            --gold: #7c600d;
+            --gold-soft: #f5efd8;
+            --violet: #67568a;
+            --violet-soft: #eeeaf5;
+            --danger: #a03232;
+            --shadow: 0 12px 32px rgba(31, 45, 38, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 15px;
+            line-height: 1.65;
+            letter-spacing: 0;
+        }
+
+        button,
+        a {
+            font: inherit;
+        }
+
+        button {
+            letter-spacing: 0;
+        }
+
+        a {
+            color: var(--blue);
+            text-underline-offset: 3px;
+        }
+
+        code {
+            padding: 1px 5px;
+            color: #174d3a;
+            background: #e9eeeb;
+            border-radius: 3px;
+            font-family: Consolas, "Cascadia Code", monospace;
+            font-size: 0.92em;
+        }
+
+        .topbar {
+            position: sticky;
+            z-index: 20;
+            top: 0;
+            display: grid;
+            grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
+            align-items: center;
+            min-height: 68px;
+            padding: 10px 24px;
+            color: #f5f8f6;
+            background: #24352e;
+            border-bottom: 4px solid var(--rust);
+        }
+
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .brand strong {
+            font-size: 19px;
+            white-space: nowrap;
+        }
+
+        .brand span {
+            color: #b9cbc1;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            min-width: 0;
+            padding: 0 20px;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .tab {
+            min-height: 38px;
+            padding: 7px 12px;
+            color: #cbd7d0;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            color: #ffffff;
+            border-color: #50645a;
+        }
+
+        .tab[aria-selected="true"] {
+            color: #ffffff;
+            background: #365247;
+            border-color: #688075;
+        }
+
+        .guide-link {
+            color: #d8e4dd;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .page {
+            width: min(1580px, calc(100% - 36px));
+            margin: 0 auto;
+            padding: 24px 0 44px;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        .view-heading {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 24px;
+            margin: 0 0 18px;
+        }
+
+        .view-heading h1,
+        .view-heading h2 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.25;
+            letter-spacing: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .view-heading p {
+            max-width: 780px;
+            margin: 5px 0 0;
+            color: var(--muted);
+        }
+
+        .facts {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .fact {
+            padding: 5px 9px;
+            color: #36423c;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            align-items: start;
+            gap: 18px;
+        }
+
+        .diagram-surface {
+            min-width: 0;
+            padding: 22px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+        }
+
+        .diagram-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .diagram-label strong {
+            font-size: 16px;
+        }
+
+        .legend {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .legend i {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid currentColor;
+            border-radius: 2px;
+        }
+
+        .legend .declare { color: var(--blue); }
+        .legend .compile { color: var(--rust); }
+        .legend .plan { color: var(--green); }
+        .legend .execute { color: var(--gold); }
+
+        .detail-panel {
+            position: sticky;
+            top: 92px;
+            min-height: 420px;
+            padding: 20px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-top: 4px solid var(--green);
+            box-shadow: var(--shadow);
+        }
+
+        .detail-kicker {
+            margin: 0 0 5px;
+            color: var(--green);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .detail-panel h3 {
+            margin: 0;
+            font-size: 21px;
+            line-height: 1.3;
+            letter-spacing: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .detail-panel p {
+            margin: 12px 0;
+            color: #3f4944;
+        }
+
+        .detail-panel ul {
+            margin: 12px 0;
+            padding-left: 20px;
+        }
+
+        .detail-panel li + li {
+            margin-top: 7px;
+        }
+
+        .detail-source {
+            display: block;
+            margin-top: 18px;
+            padding-top: 13px;
+            border-top: 1px solid var(--line);
+            font-size: 13px;
+            overflow-wrap: anywhere;
+        }
+
+        .map-node {
+            position: relative;
+            width: 100%;
+            min-width: 0;
+            min-height: 82px;
+            padding: 13px 14px;
+            color: var(--ink);
+            text-align: left;
+            background: #ffffff;
+            border: 2px solid var(--line-strong);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+        }
+
+        .map-node:hover,
+        .map-node:focus-visible {
+            z-index: 2;
+            border-color: var(--ink);
+            box-shadow: 0 8px 18px rgba(30, 37, 34, 0.12);
+            outline: none;
+            transform: translateY(-2px);
+        }
+
+        .map-node.selected {
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(23, 107, 80, 0.14);
+        }
+
+        .map-node .eyebrow {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .map-node strong {
+            display: block;
+            font-size: 15px;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .map-node small {
+            display: block;
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+        }
+
+        .map-node.declare {
+            background: var(--blue-soft);
+            border-color: #88a8c4;
+        }
+
+        .map-node.compile {
+            background: var(--rust-soft);
+            border-color: #c9917e;
+        }
+
+        .map-node.plan {
+            background: var(--green-soft);
+            border-color: #78ad97;
+        }
+
+        .map-node.execute {
+            background: var(--gold-soft);
+            border-color: #b8a061;
+        }
+
+        .map-node.sync {
+            background: var(--violet-soft);
+            border-color: #9f92bb;
+        }
+
+        .map-node.root {
+            min-height: 108px;
+            color: #ffffff;
+            text-align: center;
+            background: #263b32;
+            border-color: #263b32;
+        }
+
+        .map-node.root .eyebrow,
+        .map-node.root small {
+            color: #c8d8d0;
+        }
+
+        .map-node.root strong {
+            font-size: 21px;
+        }
+
+        .overview-map {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) 54px minmax(210px, 1.08fr) 54px minmax(180px, 1fr);
+            grid-template-rows: repeat(3, minmax(96px, auto));
+            gap: 14px 0;
+            align-items: center;
+            min-height: 480px;
+        }
+
+        .overview-map .left-1 { grid-column: 1; grid-row: 1; }
+        .overview-map .left-2 { grid-column: 1; grid-row: 2; }
+        .overview-map .left-3 { grid-column: 1; grid-row: 3; }
+        .overview-map .root {
+            grid-column: 3;
+            grid-row: 1 / 4;
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .overview-map .right-1 { grid-column: 5; grid-row: 1; }
+        .overview-map .right-2 { grid-column: 5; grid-row: 2; }
+        .overview-map .right-3 { grid-column: 5; grid-row: 3; }
+
+        .branch-line {
+            position: relative;
+            height: 2px;
+            background: var(--line-strong);
+        }
+
+        .branch-line::after {
+            position: absolute;
+            top: 50%;
+            width: 8px;
+            height: 8px;
+            content: "";
+            background: var(--surface);
+            border-top: 2px solid var(--line-strong);
+            border-right: 2px solid var(--line-strong);
+        }
+
+        .branch-line.to-root::after {
+            right: -1px;
+            transform: translateY(-50%) rotate(45deg);
+        }
+
+        .branch-line.from-root::after {
+            right: -1px;
+            transform: translateY(-50%) rotate(45deg);
+        }
+
+        .overview-map .line-left-1 { grid-column: 2; grid-row: 1; }
+        .overview-map .line-left-2 { grid-column: 2; grid-row: 2; }
+        .overview-map .line-left-3 { grid-column: 2; grid-row: 3; }
+        .overview-map .line-right-1 { grid-column: 4; grid-row: 1; }
+        .overview-map .line-right-2 { grid-column: 4; grid-row: 2; }
+        .overview-map .line-right-3 { grid-column: 4; grid-row: 3; }
+
+        .flow-caption {
+            margin: 18px 0 0;
+            padding: 12px 14px;
+            color: #43504a;
+            background: var(--surface-alt);
+            border-left: 4px solid var(--green);
+        }
+
+        .stage-flow {
+            display: grid;
+            gap: 14px;
+        }
+
+        .stage-row {
+            display: grid;
+            grid-template-columns: minmax(124px, 1fr) 26px minmax(124px, 1fr) 26px minmax(124px, 1fr) 26px minmax(124px, 1fr) 26px minmax(124px, 1fr);
+            align-items: center;
+            gap: 7px;
+        }
+
+        .flow-arrow {
+            color: var(--rust);
+            text-align: center;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .row-turn {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-height: 28px;
+            padding-right: calc(10% - 3px);
+            color: var(--rust);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .stage-node {
+            min-height: 116px;
+        }
+
+        .stage-node .stage-index {
+            display: inline-block;
+            min-width: 25px;
+            margin-bottom: 8px;
+            color: var(--rust);
+            border-bottom: 2px solid currentColor;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .stage-node.plan .stage-index {
+            color: var(--green);
+        }
+
+        .stage-row.reverse {
+            direction: rtl;
+        }
+
+        .stage-row.reverse .map-node {
+            direction: ltr;
+        }
+
+        .stage-row.reverse .flow-arrow {
+            transform: rotate(180deg);
+        }
+
+        .runtime-flow {
+            display: grid;
+            gap: 16px;
+        }
+
+        .runtime-line {
+            display: grid;
+            grid-template-columns:
+                minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px
+                minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px
+                minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px
+                minmax(112px, 1fr);
+            align-items: stretch;
+            gap: 5px;
+        }
+
+        .runtime-line .map-node {
+            min-height: 96px;
+        }
+
+        .runtime-line > .flow-arrow {
+            align-self: center;
+            color: var(--gold);
+        }
+
+        .cache-flow {
+            display: grid;
+            grid-template-columns: minmax(160px, 0.75fr) 38px minmax(210px, 1fr) 38px minmax(250px, 1.4fr);
+            align-items: center;
+            gap: 10px;
+            padding: 16px;
+            background: var(--surface-alt);
+            border: 1px solid var(--line);
+        }
+
+        .cache-branches {
+            display: grid;
+            gap: 10px;
+        }
+
+        .cache-path {
+            display: grid;
+            grid-template-columns: 54px minmax(0, 1fr);
+            align-items: center;
+            gap: 8px;
+        }
+
+        .path-label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .compact-node {
+            min-height: 68px;
+            padding: 10px 12px;
+        }
+
+        .pbr-flow {
+            display: grid;
+            gap: 20px;
+        }
+
+        .resource-bank {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 9px;
+        }
+
+        .resource-node {
+            min-height: 74px;
+            padding: 11px 12px;
+        }
+
+        .main-pass-flow {
+            display: grid;
+            grid-template-columns: minmax(145px, 0.8fr) 34px minmax(170px, 1fr) 34px minmax(170px, 1fr) 34px minmax(145px, 0.8fr);
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pass-node {
+            min-height: 118px;
+        }
+
+        .dependency-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .hazard-grid,
+        .concept-grid,
+        .output-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .concept-section + .concept-section {
+            margin-top: 22px;
+        }
+
+        .concept-section h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            letter-spacing: 0;
+        }
+
+        .hazard-node {
+            min-height: 128px;
+        }
+
+        .hazard-node strong {
+            font-size: 19px;
+        }
+
+        .equation {
+            display: block;
+            margin-top: 8px;
+            color: #31413a;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .flag-list {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            border-top: 1px solid var(--line);
+            border-left: 1px solid var(--line);
+        }
+
+        .flag-item {
+            min-width: 0;
+            padding: 14px;
+            background: #ffffff;
+            border-right: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .flag-item strong {
+            display: block;
+            color: var(--blue);
+            overflow-wrap: anywhere;
+        }
+
+        .flag-item span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .output-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .static-note {
+            padding: 14px 16px;
+            color: #4b4430;
+            background: var(--gold-soft);
+            border-left: 4px solid var(--gold);
+        }
+
+        .noscript {
+            margin: 16px;
+            padding: 12px;
+            color: #ffffff;
+            background: var(--danger);
+        }
+
+        @media (max-width: 1260px) {
+            .topbar {
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+
+            .guide-link {
+                display: none;
+            }
+
+            .workspace {
+                grid-template-columns: minmax(0, 1fr) 300px;
+            }
+
+            .stage-row {
+                grid-template-columns: minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px minmax(112px, 1fr) 20px minmax(112px, 1fr);
+                gap: 4px;
+            }
+
+            .runtime-line {
+                grid-template-columns: 1fr;
+            }
+
+            .runtime-line > .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+
+        @media (max-width: 980px) {
+            .topbar {
+                position: static;
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .brand {
+                justify-content: center;
+            }
+
+            .tabs {
+                justify-content: flex-start;
+                padding: 0;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-panel {
+                position: static;
+                min-height: 0;
+            }
+
+            .stage-row {
+                grid-template-columns: 1fr;
+            }
+
+            .stage-row .flow-arrow {
+                transform: rotate(90deg);
+            }
+
+            .stage-row.reverse {
+                direction: ltr;
+            }
+
+            .stage-row.reverse .flow-arrow {
+                transform: rotate(90deg);
+            }
+
+            .row-turn {
+                justify-content: center;
+                padding: 0;
+            }
+
+            .resource-bank {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .main-pass-flow {
+                grid-template-columns: 1fr;
+            }
+
+            .main-pass-flow .flow-arrow {
+                transform: rotate(90deg);
+            }
+
+            .flag-list {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .page {
+                width: min(100% - 20px, 1580px);
+                padding-top: 16px;
+            }
+
+            .view-heading {
+                display: block;
+            }
+
+            .view-heading h1,
+            .view-heading h2 {
+                font-size: 23px;
+            }
+
+            .facts {
+                justify-content: flex-start;
+                margin-top: 12px;
+            }
+
+            .diagram-surface {
+                padding: 14px;
+            }
+
+            .diagram-label {
+                display: block;
+            }
+
+            .legend {
+                margin-top: 8px;
+            }
+
+            .overview-map {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+                gap: 10px;
+                min-height: 0;
+            }
+
+            .overview-map .root,
+            .overview-map .left-1,
+            .overview-map .left-2,
+            .overview-map .left-3,
+            .overview-map .right-1,
+            .overview-map .right-2,
+            .overview-map .right-3 {
+                grid-column: 1;
+                grid-row: auto;
+            }
+
+            .overview-map .root { order: -1; }
+            .overview-map .branch-line { display: none; }
+
+            .cache-flow {
+                grid-template-columns: 1fr;
+            }
+
+            .cache-flow > .flow-arrow {
+                transform: rotate(90deg);
+            }
+
+            .runtime-line,
+            .resource-bank,
+            .dependency-strip,
+            .hazard-grid,
+            .concept-grid,
+            .output-grid,
+            .flag-list {
+                grid-template-columns: 1fr;
+            }
+
+            .map-node,
+            .stage-node,
+            .pass-node,
+            .hazard-node {
+                min-height: 0;
+            }
+        }
+
+        @media print {
+            .topbar,
+            .detail-panel {
+                display: none;
+            }
+
+            .page {
+                width: 100%;
+            }
+
+            .view {
+                display: block;
+                break-after: page;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .diagram-surface {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="brand">
+        <strong>RenderGraph 流程脑图</strong>
+        <span>VulkanLearn 当前实现</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="RenderGraph 图解视图">
+        <button class="tab" role="tab" aria-selected="true" aria-controls="overview" data-view="overview">总览脑图</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="compiler" data-view="compiler">编译 0–9</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="runtime" data-view="runtime">逐帧执行</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="pbr" data-view="pbr">PBRDemo 实例</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="concepts" data-view="concepts">概念速查</button>
+    </nav>
+    <a class="guide-link" href="RHI_RenderGraph_Architecture.html">打开完整架构文档</a>
+</header>
+
+<noscript><div class="noscript">此脑图需要 JavaScript 来切换视图和显示节点详情。</div></noscript>
+
+<main class="page">
+    <section class="view active" id="overview" role="tabpanel">
+        <div class="view-heading">
+            <div>
+                <h1>RenderGraph 不是渲染器，而是帧任务编译器</h1>
+                <p>上层声明资源如何被 pass 读写；编译器推导顺序、裁剪、生命周期和同步；后端只执行稳定计划。</p>
+            </div>
+            <div class="facts" aria-label="实现摘要">
+                <span class="fact">4 种 Pass</span>
+                <span class="fact">3 类 Hazard</span>
+                <span class="fact">10 个编译阶段</span>
+                <span class="fact">3 个 RHI 后端</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="diagram-surface">
+                <div class="diagram-label">
+                    <strong>声明 → 编译 → 执行</strong>
+                    <div class="legend" aria-label="节点颜色说明">
+                        <span class="declare"><i></i>声明</span>
+                        <span class="compile"><i></i>编译</span>
+                        <span class="plan"><i></i>计划</span>
+                        <span class="execute"><i></i>执行</span>
+                    </div>
+                </div>
+
+                <div class="overview-map">
+                    <button class="map-node declare left-1" data-detail="resources">
+                        <span class="eyebrow">输入声明</span>
+                        <strong>Resources</strong>
+                        <small>Buffer / Texture / SwapchainImage</small>
+                    </button>
+                    <div class="branch-line to-root line-left-1" aria-hidden="true"></div>
+
+                    <button class="map-node declare left-2" data-detail="passes">
+                        <span class="eyebrow">输入声明</span>
+                        <strong>Passes</strong>
+                        <small>reads / writes / attachments / dependsOn</small>
+                    </button>
+                    <div class="branch-line to-root line-left-2" aria-hidden="true"></div>
+
+                    <button class="map-node declare left-3" data-detail="workloads">
+                        <span class="eyebrow">本帧命令</span>
+                        <strong>Workloads</strong>
+                        <small>draw / dispatch / copy / query</small>
+                    </button>
+                    <div class="branch-line to-root line-left-3" aria-hidden="true"></div>
+
+                    <button class="map-node root selected" data-detail="rendergraph">
+                        <span class="eyebrow">核心职责</span>
+                        <strong>RenderGraph</strong>
+                        <small>把声明式帧图编译为确定的 ExecutionPlan</small>
+                    </button>
+
+                    <div class="branch-line from-root line-right-1" aria-hidden="true"></div>
+                    <button class="map-node compile right-1" data-detail="compiler-core">
+                        <span class="eyebrow">编译器</span>
+                        <strong>依赖与裁剪</strong>
+                        <small>RAW / WAR / WAW · topo sort · culling</small>
+                    </button>
+
+                    <div class="branch-line from-root line-right-2" aria-hidden="true"></div>
+                    <button class="map-node plan right-2" data-detail="execution-plan">
+                        <span class="eyebrow">静态输出</span>
+                        <strong>ExecutionPlan</strong>
+                        <small>compiled passes / lifetimes / slots / transitions</small>
+                    </button>
+
+                    <div class="branch-line from-root line-right-3" aria-hidden="true"></div>
+                    <button class="map-node execute right-3" data-detail="backends">
+                        <span class="eyebrow">后端执行</span>
+                        <strong>Vulkan · D3D11 · D3D12</strong>
+                        <small>解析句柄、应用 barrier、录制并提交</small>
+                    </button>
+                </div>
+
+                <p class="flow-caption"><strong>边界：</strong>Graph 决定“先做什么、资源处于什么状态”；Workload 决定“具体画什么”；后端决定“翻译成哪种原生 API”。</p>
+            </div>
+
+            <aside class="detail-panel" aria-live="polite">
+                <p class="detail-kicker" id="detail-kicker">核心职责</p>
+                <h3 id="detail-title">RenderGraph</h3>
+                <div id="detail-body">
+                    <p>它读取资源、Pass 和 Workload 声明，生成后端可直接线性消费的执行计划。</p>
+                    <ul>
+                        <li>不负责场景收集、材质分类或可见性判断。</li>
+                        <li>不在业务层暴露 Vulkan/D3D barrier。</li>
+                        <li>不把每帧变化的 draw 参数写入缓存计划。</li>
+                    </ul>
+                </div>
+                <a class="detail-source" id="detail-source" href="../RenderGraph/RHIRenderGraph.cpp">源码：RenderGraph/RHIRenderGraph.cpp</a>
+            </aside>
+        </div>
+    </section>
+
+    <section class="view" id="compiler" role="tabpanel" hidden>
+        <div class="view-heading">
+            <div>
+                <h2>CompileRHIRenderGraph：从声明到计划的 0–9 阶段</h2>
+                <p>前半段建立正确的依赖图，后半段压缩为后端所需的整数索引、物理槽和 transition。</p>
+            </div>
+            <div class="facts">
+                <span class="fact">两次稳定拓扑排序</span>
+                <span class="fact">错误批量收集</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="diagram-surface">
+                <div class="diagram-label">
+                    <strong>编译主流程</strong>
+                    <span class="legend">阶段 0–5：正确性　阶段 6–9：压缩与执行准备</span>
+                </div>
+
+                <div class="stage-flow">
+                    <div class="stage-row">
+                        <button class="map-node compile stage-node" data-detail="stage-0"><span class="stage-index">00</span><strong>预分配计划</strong><small>hash · lifetime · slot · culled 数组</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile stage-node" data-detail="stage-1"><span class="stage-index">01</span><strong>唯一名称表</strong><small>资源 / Pass / Workload 名称 → 下标</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile stage-node" data-detail="stage-2"><span class="stage-index">02</span><strong>校验与归一化</strong><small>类型匹配 · 引用解析 · Usage 合并</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile stage-node" data-detail="stage-3"><span class="stage-index">03</span><strong>显式依赖排序</strong><small>只处理 dependsOnPasses</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile stage-node" data-detail="stage-4"><span class="stage-index">04</span><strong>推导 Hazard</strong><small>RAW · WAR · WAW · 未初始化读取</small></button>
+                    </div>
+
+                    <div class="row-turn" aria-hidden="true">↓</div>
+
+                    <div class="stage-row reverse">
+                        <button class="map-node compile stage-node" data-detail="stage-5"><span class="stage-index">05</span><strong>最终拓扑排序</strong><small>显式边 + 数据依赖边</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node plan stage-node" data-detail="stage-6"><span class="stage-index">06</span><strong>反向活性裁剪</strong><small>从输出、Present、副作用根回溯</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node plan stage-node" data-detail="stage-7"><span class="stage-index">07</span><strong>压缩存活 Pass</strong><small>source index → compiled index</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node plan stage-node" data-detail="stage-8"><span class="stage-index">08</span><strong>生命周期与槽</strong><small>first/last pass · transient alias</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node plan stage-node" data-detail="stage-9"><span class="stage-index">09</span><strong>Transition</strong><small>状态 · 阶段 · 访问 · 队列 · alias</small></button>
+                    </div>
+                </div>
+
+                <p class="flow-caption"><strong>为什么排序两次：</strong>先用显式边得到可信扫描顺序，再沿该顺序推导资源 Hazard，最后对完整依赖图排序。</p>
+            </div>
+
+            <aside class="detail-panel" aria-live="polite">
+                <p class="detail-kicker">编译入口</p>
+                <h3>CompileRHIRenderGraph</h3>
+                <div>
+                    <p>编译成功后，后端不再进行拓扑排序，也不再通过字符串查找资源。</p>
+                    <ul>
+                        <li>任何阶段发现声明错误都会返回 <code>errors</code>。</li>
+                        <li>稳定排序让调试日志和测试结果可重复。</li>
+                        <li>输出只保留可跨帧缓存的静态结构。</li>
+                    </ul>
+                </div>
+                <a class="detail-source" href="../RenderGraph/RHIRenderGraph.cpp">源码：CompileRHIRenderGraph</a>
+            </aside>
+        </div>
+    </section>
+
+    <section class="view" id="runtime" role="tabpanel" hidden>
+        <div class="view-heading">
+            <div>
+                <h2>一帧如何经过缓存、后端和 GPU</h2>
+                <p>静态 ExecutionPlan 可以复用，但 imported handle、上传数据、clear value、viewport 和 draw 参数始终读取当前帧 Packet。</p>
+            </div>
+            <div class="facts">
+                <span class="fact">缓存键：structureHash</span>
+                <span class="fact">当前：单主命令流</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="diagram-surface">
+                <div class="diagram-label">
+                    <strong>CPU 声明到 GPU Present</strong>
+                    <div class="legend"><span class="declare"><i></i>当前帧</span><span class="plan"><i></i>缓存计划</span><span class="execute"><i></i>后端/GPU</span></div>
+                </div>
+
+                <div class="runtime-flow">
+                    <div class="cache-flow">
+                        <button class="map-node declare" data-detail="frame-packet"><span class="eyebrow">Renderer / Demo</span><strong>RHIFramePacket</strong><small>graph + workloads + uploads + submissions + present</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile" data-detail="structure-hash"><span class="eyebrow">RHIDevice</span><strong>计算 Structure Hash</strong><small>只覆盖影响执行计划的静态结构</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <div class="cache-branches">
+                            <div class="cache-path">
+                                <span class="path-label">命中</span>
+                                <button class="map-node plan compact-node" data-detail="cache-hit"><strong>复用 cachedGraphPlan</strong><small>跳过编译</small></button>
+                            </div>
+                            <div class="cache-path">
+                                <span class="path-label">未命中</span>
+                                <button class="map-node compile compact-node" data-detail="cache-miss"><strong>Compile → 更新缓存</strong><small>失败则本帧不提交</small></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flow-arrow" aria-hidden="true">↓</div>
+
+                    <div class="runtime-line">
+                        <button class="map-node execute" data-detail="validate-submit"><span class="eyebrow">后端入口</span><strong>校验提交覆盖</strong><small>passNames 顺序与依赖</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node execute" data-detail="resolve-native"><span class="eyebrow">资源准备</span><strong>解析原生资源</strong><small>Imported handle / transient slot</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node execute" data-detail="uploads"><span class="eyebrow">数据准备</span><strong>执行 Uploads</strong><small>直接写或 staging copy</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node sync" data-detail="apply-transitions"><span class="eyebrow">每个 Pass 前</span><strong>应用 Transitions</strong><small>状态 / 可见性 / alias</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node execute" data-detail="record-workload"><span class="eyebrow">命令录制</span><strong>执行 Workload</strong><small>copy / clear / draw / dispatch</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node execute" data-detail="submit-present"><span class="eyebrow">队列</span><strong>Submit / Present</strong><small>wait / signal / fence</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node plan" data-detail="deferred-release"><span class="eyebrow">帧完成后</span><strong>延迟回收</strong><small>确认 GPU 完成再复用</small></button>
+                    </div>
+                </div>
+
+                <p class="flow-caption"><strong>双重状态跟踪：</strong>编译器记录图内逻辑前序用途；后端仍维护 native 真实状态，因为 imported 资源可能刚经历 acquire、upload 或图外操作。</p>
+            </div>
+
+            <aside class="detail-panel" aria-live="polite">
+                <p class="detail-kicker">运行时入口</p>
+                <h3>RHIDevice::SubmitFrame</h3>
+                <div>
+                    <p>设备门面先处理结构缓存，再把“当前 Packet + 缓存 Plan”一起交给所选后端。</p>
+                    <ul>
+                        <li>拓扑不变时不重复编译。</li>
+                        <li>动态参数不会因为计划缓存而冻结。</li>
+                        <li>三个后端消费同一份抽象计划。</li>
+                    </ul>
+                </div>
+                <a class="detail-source" href="../Core/RHIDevice.cpp">源码：Core/RHIDevice.cpp</a>
+            </aside>
+        </div>
+    </section>
+
+    <section class="view" id="pbr" role="tabpanel" hidden>
+        <div class="view-heading">
+            <div>
+                <h2>PBRDemo：ShadowMap → OpaquePBR → Present</h2>
+                <p>当前 Demo 的所有图资源均为 Imported；RenderGraph 管理本帧访问顺序和状态，但不拥有它们的创建与销毁。</p>
+            </div>
+            <div class="facts">
+                <span class="fact">3 Pass</span>
+                <span class="fact">4 Buffer + 4 Texture</span>
+                <span class="fact">2 Raster Workload</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="diagram-surface">
+                <div class="diagram-label">
+                    <strong>当前 PBR 帧图</strong>
+                    <div class="legend"><span class="declare"><i></i>资源</span><span class="compile"><i></i>光栅 Pass</span><span class="execute"><i></i>呈现</span></div>
+                </div>
+
+                <div class="pbr-flow">
+                    <div class="resource-bank">
+                        <button class="map-node declare resource-node" data-detail="pbr-geometry"><strong>Vertices + Indices</strong><small>两个 Raster Pass 读取</small></button>
+                        <button class="map-node declare resource-node" data-detail="pbr-uniforms"><strong>Sphere / Plane Uniform</strong><small>每帧上传，VS/FS 读取</small></button>
+                        <button class="map-node declare resource-node" data-detail="pbr-depths"><strong>ShadowDepth + Depth</strong><small>阴影深度与主相机深度</small></button>
+                        <button class="map-node declare resource-node" data-detail="pbr-skybox"><strong>SkyboxCube</strong><small>六层 sRGB cubemap</small></button>
+                        <button class="map-node declare resource-node" data-detail="pbr-backbuffer"><strong>BackBuffer</strong><small>颜色附件与最终呈现目标</small></button>
+                    </div>
+
+                    <div class="main-pass-flow">
+                        <button class="map-node declare" data-detail="pbr-upload"><span class="eyebrow">帧开始</span><strong>Uploads</strong><small>静态 Mesh/Cubemap 一次，UBO 每帧</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile pass-node" data-detail="pbr-shadow"><span class="eyebrow">Pass 1 · Raster</span><strong>ShadowMap</strong><small>Sphere depth-only<br>写 ShadowDepth</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node compile pass-node" data-detail="pbr-opaque"><span class="eyebrow">Pass 2 · Raster</span><strong>OpaquePBR</strong><small>读 ShadowDepth / SkyboxCube<br>写 BackBuffer / Depth</small></button>
+                        <div class="flow-arrow" aria-hidden="true">→</div>
+                        <button class="map-node execute pass-node" data-detail="pbr-present"><span class="eyebrow">Pass 3 · Present</span><strong>Present</strong><small>BackBuffer → Present 状态</small></button>
+                    </div>
+
+                    <div class="dependency-strip">
+                        <button class="map-node sync compact-node" data-detail="pbr-shadow-edge"><strong>RAW：ShadowDepth</strong><small>DepthWrite → ShaderRead</small></button>
+                        <button class="map-node sync compact-node" data-detail="pbr-backbuffer-edge"><strong>RAW：BackBuffer</strong><small>RenderTarget → Present</small></button>
+                        <button class="map-node plan compact-node" data-detail="pbr-roots"><strong>裁剪根</strong><small>Imported 输出 + Present，三个 Pass 均存活</small></button>
+                    </div>
+                </div>
+
+                <p class="flow-caption"><strong>Workload：</strong>ShadowMap 只提交球体的 depth-only indexed draw；OpaquePBR 依次提交球体、地面和天空盒绘制；Present 没有 Workload。</p>
+            </div>
+
+            <aside class="detail-panel" aria-live="polite">
+                <p class="detail-kicker">真实示例</p>
+                <h3>PBRDemo::BuildFrame</h3>
+                <div>
+                    <p>同一份 <code>ShadowDepth</code> 声明先写后读，编译器自动建立 Pass 依赖并生成状态转换。</p>
+                    <ul>
+                        <li>Vulkan：image layout/access barrier。</li>
+                        <li>D3D12：DEPTH_WRITE → PIXEL_SHADER_RESOURCE。</li>
+                        <li>D3D11：按计划顺序解绑 DSV 后绑定 SRV。</li>
+                    </ul>
+                </div>
+                <a class="detail-source" href="../PBRDemo/main.cpp">源码：PBRDemo/main.cpp</a>
+            </aside>
+        </div>
+    </section>
+
+    <section class="view" id="concepts" role="tabpanel" hidden>
+        <div class="view-heading">
+            <div>
+                <h2>依赖、资源标志与 ExecutionPlan 速查</h2>
+                <p>这些概念决定一个 Pass 为什么必须等待、为什么可以被裁剪，以及逻辑资源能否共享物理槽。</p>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="diagram-surface">
+                <div class="concept-section">
+                    <h3>三类数据 Hazard</h3>
+                    <div class="hazard-grid">
+                        <button class="map-node compile hazard-node" data-detail="hazard-raw"><span class="eyebrow">Read After Write</span><strong>RAW</strong><small>消费者必须看到生产者写入的结果。</small><span class="equation">Writer → Reader</span></button>
+                        <button class="map-node compile hazard-node" data-detail="hazard-war"><span class="eyebrow">Write After Read</span><strong>WAR</strong><small>新写入不能覆盖仍被旧读取使用的数据。</small><span class="equation">Readers → Writer</span></button>
+                        <button class="map-node compile hazard-node" data-detail="hazard-waw"><span class="eyebrow">Write After Write</span><strong>WAW</strong><small>多个写入必须保持确定的先后顺序。</small><span class="equation">Last Writer → Writer</span></button>
+                    </div>
+                </div>
+
+                <div class="concept-section">
+                    <h3>资源标志</h3>
+                    <div class="flag-list">
+                        <div class="flag-item"><strong>Imported</strong><span>图外创建；Graph 不负责生命周期。</span></div>
+                        <div class="flag-item"><strong>Exported</strong><span>结果要在图外继续使用，是裁剪根。</span></div>
+                        <div class="flag-item"><strong>Transient</strong><span>仅在图内短期存在，可压缩生命周期。</span></div>
+                        <div class="flag-item"><strong>AllowAliasing</strong><span>允许与不重叠且描述兼容的资源复用槽。</span></div>
+                        <div class="flag-item"><strong>NeverCull</strong><span>即使输出无人读取也必须保留。</span></div>
+                    </div>
+                </div>
+
+                <div class="concept-section">
+                    <h3>ExecutionPlan 的四类核心输出</h3>
+                    <div class="output-grid">
+                        <button class="map-node plan" data-detail="plan-passes"><strong>Compiled Passes</strong><small>存活顺序、依赖、附件整数索引</small></button>
+                        <button class="map-node plan" data-detail="plan-lifetimes"><strong>Lifetimes</strong><small>每个逻辑资源的 firstPass / lastPass</small></button>
+                        <button class="map-node plan" data-detail="plan-slots"><strong>Allocation Slots</strong><small>逻辑资源 → 帧内物理槽</small></button>
+                        <button class="map-node sync" data-detail="plan-transitions"><strong>Transitions</strong><small>before/after · stage/access · queue</small></button>
+                    </div>
+                </div>
+
+                <div class="concept-section static-note">
+                    <strong>当前实现边界：</strong>queue 字段已经进入计划，但 Vulkan、D3D11、D3D12 目前仍以一个主 command stream/list/context 执行整帧；真正异步 Compute/Transfer 的 queue batch 尚未实现。
+                </div>
+            </div>
+
+            <aside class="detail-panel" aria-live="polite">
+                <p class="detail-kicker">依赖速查</p>
+                <h3>RAW / WAR / WAW</h3>
+                <div>
+                    <p>Hazard 是同一资源上相邻读写之间的顺序约束，不等同于资源状态转换。</p>
+                    <ul>
+                        <li>依赖边解决“哪个 Pass 先执行”。</li>
+                        <li>Transition 解决“访问何时可见、资源处于什么状态”。</li>
+                        <li>两者都由 Graph 声明自动推导。</li>
+                    </ul>
+                </div>
+                <a class="detail-source" href="../RenderGraph/RHIRenderGraph.cpp">源码：HazardState 与编译阶段 4</a>
+            </aside>
+        </div>
+    </section>
+</main>
+
+<script>
+    const details = {
+        "rendergraph": {
+            kicker: "核心职责",
+            title: "RenderGraph",
+            body: `<p>它读取资源、Pass 和 Workload 声明，生成后端可直接线性消费的执行计划。</p><ul><li>不负责场景收集、材质分类或可见性判断。</li><li>不在业务层暴露 Vulkan/D3D barrier。</li><li>不把每帧变化的 draw 参数写入缓存计划。</li></ul>`,
+            href: "../RenderGraph/RHIRenderGraph.cpp",
+            source: "源码：RenderGraph/RHIRenderGraph.cpp"
+        },
+        "resources": {
+            kicker: "输入声明",
+            title: "Resources",
+            body: `<p>资源通过唯一名称进入 Graph，分为 Buffer、Texture 和索引 texture 数组的 SwapchainImage。</p><ul><li><code>Imported</code> 绑定外部句柄。</li><li>内部资源由后端按 allocation slot 创建。</li><li>状态、usage、尺寸和格式参与编译与兼容性判断。</li></ul>`,
+            href: "../RHIDefinitions.hpp",
+            source: "源码：RHIRenderGraphBufferDesc / TextureDesc"
+        },
+        "passes": {
+            kicker: "输入声明",
+            title: "Passes",
+            body: `<p>Pass 描述资源关系，不保存具体 draw 参数。</p><ul><li><code>reads</code> 与 <code>writes</code> 形成数据依赖。</li><li>Raster attachment 自动转换成读写 Usage。</li><li><code>dependsOnPasses</code> 只表达无法通过资源描述的顺序。</li></ul>`,
+            href: "../RHIDefinitions.hpp",
+            source: "源码：RHIRenderGraphPassDesc"
+        },
+        "workloads": {
+            kicker: "本帧命令",
+            title: "Workloads",
+            body: `<p>Workload 用 <code>passName</code> 与 Pass 关联，保存当前帧真正要录制的命令。</p><ul><li>Raster：draw / indexed draw。</li><li>Compute：dispatch。</li><li>Copy：buffer/texture copy、blit、mipmap。</li></ul>`,
+            href: "../RHIDefinitions.hpp",
+            source: "源码：RHIRenderPassWorkload"
+        },
+        "compiler-core": {
+            kicker: "编译器",
+            title: "依赖与裁剪",
+            body: `<p>编译器先把字符串声明解析成整数资源 ID，再建立完整有向无环图。</p><ul><li>RAW、WAR、WAW 补齐隐式边。</li><li>稳定拓扑排序检测环并确定顺序。</li><li>从输出根反向标记存活 Pass。</li></ul>`,
+            href: "../RenderGraph/RHIRenderGraph.cpp",
+            source: "源码：CompileRHIRenderGraph 阶段 1–7"
+        },
+        "execution-plan": {
+            kicker: "静态输出",
+            title: "ExecutionPlan",
+            body: `<p>计划只保存稳定索引和编译结果，因此同一拓扑可以跨帧缓存。</p><ul><li>存活 Pass 顺序与依赖。</li><li>资源生命周期和 allocation slot。</li><li>每个 Pass 前需要的 transition。</li></ul>`,
+            href: "../RenderGraph/RHIRenderGraph.hpp",
+            source: "源码：RHIRenderGraphExecutionPlan"
+        },
+        "backends": {
+            kicker: "后端执行",
+            title: "Vulkan / D3D11 / D3D12",
+            body: `<p>三个后端接收相同的 Packet 和 Plan，但按各自 API 的同步模型执行。</p><ul><li>Vulkan：layout、pipeline stage、access mask。</li><li>D3D12：resource transition / UAV barrier。</li><li>D3D11：顺序执行与绑定冲突解除。</li></ul>`,
+            href: "../Vulkan/RHIVulkanFrame.inl",
+            source: "源码：各后端 *Frame.inl"
+        },
+        "stage-0": { kicker: "阶段 0", title: "预分配计划数组", body: `<p>计算结构哈希，并按声明数量初始化 lifetime、slot 和 culled 数组。</p><ul><li>空资源用 <code>RHI_INVALID_INDEX</code> 表示未使用。</li><li>这些数组与源资源下标保持一一对应。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 0" },
+        "stage-1": { kicker: "阶段 1", title: "建立唯一名称表", body: `<p>把 Buffer、Texture、Pass、Workload 名称映射为整数下标。</p><ul><li>拒绝空名称和重复名称。</li><li>Imported 资源必须携带有效外部句柄。</li><li>后端不再做字符串查找。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 1" },
+        "stage-2": { kicker: "阶段 2", title: "校验并归一化 Usage", body: `<p>检查 Pass 类型与 Workload 命令是否匹配，并解析所有资源引用。</p><ul><li>同一 Pass 对同一资源的重复声明会合并。</li><li>状态冲突会成为编译错误。</li><li>Attachment 会转换为标准读写 Usage。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 2" },
+        "stage-3": { kicker: "阶段 3", title: "显式依赖拓扑排序", body: `<p>只使用 <code>dependsOnPasses</code> 建立第一版稳定顺序。</p><ul><li>此时尚未加入资源 Hazard。</li><li>先确定扫描顺序，允许消费者在源码中写在生产者之前。</li><li>显式依赖成环会立即失败。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 3" },
+        "stage-4": { kicker: "阶段 4", title: "推导 RAW / WAR / WAW", body: `<p>沿显式顺序维护每个资源的 lastWriter 和 readers。</p><ul><li>读依赖最近写入者。</li><li>写依赖最近写入者和尚未结束的读者。</li><li>内部资源首次写入前被读取属于错误。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 4" },
+        "stage-5": { kicker: "阶段 5", title: "最终稳定拓扑排序", body: `<p>对“显式边 + Hazard 边”再次排序，形成完整执行顺序。</p><ul><li>检测所有依赖形成的环。</li><li>多个 Pass 同时可执行时保留声明顺序。</li><li>结果可重复，便于测试与抓帧。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 5" },
+        "stage-6": { kicker: "阶段 6", title: "从根 Pass 反向裁剪", body: `<p>Present、副作用、不可裁剪以及写 Imported/Exported/NeverCull 资源的 Pass 成为根。</p><ul><li>从根沿 dependencies 反向遍历。</li><li>不可抵达任何根的 Pass 标记为 dead。</li><li>无用中间结果不会进入执行计划。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 6" },
+        "stage-7": { kicker: "阶段 7", title: "压缩存活 Pass", body: `<p>删除 dead Pass，把源 Pass 下标转换成紧凑 compiled 下标。</p><ul><li>保留 <code>sourcePassIndex</code> 读取当前帧动态数据。</li><li>Attachment 名称解析成 texture 下标。</li><li>依赖同步转换为 compiled 下标。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 7" },
+        "stage-8": { kicker: "阶段 8", title: "生命周期与物理槽", body: `<p>统计逻辑资源第一次和最后一次使用的 compiled Pass。</p><ul><li>只有 <code>lastPass &lt; firstPass</code> 才能复用。</li><li>资源必须允许 alias 且描述完全兼容。</li><li>Imported 与未使用资源不分配内部槽。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 8" },
+        "stage-9": { kicker: "阶段 9", title: "分配依赖与 Transition", body: `<p>物理槽换主人时补 allocation dependency，并为每个 Pass 生成资源转换。</p><ul><li>状态、队列变化需要 barrier。</li><li>任一访问写入时，即使状态相同也需要内存依赖。</li><li>纯 read→read 且状态/队列不变可以省略。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 9" },
+        "frame-packet": { kicker: "当前帧输入", title: "RHIFramePacket", body: `<p>一帧完整数据包同时携带高层输入和 GPU 执行声明。</p><ul><li><code>graph</code> 描述静态资源关系。</li><li><code>workloads</code> 保存当前命令。</li><li><code>uploads</code>、<code>submissions</code>、<code>present</code> 完成帧边界工作。</li></ul>`, href: "../RHIDefinitions.hpp", source: "源码：RHIFramePacket" },
+        "structure-hash": { kicker: "计划缓存", title: "HashRHIRenderGraphStructure", body: `<p>哈希只覆盖会影响依赖、裁剪、槽分配和 barrier 的结构字段。</p><ul><li>包含资源描述、Pass 类型和静态 Usage。</li><li>不包含 clear value、viewport、draw 参数和 upload 数据。</li><li>拓扑变化才触发重新编译。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：HashRHIRenderGraphStructure" },
+        "cache-hit": { kicker: "缓存命中", title: "复用 cachedGraphPlan", body: `<p>结构哈希相同意味着静态执行计划仍然适用。</p><ul><li>省去拓扑、裁剪、lifetime 和 barrier 推导。</li><li>后端仍读取当前 Packet 的动态数据。</li></ul>`, href: "../Core/RHIDevice.cpp", source: "源码：RHIDevice::SubmitFrame" },
+        "cache-miss": { kicker: "缓存未命中", title: "Compile 并更新缓存", body: `<p>首帧或结构变化时重新编译。</p><ul><li>编译失败不会覆盖上一份可用计划。</li><li>错误文本通过 <code>errorMessage</code> 返回。</li><li>成功后移动新 Plan 到设备缓存。</li></ul>`, href: "../Core/RHIDevice.cpp", source: "源码：RHIDevice::SubmitFrame" },
+        "validate-submit": { kicker: "后端入口", title: "Validate Submissions", body: `<p>当前后端支持空 submissions 自动提交，或一个覆盖全部存活 Pass 的提交描述。</p><ul><li>检查遗漏和重复 Pass。</li><li>检查 compiled dependency 顺序。</li><li>真正多队列 batch 尚未实现。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：ValidateRHIRenderGraphSubmissions" },
+        "resolve-native": { kicker: "资源准备", title: "解析原生资源", body: `<p>后端把逻辑资源索引映射为本帧实际 native resource。</p><ul><li>Imported：读取当前帧 externalHandle。</li><li>Internal：按 allocation slot 创建或取得资源。</li><li>同一槽可服务多个生命周期不重叠的逻辑资源。</li></ul>`, href: "../Vulkan/RHIVulkanFrame.inl", source: "源码：各后端 RecordAndSubmitFrame" },
+        "uploads": { kicker: "数据准备", title: "执行 Uploads", body: `<p>上传发生在图 Pass 执行前，并更新后端维护的真实资源状态。</p><ul><li>CPU 可见资源可以直接映射写入。</li><li>GPU-only 资源经 staging 和 copy。</li><li>上传临时资源要等 GPU 完成后释放。</li></ul>`, href: "../D3D12/RHID3D12Frame.inl", source: "源码：各后端上传路径" },
+        "apply-transitions": { kicker: "每个 Pass 前", title: "应用 Transitions", body: `<p>Transition 把编译器的同步需求翻译为后端操作。</p><ul><li><code>before/after</code>：逻辑状态。</li><li><code>stage/access</code>：生产和消费可见性。</li><li><code>discardContents/aliasingBarrier</code>：内容保留与槽复用。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.hpp", source: "源码：RHIRenderGraphTransition" },
+        "record-workload": { kicker: "命令录制", title: "执行 Workload", body: `<p>后端通过 compiled Pass 的 <code>workloadIndex</code> 回到当前 Packet。</p><ul><li>Raster attachment 先绑定并执行 clear/load。</li><li>随后录制 copy、draw 或 dispatch。</li><li>Present Pass 可以没有 Workload。</li></ul>`, href: "../RHIDefinitions.hpp", source: "源码：RHIRenderPassWorkload" },
+        "submit-present": { kicker: "队列边界", title: "Submit / Present", body: `<p>命令录制结束后处理外部 wait/signal、提交 GPU，并把交换链图像交给窗口系统。</p><ul><li>Present 前 BackBuffer 必须进入 Present 状态。</li><li>fence/timeline 记录该帧何时真正完成。</li></ul>`, href: "../Vulkan/RHIVulkanFrame.inl", source: "源码：各后端 Frame 提交路径" },
+        "deferred-release": { kicker: "帧完成后", title: "延迟回收", body: `<p>CPU 提交成功不代表 GPU 已经使用完资源。</p><ul><li>等待 fence/timeline 达到目标值。</li><li>之后才能复用 frame context、descriptor 或 allocator。</li><li>staging 与 transient native resource 同样延迟释放。</li></ul>`, href: "../D3D12/RHID3D12Frame.inl", source: "源码：各后端帧完成追踪" },
+        "pbr-geometry": { kicker: "Imported Buffer", title: "Vertices + Indices", body: `<p>球体与地面共享顶点和索引 Buffer。</p><ul><li>ShadowMap 只读取球体索引范围。</li><li>OpaquePBR 依次读取球体、地面和天空盒几何。</li><li>Graph 不拥有这些长期资源。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：PBRDemo::BuildFrame" },
+        "pbr-uniforms": { kicker: "Imported Buffer", title: "Sphere / Plane Uniform", body: `<p>两个 UBO 每帧上传最新矩阵、相机、灯光和材质参数。</p><ul><li>SphereUniform 同时用于 Shadow 与 Opaque。</li><li>PlaneUniform 只用于 OpaquePBR。</li><li>动态内容不进入 structure hash。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：PBRDemo::BuildFrame" },
+        "pbr-depths": { kicker: "Imported Texture", title: "ShadowDepth + Depth", body: `<p>ShadowDepth 先作为 Depth attachment 写入，再作为 ShaderRead 采样；Depth 是主相机深度附件。</p><ul><li>两者格式均为 D32_Float。</li><li>每帧使用 1.0 清除旧深度。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：PBRDemo::BuildFrame" },
+        "pbr-skybox": { kicker: "Imported Texture", title: "SkyboxCube", body: `<p>六个 array layer 组成 CubeCompatible 的 sRGB cubemap。</p><ul><li>首帧上传六张面纹理。</li><li>OpaquePBR 的 Fragment Shader 读取。</li><li>天空盒 draw 位于主 workload 最后。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：SkyboxCube 声明与上传" },
+        "pbr-backbuffer": { kicker: "Imported SwapchainImage", title: "BackBuffer", body: `<p>当前 acquire 得到的交换链图像，初始状态为 Present。</p><ul><li>OpaquePBR 将它作为颜色附件清除并写入。</li><li>Present Pass 再把它转换回 Present 状态。</li><li>externalHandle 每帧随 imageIndex 变化。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：BackBuffer 图资源声明" },
+        "pbr-upload": { kicker: "帧开始", title: "PBR Uploads", body: `<p>静态几何和 cubemap 只在待上传标志有效时提交，两个 UBO 每帧提交。</p><ul><li>上传由后端在图 Pass 前执行。</li><li>资源真实状态随后参与 transition 翻译。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：PBRDemo::BuildFrame uploads" },
+        "pbr-shadow": { kicker: "Pass 1 · Raster", title: "ShadowMap", body: `<p>从光源视角执行 depth-only 球体绘制。</p><ul><li>读取 Vertices、Indices、SphereUniform。</li><li>清除并写入 2048×2048 ShadowDepth。</li><li>Store 保证后续 PBR Pass 可以采样。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：ShadowMap Pass / Workload" },
+        "pbr-opaque": { kicker: "Pass 2 · Raster", title: "OpaquePBR", body: `<p>主相机 Pass 绘制球体、地面和天空盒。</p><ul><li>读取 ShadowDepth 与 SkyboxCube。</li><li>清除并写 BackBuffer 和 Depth。</li><li>ShadowDepth 的读写关系自动依赖 ShadowMap。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：OpaquePBR Pass / Workload" },
+        "pbr-present": { kicker: "Pass 3 · Present", title: "Present", body: `<p>Present Pass 不包含绘制命令，只声明 BackBuffer 的最终用途。</p><ul><li>读取 BackBuffer。</li><li>要求 <code>RHIResourceState::Present</code>。</li><li>作为副作用根不会被裁剪。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：Present Pass" },
+        "pbr-shadow-edge": { kicker: "自动依赖", title: "ShadowDepth RAW", body: `<p>ShadowMap 写 ShadowDepth，OpaquePBR 随后读取，因此产生 Writer → Reader 边。</p><ul><li>顺序：ShadowMap → OpaquePBR。</li><li>状态：DepthWrite → ShaderRead。</li><li>阶段：Depth tests → Fragment Shader。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：ShadowDepth Pass Usage" },
+        "pbr-backbuffer-edge": { kicker: "自动依赖", title: "BackBuffer RAW", body: `<p>OpaquePBR 写颜色附件，Present 随后读取同一交换链图像。</p><ul><li>顺序：OpaquePBR → Present。</li><li>状态：RenderTarget → Present。</li></ul>`, href: "../PBRDemo/main.cpp", source: "源码：BackBuffer Pass Usage" },
+        "pbr-roots": { kicker: "活性裁剪", title: "三个 Pass 均存活", body: `<p>ShadowMap 是 OpaquePBR 的依赖，OpaquePBR 写 Imported 输出，Present 自身是根。</p><ul><li>从 Present/Imported 输出反向遍历可到达全部 Pass。</li><li>因此本图没有 dead Pass。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 6" },
+        "hazard-raw": { kicker: "Read After Write", title: "RAW：写后读", body: `<p>Reader 需要 Writer 产生的数据，因此 Reader 依赖该资源的 <code>lastWriter</code>。</p><ul><li>典型例子：ShadowMap 写深度，OpaquePBR 采样。</li><li>这是最常见的 producer → consumer 边。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：HazardState" },
+        "hazard-war": { kicker: "Write After Read", title: "WAR：读后写", body: `<p>新 Writer 不能在旧 Reader 完成前覆盖资源。</p><ul><li>Writer 依赖当前累计的全部 readers。</li><li>写入后清空 readers，并成为新的 lastWriter。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：Hazard 推导循环" },
+        "hazard-waw": { kicker: "Write After Write", title: "WAW：写后写", body: `<p>后一个 Writer 依赖前一个 lastWriter，保证最终内容和声明顺序确定。</p><ul><li>即使目标状态相同也需要内存依赖。</li><li>否则多个写入可能乱序完成。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：Hazard 推导循环" },
+        "plan-passes": { kicker: "ExecutionPlan", title: "Compiled Passes", body: `<p>已经裁剪并按依赖排序的紧凑执行序列。</p><ul><li>保存 sourcePassIndex 和 workloadIndex。</li><li>依赖全部使用 compiled 下标。</li><li>Attachment 已解析为 texture 下标。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.hpp", source: "源码：RHICompiledRenderGraphPass" },
+        "plan-lifetimes": { kicker: "ExecutionPlan", title: "Resource Lifetimes", body: `<p>每个逻辑资源记录首次和末次使用的 compiled Pass。</p><ul><li>未使用资源保持无效下标。</li><li>生命周期是 alias 和延迟创建的基础。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.hpp", source: "源码：RHIRenderGraphResourceLifetime" },
+        "plan-slots": { kicker: "ExecutionPlan", title: "Allocation Slots", body: `<p>逻辑资源数量可以大于物理槽数量。</p><ul><li>生命周期不重叠。</li><li>资源显式允许 alias。</li><li>描述必须完全兼容。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.cpp", source: "源码：CompileRHIRenderGraph 阶段 8" },
+        "plan-transitions": { kicker: "ExecutionPlan", title: "Transitions", body: `<p>每个 Transition 描述执行 Pass 前的同步需求。</p><ul><li>资源前后状态。</li><li>源/目标 pipeline stages 与 access。</li><li>队列迁移、discard 和 aliasing 标志。</li></ul>`, href: "../RenderGraph/RHIRenderGraph.hpp", source: "源码：RHIRenderGraphTransition" }
+    };
+
+    const tabs = [...document.querySelectorAll(".tab")];
+    const views = [...document.querySelectorAll(".view")];
+
+    function activateView(viewId, updateHash = true) {
+        const target = document.getElementById(viewId) || document.getElementById("overview");
+        tabs.forEach((tab) => {
+            const active = tab.dataset.view === target.id;
+            tab.setAttribute("aria-selected", String(active));
+            tab.tabIndex = active ? 0 : -1;
+        });
+        views.forEach((view) => {
+            const active = view === target;
+            view.classList.toggle("active", active);
+            view.hidden = !active;
+        });
+        if (updateHash) {
+            history.replaceState(null, "", `#${target.id}`);
+        }
+    }
+
+    tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => activateView(tab.dataset.view));
+        tab.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const offset = event.key === "ArrowRight" ? 1 : -1;
+            const next = tabs[(index + offset + tabs.length) % tabs.length];
+            next.focus();
+            activateView(next.dataset.view);
+        });
+    });
+
+    document.querySelectorAll(".map-node[data-detail]").forEach((node) => {
+        node.addEventListener("click", () => {
+            const detail = details[node.dataset.detail];
+            const view = node.closest(".view");
+            const panel = view?.querySelector(".detail-panel");
+            if (!detail || !panel) return;
+
+            view.querySelectorAll(".map-node.selected").forEach((selected) => selected.classList.remove("selected"));
+            node.classList.add("selected");
+            panel.querySelector(".detail-kicker").textContent = detail.kicker;
+            panel.querySelector("h3").textContent = detail.title;
+            const body = panel.querySelector("h3 + div");
+            body.innerHTML = detail.body;
+            const source = panel.querySelector(".detail-source");
+            source.href = detail.href;
+            source.textContent = detail.source;
+        });
+    });
+
+    const initialView = location.hash.slice(1);
+    activateView(views.some((view) => view.id === initialView) ? initialView : "overview", false);
+</script>
+</body>
+</html>

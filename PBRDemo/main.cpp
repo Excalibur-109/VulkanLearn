@@ -470,63 +470,111 @@ private:
 
     /// 注册窗口类并创建窗口模式或无边框全屏窗口。
     void CreateWindowHandle(HINSTANCE instance) {
+        // 值初始化会把未显式设置的窗口类成员清零，例如图标、背景画刷和菜单名称。
         WNDCLASSEXW windowClass{};
+        // Win32 通过结构体字节数识别 WNDCLASSEXW 的版本，注册前必须填写。
         windowClass.cbSize = sizeof(windowClass);
+        // 当窗口宽度或高度变化时，要求系统重绘整个客户区，避免保留旧尺寸的画面。
         windowClass.style = CS_HREDRAW | CS_VREDRAW;
+        // 指定该窗口类处理消息的回调，WM_CREATE 会在这里保存 PBRDemoApp 指针。
         windowClass.lpfnWndProc = WindowProcedure;
+        // 标记窗口类属于当前可执行模块；创建窗口时必须传入同一个模块实例。
         windowClass.hInstance = instance;
+        // 从系统资源加载标准箭头光标；资源编号 32512 对应 IDC_ARROW。
         windowClass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+        // 设置窗口类的唯一 Unicode 名称，CreateWindowExW 将通过此名称查找该类。
         windowClass.lpszClassName = L"RHIRenderGraphPBRDemo";
+        // 注册窗口类并检查返回的 ATOM；返回 0 表示 Win32 注册失败。
         if (RegisterClassExW(&windowClass) == 0) {
+            // 没有成功注册窗口类就无法创建 HWND，因此立即终止初始化。
             throw std::runtime_error("RegisterClassEx failed");
         }
 
+        // 先用逻辑渲染尺寸构造客户区矩形：左上角为 (0, 0)，右下角为目标宽高。
         RECT rectangle{0, 0, static_cast<LONG>(WINDOW_WIDTH), static_cast<LONG>(WINDOW_HEIGHT)};
+        // 根据普通窗口的边框和标题栏扩张矩形，使最终客户区仍为 WINDOW_WIDTH x WINDOW_HEIGHT；FALSE 表示没有菜单栏。
         AdjustWindowRect(&rectangle, WS_OVERLAPPEDWINDOW, FALSE);
 
+        // 窗口模式默认使用带标题栏、边框以及最小化/最大化按钮的标准顶层窗口样式。
         DWORD windowStyle = WS_OVERLAPPEDWINDOW;
+        // 交给系统选择窗口的初始水平位置。
         int windowX = CW_USEDEFAULT;
+        // 交给系统选择窗口的初始垂直位置。
         int windowY = CW_USEDEFAULT;
+        // AdjustWindowRect 处理后的矩形宽度是包含边框和标题栏的窗口总宽度。
         int windowWidth = rectangle.right - rectangle.left;
+        // AdjustWindowRect 处理后的矩形高度是包含边框和标题栏的窗口总高度。
         int windowHeight = rectangle.bottom - rectangle.top;
 
+        // 全屏模式会覆盖上面的普通窗口样式、位置和尺寸，但不会切换显示器分辨率。
         if (isFullscreen_) {
             // 无边框全屏不改变显示器分辨率，只让 WS_POPUP 窗口覆盖整个主显示器。
             // 使用 rcMonitor 而不是 rcWork，确保窗口也覆盖任务栏所在区域。
+            // (0, 0) 是用于查询显示器的虚拟桌面坐标；找不到时仍会回退到主显示器。
             const POINT primaryMonitorPoint{0, 0};
+            // 获取目标显示器句柄，MONITOR_DEFAULTTOPRIMARY 保证查询失败时返回主显示器。
             const HMONITOR monitor = MonitorFromPoint(
+                // 传入上面定义的虚拟桌面坐标。
                 primaryMonitorPoint,
+                // 指定坐标不属于任何显示器时使用主显示器。
                 MONITOR_DEFAULTTOPRIMARY);
+            // 值初始化显示器信息，避免未填写的字段包含不确定数据。
             MONITORINFO monitorInfo{};
+            // GetMonitorInfoW 依靠 cbSize 判断调用方提供的结构体版本和可写范围。
             monitorInfo.cbSize = sizeof(MONITORINFO);
+            // 查询显示器在虚拟桌面中的完整矩形，并检查 Win32 的 BOOL 返回值。
             if (GetMonitorInfoW(monitor, &monitorInfo) == FALSE) {
+                // 无法取得显示器范围时不能可靠计算全屏窗口尺寸，因此终止初始化。
                 throw std::runtime_error("GetMonitorInfoW failed");
             }
 
+            // WS_POPUP 不带标题栏和边框，适合覆盖显示器的无边框全屏窗口。
             windowStyle = WS_POPUP;
+            // 使用显示器矩形左边界作为窗口左上角的 X 坐标，兼容多显示器负坐标。
             windowX = monitorInfo.rcMonitor.left;
+            // 使用显示器矩形上边界作为窗口左上角的 Y 坐标，兼容多显示器排列。
             windowY = monitorInfo.rcMonitor.top;
+            // Win32 RECT 的 right 是右边界坐标，减去 left 得到显示器实际宽度。
             windowWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+            // Win32 RECT 的 bottom 是下边界坐标，减去 top 得到显示器实际高度。
             windowHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
         }
 
+        // 窗口标题由固定 Demo 名称和当前 RHI 后端名称拼接而成。
         const std::wstring windowTitle =
+            // 先构造 std::wstring，确保后续加法执行宽字符串拼接而不是指针运算。
             std::wstring(L"RHI RenderGraph PBR Demo - ") +
+            // 追加 Vulkan 或 D3D 等当前图形 API 的可读名称。
             ApiDisplayName(options_.api);
+        // 使用已注册的 Unicode 窗口类创建顶层窗口，并保存返回的原生 HWND。
         window_ = CreateWindowExW(
+            // 不启用 WS_EX_* 扩展样式。
             0,
+            // 窗口类名称必须与 RegisterClassExW 注册时使用的名称完全一致。
             windowClass.lpszClassName,
+            // Win32 在调用期间读取标题字符串，c_str() 提供以空字符结尾的宽字符指针。
             windowTitle.c_str(),
+            // 使用前面选定的窗口样式，并用 WS_VISIBLE 让窗口创建后立即显示。
             windowStyle | WS_VISIBLE,
+            // 窗口左上角的 X 坐标；窗口模式下为 CW_USEDEFAULT，全屏下为显示器左边界。
             windowX,
+            // 窗口左上角的 Y 坐标；窗口模式下为 CW_USEDEFAULT，全屏下为显示器上边界。
             windowY,
+            // 传入窗口总宽度；窗口模式已包含非客户区，全屏模式等于显示器宽度。
             windowWidth,
+            // 传入窗口总高度；窗口模式已包含非客户区，全屏模式等于显示器高度。
             windowHeight,
+            // 不设置父窗口，表示这是独立的顶层窗口。
             nullptr,
+            // 不绑定菜单，也不把该参数用作子窗口 ID。
             nullptr,
+            // 指定创建该窗口的可执行模块，与窗口类的 hInstance 保持一致。
             instance,
+            // 把当前对象传给 WM_CREATE；WindowProcedure 从 CREATESTRUCT::lpCreateParams 取回并保存。
             this);
+        // CreateWindowExW 失败时返回 nullptr，不能继续创建依赖 HWND 的 swapchain。
         if (window_ == nullptr) {
+            // 立即报告窗口创建失败，阻止后续 RHI 初始化使用无效句柄。
             throw std::runtime_error("CreateWindowEx failed");
         }
     }

@@ -279,15 +279,17 @@ constexpr bool operator!=(const Matrix<T, R, C>& lhs, const Matrix<T, R, C>& rhs
  * 左右操作数可以使用不同标量类型。例如 Matrix<float> + Matrix<double> 会通过
  * std::common_type_t<Lhs, Rhs> 推导出 double，避免把右侧结果截断回 float。
  */
-#define MATH_DEFINE_MATRIX_BINARY_OPERATOR(OPERATOR)                                                         \
-    template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t C>                      \
-    constexpr auto operator OPERATOR(const Matrix<Lhs, R, C>& lhs, const Matrix<Rhs, R, C>& rhs) noexcept {  \
-        using Result = std::common_type_t<Lhs, Rhs>;                                                         \
-        Matrix<Result, R, C> output{};                                                                       \
-        for (std::size_t row = 0; row < R; ++row) {                                                          \
-            output[row] = lhs[row] OPERATOR rhs[row];                                                        \
-        }                                                                                                    \
-        return output;                                                                                       \
+#define MATH_DEFINE_MATRIX_BINARY_OPERATOR(OPERATOR)                                                    \
+    template <ArithmeticScalar Lhs, ArithmeticScalar Rhs, std::size_t R, std::size_t C>                 \
+    constexpr auto operator OPERATOR(                                                                   \
+        const Matrix<Lhs, R, C>& lhs,                                                                   \
+        const Matrix<Rhs, R, C>& rhs) noexcept {                                                        \
+        using Result = std::common_type_t<Lhs, Rhs>;                                                    \
+        Matrix<Result, R, C> output{};                                                                  \
+        for (std::size_t row = 0; row < R; ++row) {                                                     \
+            output[row] = lhs[row] OPERATOR rhs[row];                                                   \
+        }                                                                                               \
+        return output;                                                                                  \
     }
 
 MATH_DEFINE_MATRIX_BINARY_OPERATOR(+)

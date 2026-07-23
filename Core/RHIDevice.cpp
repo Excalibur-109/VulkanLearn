@@ -1,4 +1,4 @@
-﻿#include "RHIDevice.hpp"
+#include "RHIDevice.hpp"
 
 #include "../RenderGraph/RHIRenderGraph.hpp"
 #include "../Vulkan/RHIVulkan.hpp"
@@ -85,10 +85,10 @@ RHIGraphicsAPI RHIDevice::Api() const noexcept {
 
 const char* RHIDevice::BackendName() const noexcept {
     switch (Api()) {
-    case RHIGraphicsAPI::Vulkan:     return "Vulkan";
-    case RHIGraphicsAPI::D3D11: return "Direct3D 11";
-    case RHIGraphicsAPI::D3D12: return "Direct3D 12";
-    default:                         return "UnInitialized RHI";
+        case RHIGraphicsAPI::Vulkan:    return "Vulkan";
+        case RHIGraphicsAPI::D3D11:     return "Direct3D 11";
+        case RHIGraphicsAPI::D3D12:     return "Direct3D 12";
+        default:                        return "UnInitialized RHI";
     }
 }
 
@@ -204,9 +204,11 @@ const RHICapabilities& RHIDevice::Capabilities() const noexcept {
         impl_->implementation);
 }
 
-#define RHI_FORWARD_RETURN(ReturnType, Method, ParameterType) \
-    ReturnType RHIDevice::Method(const ParameterType& desc) { \
-        return visitImplementation<ReturnType>(impl_->implementation, [&](auto& implementation) { return implementation.Method(desc); }); \
+#define RHI_FORWARD_RETURN(ReturnType, Method, ParameterType)                                           \
+    ReturnType RHIDevice::Method(const ParameterType& desc) {                                           \
+        return visitImplementation<ReturnType>(                                                         \
+            impl_->implementation,                                                                      \
+            [&](auto& implementation) { return implementation.Method(desc); });                         \
     }
 
 RHI_FORWARD_RETURN(RHIBuffer, CreateBuffer, RHIBufferDesc)
@@ -290,9 +292,11 @@ void RHIDevice::WaitIdle() const noexcept {
     visitImplementationNoexcept(impl_->implementation, [](const auto& implementation) { implementation.WaitIdle(); });
 }
 
-#define RHI_FORWARD_DESTROY(HandleType) \
-    void RHIDevice::Destroy(HandleType handle) noexcept { \
-        visitImplementationNoexcept(impl_->implementation, [&](auto& implementation) { implementation.Destroy(handle); }); \
+#define RHI_FORWARD_DESTROY(HandleType)                                                                 \
+    void RHIDevice::Destroy(HandleType handle) noexcept {                                               \
+        visitImplementationNoexcept(                                                                    \
+            impl_->implementation,                                                                      \
+            [&](auto& implementation) { implementation.Destroy(handle); });                             \
     }
 
 RHI_FORWARD_DESTROY(RHIBuffer)
