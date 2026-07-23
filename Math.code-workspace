@@ -22,7 +22,7 @@
         "C_Cpp.intelliSenseEngine": "default",
         "cmake.configureOnOpen": true,
         "cmake.sourceDirectory": "${workspaceFolder}",
-        "cmake.buildDirectory": "${workspaceFolder}/build_math",
+        "cmake.buildDirectory": "${workspaceFolder}/build_rhi",
         "files.encoding": "utf8",
         "files.associations": {
             "*.hpp": "cpp",
