@@ -86,8 +86,8 @@ RHIGraphicsAPI RHIDevice::Api() const noexcept {
 const char* RHIDevice::BackendName() const noexcept {
     switch (Api()) {
     case RHIGraphicsAPI::Vulkan:     return "Vulkan";
-    case RHIGraphicsAPI::Direct3D11: return "Direct3D 11";
-    case RHIGraphicsAPI::Direct3D12: return "Direct3D 12";
+    case RHIGraphicsAPI::D3D11: return "Direct3D 11";
+    case RHIGraphicsAPI::D3D12: return "Direct3D 12";
     default:                         return "UnInitialized RHI";
     }
 }
@@ -126,10 +126,10 @@ bool RHIDevice::Initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
         break;
     }
 #if defined(_WIN32)
-    case RHIGraphicsAPI::Direct3D11: {
+    case RHIGraphicsAPI::D3D11: {
         RHID3D11Desc nativeDesc{};
         nativeDesc.backend = desc.backend;
-        nativeDesc.backend.preferredApi = RHIGraphicsAPI::Direct3D11;
+        nativeDesc.backend.preferredApi = RHIGraphicsAPI::D3D11;
         nativeDesc.surface.hwnd = static_cast<HWND>(desc.nativeWindow);
         nativeDesc.minimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
         nativeDesc.allowWarpFallback = desc.allowSoftwareAdapter;
@@ -141,10 +141,10 @@ bool RHIDevice::Initialize(const RHIDeviceCreateDesc& desc, std::string* errorMe
         }
         break;
     }
-    case RHIGraphicsAPI::Direct3D12: {
+    case RHIGraphicsAPI::D3D12: {
         RHID3D12Desc nativeDesc{};
         nativeDesc.backend = desc.backend;
-        nativeDesc.backend.preferredApi = RHIGraphicsAPI::Direct3D12;
+        nativeDesc.backend.preferredApi = RHIGraphicsAPI::D3D12;
         nativeDesc.surface.hwnd = static_cast<HWND>(desc.nativeWindow);
         nativeDesc.minimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
         nativeDesc.allowWarpFallback = desc.allowSoftwareAdapter;

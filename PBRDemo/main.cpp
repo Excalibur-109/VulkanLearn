@@ -221,9 +221,9 @@ DemoOptions ParseOptions(std::string_view commandLine) {
             if (value == "vulkan") {
                 options.api = rhi::RHIGraphicsAPI::Vulkan;
             } else if (value == "d3d11") {
-                options.api = rhi::RHIGraphicsAPI::Direct3D11;
+                options.api = rhi::RHIGraphicsAPI::D3D11;
             } else if (value == "d3d12") {
-                options.api = rhi::RHIGraphicsAPI::Direct3D12;
+                options.api = rhi::RHIGraphicsAPI::D3D12;
             } else {
                 throw std::runtime_error("Unknown --api value: " + std::string(value));
             }
@@ -246,8 +246,8 @@ DemoOptions ParseOptions(std::string_view commandLine) {
 const wchar_t* ApiDisplayName(rhi::RHIGraphicsAPI api) noexcept {
     switch (api) {
     case rhi::RHIGraphicsAPI::Vulkan:     return L"Vulkan";
-    case rhi::RHIGraphicsAPI::Direct3D11: return L"Direct3D 11";
-    case rhi::RHIGraphicsAPI::Direct3D12: return L"Direct3D 12";
+    case rhi::RHIGraphicsAPI::D3D11: return L"Direct3D 11";
+    case rhi::RHIGraphicsAPI::D3D12: return L"Direct3D 12";
     default:                              return L"Unknown";
     }
 }
@@ -884,7 +884,7 @@ private:
         } else {
             // D3D11 与 D3D12 共用 HLSL 源码，但分别编译到各自合适的 shader model。
             // b0、POSITION/NORMAL/TEXCOORD 和 SV_POSITION/SV_TARGET 共同构成 D3D 管线契约。
-            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::D3D12;
             vertexShader.language = rhi::RHIShaderLanguage::HLSL;
             vertexShader.filePath = shaderDirectory + "/pbr.hlsl";
             vertexShader.entryPoint = "VSMain";
@@ -929,7 +929,7 @@ private:
             shadowVertexShader.language = rhi::RHIShaderLanguage::SPIRV;
             shadowVertexShader.filePath = shaderDirectory + "/shadow.vert.spv";
         } else {
-            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::D3D12;
             shadowVertexShader.language = rhi::RHIShaderLanguage::HLSL;
             shadowVertexShader.filePath = shaderDirectory + "/pbr.hlsl";
             shadowVertexShader.entryPoint = "ShadowVSMain";
@@ -978,7 +978,7 @@ private:
             skyboxFragmentShader.language = rhi::RHIShaderLanguage::SPIRV;
             skyboxFragmentShader.filePath = shaderDirectory + "/skybox.frag.spv";
         } else {
-            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::D3D12;
             skyboxVertexShader.language = rhi::RHIShaderLanguage::HLSL;
             skyboxVertexShader.filePath = shaderDirectory + "/pbr.hlsl";
             skyboxVertexShader.entryPoint = "SkyboxVSMain";

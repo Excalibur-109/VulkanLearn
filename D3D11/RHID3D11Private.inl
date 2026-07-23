@@ -936,7 +936,7 @@ static bool supportsRequiredFeatures(const RHICapabilities& caps, RHIRenderFeatu
 // 这些能力会被上层用于选择渲染路径，也会被 requiredFeatures 校验。
 static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVEL featureLevel) {
     RHICapabilities caps{};
-    caps.api = RHIGraphicsAPI::Direct3D11;
+    caps.api = RHIGraphicsAPI::D3D11;
 
     DXGI_ADAPTER_DESC1 desc{};
     if (adapter != nullptr) {

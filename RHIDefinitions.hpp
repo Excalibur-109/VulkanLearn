@@ -204,8 +204,8 @@ template <RHIEnumFlags Enum>
 enum class RHIGraphicsAPI : u8 {
     Unknown, ///< 未指定或无法识别的图形 API；用于默认值、错误回退和日志占位。
     Vulkan, ///< 使用 Vulkan 后端，适合显式资源状态、跨平台桌面/移动渲染路径。
-    Direct3D11, ///< 使用 Direct3D 11 后端，面向 Windows 兼容路径和较传统的隐式状态模型。
-    Direct3D12, ///< 使用 Direct3D 12 后端，面向 Windows 显式同步、资源状态和现代 GPU 功能。
+    D3D11, ///< 使用 Direct3D 11 后端，面向 Windows 兼容路径和较传统的隐式状态模型。
+    D3D12, ///< 使用 Direct3D 12 后端，面向 Windows 显式同步、资源状态和现代 GPU 功能。
     Metal, ///< 使用 Apple Metal 后端，面向 macOS/iOS 平台渲染。
     OpenGL, ///< 使用 OpenGL 后端，主要用于兼容旧平台或调试路径。
     WebGPU ///< 使用 WebGPU 后端，面向浏览器或 WebGPU 原生实现。

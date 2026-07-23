@@ -69,7 +69,7 @@ void RunBackend(rhi::RHIGraphicsAPI api) {
             std::string("Failed to initialize ") +
             (api == rhi::RHIGraphicsAPI::Vulkan
                  ? "Vulkan"
-                 : (api == rhi::RHIGraphicsAPI::Direct3D11 ? "D3D11" : "D3D12")) +
+                 : (api == rhi::RHIGraphicsAPI::D3D11 ? "D3D11" : "D3D12")) +
             ": " + error);
     }
 
@@ -148,8 +148,8 @@ int main() {
     try {
         RunBackend(rhi::RHIGraphicsAPI::Vulkan);
 #if defined(_WIN32)
-        RunBackend(rhi::RHIGraphicsAPI::Direct3D11);
-        RunBackend(rhi::RHIGraphicsAPI::Direct3D12);
+        RunBackend(rhi::RHIGraphicsAPI::D3D11);
+        RunBackend(rhi::RHIGraphicsAPI::D3D12);
 #endif
         std::cout << "All available RHI backends executed RenderGraph frames.\n";
         return 0;

@@ -1135,7 +1135,7 @@ static bool supportsRequiredFeatures(const RHICapabilities& caps, RHIRenderFeatu
 
 static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVEL featureLevel) {
     RHICapabilities caps{};
-    caps.api = RHIGraphicsAPI::Direct3D12;
+    caps.api = RHIGraphicsAPI::D3D12;
 
     DXGI_ADAPTER_DESC1 desc{};
     if (adapter != nullptr) {
