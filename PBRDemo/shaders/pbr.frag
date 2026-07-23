@@ -10,7 +10,7 @@
 //   - 漫反射：Lambert (1 - F) * (1 - metallic) * albedo / PI
 //   - 环境光：半球常数 f0 + albedo 混合（取代完整 IBL，方便 demo 跑通）
 //
-// 单方向光 + 方向光 Shadow Map（3x3 PCF），无 env map。
+// 单方向光 + 方向光 Shadow Map（3x3 PCF）+ 简化环境光照。
 // 直接光受阴影影响，环境光不乘阴影可见度，避免遮挡区完全变黑。
 // =============================================================================
 
@@ -32,6 +32,7 @@ layout(set = 0, binding = 0) uniform PBRUBO {
 // 返回 1 表示当前 receiver 比 Shadow Map 中最近的 caster 更靠近光源，即可见；
 // 返回 0 表示中间存在更靠近光源的几何体，即当前片元处于阴影中。
 layout(set = 0, binding = 1) uniform sampler2DShadow shadowMap;
+layout(set = 0, binding = 2) uniform samplerCube skyboxTexture;
 
 layout(location = 0) in vec3 vWorldPos;
 layout(location = 1) in vec3 vWorldNormal;
@@ -146,8 +147,16 @@ void main() {
     vec3 directLight =
         (diffuse + specular) * ubo.lightColor.rgb * NoL * shadow;
 
-    // 简化环境光：金属用 f0，非金属用 albedo
-    vec3 ambient = mix(vec3(0.03) * albedo, f0, metallic) * ao;
+    // Skybox 本身已经是柔和环境图，可直接近似 diffuse irradiance 和粗糙镜面反射。
+    vec3 environmentDiffuse = texture(skyboxTexture, N).rgb;
+    vec3 reflectionDirection = reflect(-V, N);
+    vec3 environmentSpecular = texture(skyboxTexture, reflectionDirection).rgb;
+    vec3 ambientFresnel = F_Schlick(NoV, f0);
+    vec3 ambientDiffuse =
+        environmentDiffuse * albedo * (1.0 - metallic) * 0.22;
+    vec3 ambientSpecular =
+        environmentSpecular * ambientFresnel * (0.55 - 0.35 * roughness);
+    vec3 ambient = (ambientDiffuse + ambientSpecular + 0.012 * albedo) * ao;
 
     // 简单 gamma correction（sRGB framebuffer 会再做硬件 gamma）
     vec3 finalColor = ambient + directLight;

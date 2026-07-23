@@ -405,6 +405,146 @@ bool RHIVulkan::RecordAndSubmitFrame(
             buffer->currentAccess = destinationAccess;
         };
 
+        for (const RHITextureUploadDesc& upload : packet.uploads.textures) {
+            if (upload.data.empty()) {
+                continue;
+            }
+
+            Impl::TextureResource* texture =
+                getRenderResource(impl_->textures, upload.destination);
+            if (texture == nullptr || texture->image == VK_NULL_HANDLE) {
+                throw std::runtime_error(
+                    "RHIFramePacket texture upload destination is invalid");
+            }
+            if (!RHIHasAny(
+                    texture->desc.usage,
+                    RHITextureUsage::TransferDestination)) {
+                throw std::runtime_error(
+                    "Vulkan texture upload destination is missing TransferDestination usage");
+            }
+            if (upload.mipLevel >= texture->desc.mipLevels ||
+                upload.arrayLayer >= texture->desc.arrayLayers ||
+                upload.extent.width == 0 || upload.extent.height == 0 ||
+                upload.extent.depth == 0 || upload.offset.x < 0 ||
+                upload.offset.y < 0 || upload.offset.z < 0) {
+                throw std::runtime_error("Vulkan texture upload subresource is invalid");
+            }
+            if (upload.bytesPerRow != 0 || upload.rowsPerImage != 0) {
+                throw std::runtime_error(
+                    "Vulkan texture uploads currently require tightly packed source data");
+            }
+
+            const u32 mipWidth = std::max(
+                1u, texture->desc.extent.width >> upload.mipLevel);
+            const u32 mipHeight = std::max(
+                1u, texture->desc.extent.height >> upload.mipLevel);
+            const u32 mipDepth = texture->desc.dimension ==
+                                         RHITextureDimension::Texture3D
+                                     ? std::max(
+                                           1u,
+                                           texture->desc.extent.depth >>
+                                               upload.mipLevel)
+                                     : 1u;
+            if (static_cast<u32>(upload.offset.x) > mipWidth ||
+                upload.extent.width >
+                    mipWidth - static_cast<u32>(upload.offset.x) ||
+                static_cast<u32>(upload.offset.y) > mipHeight ||
+                upload.extent.height >
+                    mipHeight - static_cast<u32>(upload.offset.y) ||
+                static_cast<u32>(upload.offset.z) > mipDepth ||
+                upload.extent.depth >
+                    mipDepth - static_cast<u32>(upload.offset.z)) {
+                throw std::runtime_error("Vulkan texture upload range is invalid");
+            }
+
+            transitionTexture(
+                upload.destination,
+                RHIResourceState::CopyDestination,
+                RHIPipelineStage::Transfer,
+                RHIAccessFlags::TransferWrite);
+
+            Impl::StagingResource staging{};
+            VkBufferCreateInfo stagingInfo{};
+            stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            stagingInfo.size = static_cast<VkDeviceSize>(upload.data.size());
+            stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            if (vkCreateBuffer(
+                    impl_->native.device,
+                    &stagingInfo,
+                    nullptr,
+                    &staging.buffer) != VK_SUCCESS) {
+                throw std::runtime_error(
+                    "vkCreateBuffer(texture staging) failed");
+            }
+            frame->stagingResources.push_back(staging);
+            Impl::StagingResource& trackedStaging =
+                frame->stagingResources.back();
+
+            VkMemoryRequirements requirements{};
+            vkGetBufferMemoryRequirements(
+                impl_->native.device,
+                trackedStaging.buffer,
+                &requirements);
+            VkMemoryAllocateInfo memoryInfo{};
+            memoryInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memoryInfo.allocationSize = requirements.size;
+            memoryInfo.memoryTypeIndex = impl_->findMemoryType(
+                requirements.memoryTypeBits,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            if (vkAllocateMemory(
+                    impl_->native.device,
+                    &memoryInfo,
+                    nullptr,
+                    &trackedStaging.memory) != VK_SUCCESS) {
+                throw std::runtime_error(
+                    "vkAllocateMemory(texture staging) failed");
+            }
+            if (vkBindBufferMemory(
+                    impl_->native.device,
+                    trackedStaging.buffer,
+                    trackedStaging.memory,
+                    0) != VK_SUCCESS) {
+                throw std::runtime_error(
+                    "vkBindBufferMemory(texture staging) failed");
+            }
+
+            void* mapped = nullptr;
+            if (vkMapMemory(
+                    impl_->native.device,
+                    trackedStaging.memory,
+                    0,
+                    stagingInfo.size,
+                    0,
+                    &mapped) != VK_SUCCESS) {
+                throw std::runtime_error("vkMapMemory(texture staging) failed");
+            }
+            std::memcpy(mapped, upload.data.data(), upload.data.size());
+            vkUnmapMemory(impl_->native.device, trackedStaging.memory);
+
+            VkBufferImageCopy copy{};
+            copy.imageSubresource.aspectMask = toVkImageAspect(
+                RHITextureAspect::All,
+                texture->desc.format);
+            copy.imageSubresource.mipLevel = upload.mipLevel;
+            copy.imageSubresource.baseArrayLayer = upload.arrayLayer;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageOffset = {
+                upload.offset.x, upload.offset.y, upload.offset.z};
+            copy.imageExtent = {
+                upload.extent.width,
+                upload.extent.height,
+                upload.extent.depth};
+            vkCmdCopyBufferToImage(
+                commandBuffer,
+                trackedStaging.buffer,
+                texture->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &copy);
+        }
+
         const auto vkClearColor = [](const RHIClearColor& color) {
             VkClearValue value{};
             value.color.float32[0] = color.r;

@@ -251,8 +251,187 @@ bool RHID3D12::RecordAndSubmitFrame(
             stagingResources.push_back(std::move(staging));
         }
 
-        if (!packet.uploads.textures.empty()) {
-            throw std::runtime_error("D3D12 texture upload staging is not implemented yet");
+        for (const RHITextureUploadDesc& upload : packet.uploads.textures) {
+            if (upload.data.empty()) {
+                continue;
+            }
+
+            Impl::TextureResource* texture =
+                getRenderResource(impl_->textures, upload.destination);
+            if (texture == nullptr || !texture->resource) {
+                throw std::runtime_error(
+                    "RHIFramePacket texture upload destination is invalid");
+            }
+            if (!RHIHasAny(
+                    texture->desc.usage,
+                    RHITextureUsage::TransferDestination)) {
+                throw std::runtime_error(
+                    "D3D12 texture upload destination is missing TransferDestination usage");
+            }
+            if (upload.mipLevel >= texture->desc.mipLevels ||
+                upload.arrayLayer >= texture->desc.arrayLayers ||
+                upload.extent.width == 0 || upload.extent.height == 0 ||
+                upload.extent.depth == 0 || upload.offset.x < 0 ||
+                upload.offset.y < 0 || upload.offset.z < 0) {
+                throw std::runtime_error("D3D12 texture upload subresource is invalid");
+            }
+
+            const u32 mipWidth = std::max(
+                1u, texture->desc.extent.width >> upload.mipLevel);
+            const u32 mipHeight = std::max(
+                1u, texture->desc.extent.height >> upload.mipLevel);
+            const u32 mipDepth = texture->desc.dimension ==
+                                         RHITextureDimension::Texture3D
+                                     ? std::max(
+                                           1u,
+                                           texture->desc.extent.depth >>
+                                               upload.mipLevel)
+                                     : 1u;
+            if (static_cast<u32>(upload.offset.x) > mipWidth ||
+                upload.extent.width >
+                    mipWidth - static_cast<u32>(upload.offset.x) ||
+                static_cast<u32>(upload.offset.y) > mipHeight ||
+                upload.extent.height >
+                    mipHeight - static_cast<u32>(upload.offset.y) ||
+                static_cast<u32>(upload.offset.z) > mipDepth ||
+                upload.extent.depth >
+                    mipDepth - static_cast<u32>(upload.offset.z)) {
+                throw std::runtime_error("D3D12 texture upload range is invalid");
+            }
+            if (upload.bytesPerRow > UINT_MAX ||
+                upload.rowsPerImage > UINT_MAX) {
+                throw std::runtime_error(
+                    "D3D12 texture upload source pitch exceeds UINT range");
+            }
+
+            const UINT sourceRowPitch = static_cast<UINT>(
+                upload.bytesPerRow == 0
+                    ? rowPitchForFormat(
+                          texture->desc.format, upload.extent.width)
+                    : upload.bytesPerRow);
+            const UINT copiedRows = isBlockCompressed(texture->desc.format)
+                                        ? std::max(
+                                              1u,
+                                              (upload.extent.height + 3u) / 4u)
+                                        : upload.extent.height;
+            const UINT sourceRowsPerImage = static_cast<UINT>(
+                upload.rowsPerImage == 0 ? copiedRows : upload.rowsPerImage);
+            const UINT copiedRowBytes = rowPitchForFormat(
+                texture->desc.format, upload.extent.width);
+            if (sourceRowPitch < copiedRowBytes ||
+                sourceRowsPerImage < copiedRows) {
+                throw std::runtime_error("D3D12 texture upload source pitch is invalid");
+            }
+
+            const UINT64 sourceSlicePitch =
+                static_cast<UINT64>(sourceRowPitch) * sourceRowsPerImage;
+            const UINT64 requiredSourceSize =
+                sourceSlicePitch * (upload.extent.depth - 1u) +
+                static_cast<UINT64>(sourceRowPitch) * (copiedRows - 1u) +
+                copiedRowBytes;
+            if (requiredSourceSize > upload.data.size()) {
+                throw std::runtime_error(
+                    "D3D12 texture upload source data is too small");
+            }
+
+            const UINT subresource = upload.mipLevel +
+                upload.arrayLayer * texture->desc.mipLevels;
+            const D3D12_RESOURCE_DESC destinationDesc =
+                texture->resource->GetDesc();
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+            UINT footprintRows = 0;
+            UINT64 footprintRowBytes = 0;
+            UINT64 stagingSize = 0;
+            impl_->device->GetCopyableFootprints(
+                &destinationDesc,
+                subresource,
+                1,
+                0,
+                &footprint,
+                &footprintRows,
+                &footprintRowBytes,
+                &stagingSize);
+            if (stagingSize == 0 || copiedRows > footprintRows ||
+                copiedRowBytes > footprint.Footprint.RowPitch ||
+                upload.extent.depth > footprint.Footprint.Depth) {
+                throw std::runtime_error(
+                    "D3D12 texture upload footprint is invalid");
+            }
+
+            D3D12_HEAP_PROPERTIES uploadHeap{};
+            uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+            uploadHeap.CreationNodeMask = 1;
+            uploadHeap.VisibleNodeMask = 1;
+            D3D12_RESOURCE_DESC stagingDesc{};
+            stagingDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            stagingDesc.Width = stagingSize;
+            stagingDesc.Height = 1;
+            stagingDesc.DepthOrArraySize = 1;
+            stagingDesc.MipLevels = 1;
+            stagingDesc.SampleDesc.Count = 1;
+            stagingDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            ComPtr<ID3D12Resource> staging;
+            throwIfFailed(
+                impl_->device->CreateCommittedResource(
+                    &uploadHeap,
+                    D3D12_HEAP_FLAG_NONE,
+                    &stagingDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(&staging)),
+                "CreateCommittedResource for D3D12 texture staging failed");
+
+            void* mapped = nullptr;
+            throwIfFailed(
+                staging->Map(0, nullptr, &mapped),
+                "Map D3D12 texture staging failed");
+            const UINT64 destinationSlicePitch =
+                static_cast<UINT64>(footprint.Footprint.RowPitch) *
+                footprintRows;
+            for (u32 depthSlice = 0;
+                 depthSlice < upload.extent.depth;
+                 ++depthSlice) {
+                const std::byte* sourceSlice = upload.data.data() +
+                    sourceSlicePitch * depthSlice;
+                std::byte* destinationSlice =
+                    static_cast<std::byte*>(mapped) + footprint.Offset +
+                    destinationSlicePitch * depthSlice;
+                for (UINT row = 0; row < copiedRows; ++row) {
+                    std::memcpy(
+                        destinationSlice +
+                            static_cast<UINT64>(footprint.Footprint.RowPitch) *
+                                row,
+                        sourceSlice + static_cast<UINT64>(sourceRowPitch) * row,
+                        copiedRowBytes);
+                }
+            }
+            staging->Unmap(0, nullptr);
+
+            transitionResource(
+                texture->resource.Get(),
+                texture->currentState,
+                RHIResourceState::CopyDestination);
+            D3D12_TEXTURE_COPY_LOCATION destination{};
+            destination.pResource = texture->resource.Get();
+            destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            destination.SubresourceIndex = subresource;
+            D3D12_TEXTURE_COPY_LOCATION source{};
+            source.pResource = staging.Get();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            source.PlacedFootprint = footprint;
+            D3D12_BOX sourceBox{};
+            sourceBox.right = upload.extent.width;
+            sourceBox.bottom = upload.extent.height;
+            sourceBox.back = upload.extent.depth;
+            impl_->commandList->CopyTextureRegion(
+                &destination,
+                static_cast<UINT>(upload.offset.x),
+                static_cast<UINT>(upload.offset.y),
+                static_cast<UINT>(upload.offset.z),
+                &source,
+                &sourceBox);
+            stagingResources.push_back(std::move(staging));
         }
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect)

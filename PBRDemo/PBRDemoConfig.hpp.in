@@ -4,5 +4,6 @@
 namespace pbr_demo_config {
 
 inline constexpr char SHADER_DIRECTORY[] = "@PBR_SHADER_OUT_DIR@";
+inline constexpr char ASSET_DIRECTORY[] = "@PBR_ASSET_DIRECTORY@";
 
 } // namespace pbr_demo_config

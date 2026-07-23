@@ -4,6 +4,7 @@
 // RHI 与 HLSL 的绑定契约：
 //   b0         : 每个物体自己的常量缓冲（矩阵、光照、材质）
 //   t1 + s1    : Shadow Map SRV + 深度比较 Sampler
+//   t2 + s2    : Skybox Cube SRV + 普通 Sampler
 //   POSITION0  : float3 顶点位置
 //   NORMAL0    : float3 顶点法线
 //   TEXCOORD0  : float2 UV
@@ -34,6 +35,8 @@ cbuffer PBRConstants : register(b0) {
 // 在 D3D 后端会拆成 t1 和 s1，在 Vulkan 后端则对应一个 combined descriptor。
 Texture2D<float> shadowMap : register(t1);
 SamplerComparisonState shadowSampler : register(s1);
+TextureCube<float4> skyboxTexture : register(t2);
+SamplerState skyboxSampler : register(s2);
 
 struct VertexInput {
     float3 position : POSITION0;
@@ -71,6 +74,29 @@ struct ShadowVertexInput {
 float4 ShadowVSMain(ShadowVertexInput input) : SV_POSITION {
     const float4 worldPosition = mul(model, float4(input.position, 1.0F));
     return mul(lightViewProjection, worldPosition);
+}
+
+struct SkyboxVertexOutput {
+    float4 clipPosition : SV_POSITION;
+    float3 direction    : TEXCOORD0;
+};
+
+SkyboxVertexOutput SkyboxVSMain(ShadowVertexInput input) {
+    SkyboxVertexOutput output;
+    const float3 viewPosition = mul(view, float4(input.position, 0.0F)).xyz;
+    const float4 clipPosition = mul(projection, float4(viewPosition, 1.0F));
+    output.clipPosition = clipPosition.xyww;
+    output.direction = input.position;
+    return output;
+}
+
+float4 SkyboxPSMain(SkyboxVertexOutput input) : SV_TARGET0 {
+    float3 color = skyboxTexture.Sample(
+        skyboxSampler,
+        normalize(input.direction)).rgb;
+    const float luminance = dot(color, float3(0.2126F, 0.7152F, 0.0722F));
+    color = max(lerp(luminance.xxx, color, 1.18F) * 1.18F, 0.0F.xxx);
+    return float4(color, 1.0F);
 }
 
 // Trowbridge-Reitz GGX normal distribution function.
@@ -174,7 +200,20 @@ float4 PSMain(VertexOutput input) : SV_TARGET0 {
     const float shadow = ShadowVisibility(input.worldPosition, N, L);
     const float3 directLight =
         (diffuse + specular) * lightColor.rgb * NoL * shadow;
+    const float3 environmentDiffuse = skyboxTexture.Sample(
+        skyboxSampler,
+        N).rgb;
+    const float3 environmentSpecular = skyboxTexture.Sample(
+        skyboxSampler,
+        reflect(-V, N)).rgb;
+    const float3 ambientFresnel = FresnelSchlick(NoV, f0);
+    const float3 ambientDiffuse =
+        environmentDiffuse * albedo * (1.0F - metallic) * 0.22F;
+    const float3 ambientSpecular =
+        environmentSpecular * ambientFresnel *
+        (0.55F - 0.35F * roughness);
     const float3 ambient =
-        lerp(0.03F * albedo, f0, metallic) * ambientOcclusion;
+        (ambientDiffuse + ambientSpecular + 0.012F * albedo) *
+        ambientOcclusion;
     return float4(ambient + directLight, 1.0F);
 }

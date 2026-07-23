@@ -39,6 +39,12 @@ file(MAKE_DIRECTORY ${PBR_SHADER_OUT_DIR})
 # 编译器和 IntelliSense 看到同一个 constexpr 定义，并支持“转到定义”。
 set(PBR_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${PBR_GENERATED_INCLUDE_DIR})
+get_filename_component(
+    PBR_ASSET_DIRECTORY
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Assets"
+    ABSOLUTE
+)
+file(TO_CMAKE_PATH "${PBR_ASSET_DIRECTORY}" PBR_ASSET_DIRECTORY)
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/PBRDemoConfig.hpp.in
     ${PBR_GENERATED_INCLUDE_DIR}/PBRDemoConfig.hpp
@@ -71,6 +77,8 @@ endfunction()
 
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.vert)
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.frag)
+rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/skybox.vert)
+rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/skybox.frag)
 # Shadow Pass 是 depth-only，所以只需要编译 shadow.vert，不存在 shadow.frag。
 # 顶点输出的 gl_Position 会由固定功能光栅器转换成 Shadow Map 深度。
 rhi_compile_shader(${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.vert)
@@ -87,6 +95,8 @@ configure_file(
 target_sources(PBRDemo PRIVATE
     ${PBR_SHADER_OUT_DIR}/pbr.vert.spv
     ${PBR_SHADER_OUT_DIR}/pbr.frag.spv
+    ${PBR_SHADER_OUT_DIR}/skybox.vert.spv
+    ${PBR_SHADER_OUT_DIR}/skybox.frag.spv
     ${PBR_SHADER_OUT_DIR}/shadow.vert.spv
 )
 
@@ -96,6 +106,7 @@ target_sources(PBRDemo PRIVATE
 target_link_libraries(PBRDemo
     PRIVATE
         RHI::RHI
+        windowscodecs
 )
 
 if(VULKAN_INCLUDE_DIRS)

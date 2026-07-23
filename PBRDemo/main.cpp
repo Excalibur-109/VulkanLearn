@@ -3,6 +3,8 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <wincodec.h>
+#include <wrl/client.h>
 
 #ifndef VK_USE_PLATFORM_WIN32_KHR
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -17,6 +19,7 @@
 #include <array>
 #include <charconv>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -75,6 +78,131 @@ struct Mesh {
     std::vector<rhi::u32> indices;
 };
 
+class ComApartment {
+public:
+    ComApartment() {
+        result_ = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(result_) && result_ != RPC_E_CHANGED_MODE) {
+            throw std::runtime_error("CoInitializeEx failed");
+        }
+    }
+
+    ~ComApartment() {
+        if (SUCCEEDED(result_)) {
+            CoUninitialize();
+        }
+    }
+
+private:
+    HRESULT result_ = E_FAIL;
+};
+
+void ThrowIfFailed(HRESULT result, const char* operation) {
+    if (FAILED(result)) {
+        throw std::runtime_error(
+            std::string(operation) + " failed with HRESULT " +
+            std::to_string(static_cast<unsigned long>(result)));
+    }
+}
+
+std::wstring Utf8ToWide(std::string_view text) {
+    if (text.empty()) {
+        return {};
+    }
+    const int length = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        text.data(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0);
+    if (length <= 0) {
+        throw std::runtime_error("Asset path is not valid UTF-8");
+    }
+    std::wstring wide(static_cast<std::size_t>(length), L'\0');
+    if (MultiByteToWideChar(
+            CP_UTF8,
+            MB_ERR_INVALID_CHARS,
+            text.data(),
+            static_cast<int>(text.size()),
+            wide.data(),
+            length) != length) {
+        throw std::runtime_error("Asset path conversion failed");
+    }
+    return wide;
+}
+
+struct DecodedImage {
+    rhi::u32 width = 0;
+    rhi::u32 height = 0;
+    std::vector<std::byte> pixels;
+};
+
+DecodedImage LoadPngRGBA8(std::string_view utf8Path) {
+    using Microsoft::WRL::ComPtr;
+
+    ComPtr<IWICImagingFactory> factory;
+    ThrowIfFailed(
+        CoCreateInstance(
+            CLSID_WICImagingFactory,
+            nullptr,
+            CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(factory.GetAddressOf())),
+        "Create WIC imaging factory");
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    const std::wstring path = Utf8ToWide(utf8Path);
+    ThrowIfFailed(
+        factory->CreateDecoderFromFilename(
+            path.c_str(),
+            nullptr,
+            GENERIC_READ,
+            WICDecodeMetadataCacheOnLoad,
+            decoder.GetAddressOf()),
+        "Open skybox PNG");
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ThrowIfFailed(decoder->GetFrame(0, frame.GetAddressOf()), "Decode skybox PNG frame");
+
+    ComPtr<IWICFormatConverter> converter;
+    ThrowIfFailed(factory->CreateFormatConverter(converter.GetAddressOf()), "Create WIC format converter");
+    ThrowIfFailed(
+        converter->Initialize(
+            frame.Get(),
+            GUID_WICPixelFormat32bppRGBA,
+            WICBitmapDitherTypeNone,
+            nullptr,
+            0.0,
+            WICBitmapPaletteTypeCustom),
+        "Convert skybox PNG to RGBA8");
+
+    UINT width = 0;
+    UINT height = 0;
+    ThrowIfFailed(converter->GetSize(&width, &height), "Read skybox PNG dimensions");
+    if (width == 0 || height == 0 || width > UINT_MAX / 4U) {
+        throw std::runtime_error("Skybox PNG dimensions are invalid");
+    }
+
+    const UINT stride = width * 4U;
+    const rhi::u64 byteCount = static_cast<rhi::u64>(stride) * height;
+    if (byteCount > UINT_MAX) {
+        throw std::runtime_error("Skybox PNG is too large for WIC CopyPixels");
+    }
+
+    DecodedImage result{};
+    result.width = width;
+    result.height = height;
+    result.pixels.resize(static_cast<std::size_t>(byteCount));
+    ThrowIfFailed(
+        converter->CopyPixels(
+            nullptr,
+            stride,
+            static_cast<UINT>(byteCount),
+            reinterpret_cast<BYTE*>(result.pixels.data())),
+        "Copy skybox PNG pixels");
+    return result;
+}
+
 struct DemoOptions {
     rhi::RHIGraphicsAPI api = rhi::RHIGraphicsAPI::Vulkan;
     rhi::u64 maxFrames = 0;
@@ -124,7 +252,7 @@ const wchar_t* ApiDisplayName(rhi::RHIGraphicsAPI api) noexcept {
     }
 }
 
-Mesh MakePlane(float halfSize = 4.0F) {
+Mesh MakePlane(float halfSize = 3.25F) {
     Mesh mesh{};
     mesh.vertices = {
         {{-halfSize, 0.0F, -halfSize}, {0.0F, 1.0F, 0.0F}, {0.0F, 0.0F}},
@@ -250,9 +378,20 @@ private:
     rhi::RHIPipelineLayout shadowPipelineLayout_{};
     rhi::RHIPipeline shadowPipeline_{};
 
+    rhi::RHITexture skyboxTexture_{};
+    rhi::RHITextureView skyboxView_{};
+    rhi::RHISampler skyboxSampler_{};
+    rhi::RHIBindSetLayout skyboxBindSetLayout_{};
+    rhi::RHIBindSet skyboxBindSet_{};
+    rhi::RHIPipelineLayout skyboxPipelineLayout_{};
+    rhi::RHIPipeline skyboxPipeline_{};
+
     std::vector<std::byte> initialVertexData_;
     std::vector<std::byte> initialIndexData_;
+    std::array<std::vector<std::byte>, 6> initialSkyboxFaceData_{};
     bool staticUploadsPending_ = true;
+    rhi::u32 skyboxWidth_ = 0;
+    rhi::u32 skyboxHeight_ = 0;
     rhi::u32 sphereVertexCount_ = 0;
     rhi::u32 sphereIndexCount_ = 0;
     rhi::u32 planeIndexCount_ = 0;
@@ -447,6 +586,96 @@ private:
         uniformDesc.debugName = "PBR.PlaneUniform";
         planeUniformBuffer_ = device_->CreateBuffer(uniformDesc);
 
+        constexpr std::array<std::string_view, 6> faceFiles = {
+            "px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"};
+        const std::string skyboxDirectory =
+            std::string(pbr_demo_config::ASSET_DIRECTORY) +
+            "/sky_27_cubemap_2k/";
+        for (std::size_t face = 0; face < faceFiles.size(); ++face) {
+            DecodedImage image = LoadPngRGBA8(
+                skyboxDirectory + std::string(faceFiles[face]));
+            if (face == 0) {
+                skyboxWidth_ = image.width;
+                skyboxHeight_ = image.height;
+                if (skyboxWidth_ != skyboxHeight_) {
+                    throw std::runtime_error("Skybox faces must be square");
+                }
+            } else if (image.width != skyboxWidth_ || image.height != skyboxHeight_) {
+                throw std::runtime_error("All skybox faces must have identical dimensions");
+            }
+            initialSkyboxFaceData_[face] = std::move(image.pixels);
+        }
+
+        rhi::RHITextureDesc skyboxTextureDesc{};
+        skyboxTextureDesc.debugName = "PBR.SkyboxCube";
+        skyboxTextureDesc.dimension = rhi::RHITextureDimension::Texture2D;
+        skyboxTextureDesc.extent = {skyboxWidth_, skyboxHeight_, 1};
+        skyboxTextureDesc.arrayLayers = 6;
+        skyboxTextureDesc.format = rhi::RHIFormat::RGBA8_SRGB;
+        skyboxTextureDesc.usage = rhi::RHITextureUsage::Sampled |
+                                  rhi::RHITextureUsage::TransferDestination;
+        skyboxTextureDesc.flags = rhi::RHITextureCreateFlags::CubeCompatible;
+        skyboxTexture_ = device_->CreateTexture(skyboxTextureDesc);
+
+        rhi::RHITextureViewDesc skyboxViewDesc{};
+        skyboxViewDesc.debugName = "PBR.SkyboxCubeView";
+        skyboxViewDesc.texture = skyboxTexture_;
+        skyboxViewDesc.dimension = rhi::RHITextureViewDimension::Cube;
+        skyboxViewDesc.format = skyboxTextureDesc.format;
+        skyboxViewDesc.aspect = rhi::RHITextureAspect::Color;
+        skyboxViewDesc.arrayLayerCount = 6;
+        skyboxView_ = device_->CreateTextureView(skyboxViewDesc);
+
+        rhi::RHISamplerDesc skyboxSamplerDesc{};
+        skyboxSamplerDesc.debugName = "PBR.SkyboxSampler";
+        skyboxSamplerDesc.minFilter = rhi::RHIFilterMode::Linear;
+        skyboxSamplerDesc.magFilter = rhi::RHIFilterMode::Linear;
+        skyboxSamplerDesc.mipmapMode = rhi::RHIMipmapMode::Nearest;
+        skyboxSamplerDesc.addressU = rhi::RHIAddressMode::ClampToEdge;
+        skyboxSamplerDesc.addressV = rhi::RHIAddressMode::ClampToEdge;
+        skyboxSamplerDesc.addressW = rhi::RHIAddressMode::ClampToEdge;
+        skyboxSamplerDesc.maxLod = 0.0F;
+        skyboxSampler_ = device_->CreateSampler(skyboxSamplerDesc);
+
+        rhi::RHIBindSetLayoutDesc skyboxBindLayoutDesc{};
+        skyboxBindLayoutDesc.debugName = "PBR.SkyboxBindSetLayout";
+        skyboxBindLayoutDesc.set = 0;
+        skyboxBindLayoutDesc.entries.push_back({
+            0,
+            rhi::RHIBindingType::UniformBuffer,
+            rhi::RHIShaderStage::Vertex});
+        rhi::RHIBindSetLayoutEntry skyboxTextureEntry{};
+        skyboxTextureEntry.binding = 2;
+        skyboxTextureEntry.type = rhi::RHIBindingType::CombinedTextureSampler;
+        skyboxTextureEntry.visibility = rhi::RHIShaderStage::Fragment;
+        skyboxTextureEntry.textureViewDimension = rhi::RHITextureViewDimension::Cube;
+        skyboxTextureEntry.textureSampleType = rhi::RHITextureSampleType::Float;
+        skyboxBindLayoutDesc.entries.push_back(skyboxTextureEntry);
+        skyboxBindSetLayout_ = device_->CreateBindSetLayout(skyboxBindLayoutDesc);
+
+        rhi::RHIBindSetDesc skyboxBindSetDesc{};
+        skyboxBindSetDesc.debugName = "PBR.SkyboxBindSet";
+        skyboxBindSetDesc.layout = skyboxBindSetLayout_;
+        rhi::RHIResourceBinding skyboxUniformBinding{};
+        skyboxUniformBinding.binding = 0;
+        skyboxUniformBinding.type = rhi::RHIBindingType::UniformBuffer;
+        skyboxUniformBinding.buffer = {
+            sphereUniformBuffer_, 0, sizeof(UniformBufferObject)};
+        skyboxBindSetDesc.bindings.push_back(skyboxUniformBinding);
+        rhi::RHIResourceBinding skyboxTextureBinding{};
+        skyboxTextureBinding.binding = 2;
+        skyboxTextureBinding.type = rhi::RHIBindingType::CombinedTextureSampler;
+        skyboxTextureBinding.texture = {skyboxView_, skyboxTexture_};
+        skyboxTextureBinding.sampler = skyboxSampler_;
+        skyboxBindSetDesc.bindings.push_back(skyboxTextureBinding);
+        skyboxBindSet_ = device_->CreateBindSet(skyboxBindSetDesc);
+
+        rhi::RHIPipelineLayoutDesc skyboxPipelineLayoutDesc{};
+        skyboxPipelineLayoutDesc.debugName = "PBR.SkyboxPipelineLayout";
+        skyboxPipelineLayoutDesc.bindSetLayouts.push_back(skyboxBindSetLayout_);
+        skyboxPipelineLayout_ = device_->CreatePipelineLayout(
+            skyboxPipelineLayoutDesc);
+
         // Shadow Map 本质是一张“可采样的深度附件”：
         // - DepthStencilAttachment：允许 Shadow Pass 做深度测试并写入最近深度；
         // - Sampled：允许后续 PBR Fragment Shader 把它当只读纹理采样。
@@ -508,6 +737,13 @@ private:
         shadowMapEntry.textureViewDimension = rhi::RHITextureViewDimension::View2D;
         shadowMapEntry.textureSampleType = rhi::RHITextureSampleType::Depth;
         bindLayoutDesc.entries.push_back(shadowMapEntry);
+        rhi::RHIBindSetLayoutEntry pbrSkyboxEntry{};
+        pbrSkyboxEntry.binding = 2;
+        pbrSkyboxEntry.type = rhi::RHIBindingType::CombinedTextureSampler;
+        pbrSkyboxEntry.visibility = rhi::RHIShaderStage::Fragment;
+        pbrSkyboxEntry.textureViewDimension = rhi::RHITextureViewDimension::Cube;
+        pbrSkyboxEntry.textureSampleType = rhi::RHITextureSampleType::Float;
+        bindLayoutDesc.entries.push_back(pbrSkyboxEntry);
         bindSetLayout_ = device_->CreateBindSetLayout(bindLayoutDesc);
 
         sphereBindSet_ = CreatePBRBindSet("PBR.SphereBindSet", sphereUniformBuffer_);
@@ -558,6 +794,13 @@ private:
         shadowBinding.texture = {shadowView_, shadowTexture_};
         shadowBinding.sampler = shadowSampler_;
         desc.bindings.push_back(shadowBinding);
+
+        rhi::RHIResourceBinding skyboxBinding{};
+        skyboxBinding.binding = 2;
+        skyboxBinding.type = rhi::RHIBindingType::CombinedTextureSampler;
+        skyboxBinding.texture = {skyboxView_, skyboxTexture_};
+        skyboxBinding.sampler = skyboxSampler_;
+        desc.bindings.push_back(skyboxBinding);
         return device_->CreateBindSet(desc);
     }
 
@@ -722,6 +965,45 @@ private:
         shadowPipelineDesc.depthStencil.depthCompareOp = rhi::RHICompareOp::Less;
         shadowPipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
         shadowPipeline_ = device_->CreateGraphicsPipeline(shadowPipelineDesc);
+
+        rhi::RHIShaderDesc skyboxVertexShader{};
+        skyboxVertexShader.debugName = "PBR.SkyboxVertexShader";
+        skyboxVertexShader.stage = rhi::RHIShaderStage::Vertex;
+        rhi::RHIShaderDesc skyboxFragmentShader{};
+        skyboxFragmentShader.debugName = "PBR.SkyboxFragmentShader";
+        skyboxFragmentShader.stage = rhi::RHIShaderStage::Fragment;
+        if (options_.api == rhi::RHIGraphicsAPI::Vulkan) {
+            skyboxVertexShader.language = rhi::RHIShaderLanguage::SPIRV;
+            skyboxVertexShader.filePath = shaderDirectory + "/skybox.vert.spv";
+            skyboxFragmentShader.language = rhi::RHIShaderLanguage::SPIRV;
+            skyboxFragmentShader.filePath = shaderDirectory + "/skybox.frag.spv";
+        } else {
+            const bool d3d12 = options_.api == rhi::RHIGraphicsAPI::Direct3D12;
+            skyboxVertexShader.language = rhi::RHIShaderLanguage::HLSL;
+            skyboxVertexShader.filePath = shaderDirectory + "/pbr.hlsl";
+            skyboxVertexShader.entryPoint = "SkyboxVSMain";
+            skyboxVertexShader.compileOptions.targetProfile = d3d12 ? "vs_5_1" : "vs_5_0";
+            skyboxFragmentShader.language = rhi::RHIShaderLanguage::HLSL;
+            skyboxFragmentShader.filePath = shaderDirectory + "/pbr.hlsl";
+            skyboxFragmentShader.entryPoint = "SkyboxPSMain";
+            skyboxFragmentShader.compileOptions.targetProfile = d3d12 ? "ps_5_1" : "ps_5_0";
+        }
+
+        rhi::RHIGraphicsPipelineDesc skyboxPipelineDesc{};
+        skyboxPipelineDesc.debugName = "PBR.SkyboxGraphicsPipeline";
+        skyboxPipelineDesc.layout = skyboxPipelineLayout_;
+        skyboxPipelineDesc.shaders = {skyboxVertexShader, skyboxFragmentShader};
+        skyboxPipelineDesc.vertexBuffers.push_back(shadowVertexLayout);
+        skyboxPipelineDesc.inputAssembly.topology = rhi::RHIPrimitiveTopology::TriangleList;
+        skyboxPipelineDesc.raster.cullMode = rhi::RHICullMode::None;
+        skyboxPipelineDesc.raster.frontFace = rhi::RHIFrontFace::CounterClockwise;
+        skyboxPipelineDesc.depthStencil.depthTestEnable = true;
+        skyboxPipelineDesc.depthStencil.depthWriteEnable = false;
+        skyboxPipelineDesc.depthStencil.depthCompareOp = rhi::RHICompareOp::LessOrEqual;
+        skyboxPipelineDesc.blend.attachments.push_back({});
+        skyboxPipelineDesc.colorFormats.push_back(swapchainFormat_);
+        skyboxPipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
+        skyboxPipeline_ = device_->CreateGraphicsPipeline(skyboxPipelineDesc);
     }
 
     void RecreateSwapchain() {
@@ -750,7 +1032,7 @@ private:
         UniformBufferObject uniform{};
         uniform.view = ToShaderMatrix(LookAtRH(
             eye,
-            float3{0.0F, 0.5F, 0.0F},
+            float3{0.0F, 0.8F, 0.0F},
             float3{0.0F, 1.0F, 0.0F}));
         float4x4 projection = PerspectiveRH_ZO(
             math::Radians(45.0F),
@@ -851,6 +1133,14 @@ private:
         if (staticUploadsPending_) {
             packet.uploads.buffers.push_back({vertexBuffer_, 0, initialVertexData_});
             packet.uploads.buffers.push_back({indexBuffer_, 0, initialIndexData_});
+            for (rhi::u32 face = 0; face < initialSkyboxFaceData_.size(); ++face) {
+                rhi::RHITextureUploadDesc upload{};
+                upload.destination = skyboxTexture_;
+                upload.arrayLayer = face;
+                upload.extent = {skyboxWidth_, skyboxHeight_, 1};
+                upload.data = initialSkyboxFaceData_[face];
+                packet.uploads.textures.push_back(std::move(upload));
+            }
         }
         packet.uploads.buffers.push_back(
             {sphereUniformBuffer_, 0, ToBytes(MakeUniform(true))});
@@ -912,6 +1202,20 @@ private:
                                  rhi::RHITextureUsage::Sampled;
         packet.graph.textures.push_back(shadowDepth);
 
+        rhi::RHIRenderGraphTextureDesc skybox{};
+        skybox.name = "SkyboxCube";
+        skybox.imported = true;
+        skybox.flags = rhi::RHIRenderGraphResourceFlags::Imported;
+        skybox.externalHandle = skyboxTexture_;
+        skybox.desc.dimension = rhi::RHITextureDimension::Texture2D;
+        skybox.desc.extent = {skyboxWidth_, skyboxHeight_, 1};
+        skybox.desc.arrayLayers = 6;
+        skybox.desc.format = rhi::RHIFormat::RGBA8_SRGB;
+        skybox.desc.usage = rhi::RHITextureUsage::Sampled |
+                            rhi::RHITextureUsage::TransferDestination;
+        skybox.desc.flags = rhi::RHITextureCreateFlags::CubeCompatible;
+        packet.graph.textures.push_back(skybox);
+
         // -----------------------------------------------------------------
         // Pass 1：从光源视角生成 Shadow Map。
         // -----------------------------------------------------------------
@@ -953,7 +1257,8 @@ private:
             {"Indices", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::IndexBuffer, rhi::RHIPipelineStage::VertexInput},
             {"SphereUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader | rhi::RHIPipelineStage::FragmentShader},
             {"PlaneUniform", rhi::RHIRenderGraphResourceType::Buffer, rhi::RHIResourceState::ConstantBuffer, rhi::RHIPipelineStage::VertexShader | rhi::RHIPipelineStage::FragmentShader},
-            {"ShadowDepth", rhi::RHIRenderGraphResourceType::Texture, rhi::RHIResourceState::ShaderRead, rhi::RHIPipelineStage::FragmentShader}};
+            {"ShadowDepth", rhi::RHIRenderGraphResourceType::Texture, rhi::RHIResourceState::ShaderRead, rhi::RHIPipelineStage::FragmentShader},
+            {"SkyboxCube", rhi::RHIRenderGraphResourceType::Texture, rhi::RHIResourceState::ShaderRead, rhi::RHIPipelineStage::FragmentShader}};
 
         rhi::RHIRenderGraphAttachmentDesc colorAttachment{};
         colorAttachment.resourceName = "BackBuffer";
@@ -1037,6 +1342,17 @@ private:
         planeDraw.indexCount = planeIndexCount_;
         planeDraw.vertexOffsetElements = static_cast<rhi::i32>(sphereVertexCount_);
         opaqueWorkload.indexedDraws.push_back(planeDraw);
+
+        rhi::RHIDrawIndexedCommand skyboxDraw{};
+        skyboxDraw.pipeline = skyboxPipeline_;
+        skyboxDraw.bindSets = {skyboxBindSet_};
+        skyboxDraw.vertexStreams = {{vertexBuffer_, 0, 0, sizeof(Vertex)}};
+        skyboxDraw.indexStream.buffer = indexBuffer_;
+        skyboxDraw.indexStream.indexType = rhi::RHIIndexType::UInt32;
+        skyboxDraw.indexStream.offset = sphereIndexOffset_;
+        skyboxDraw.indexStream.indexCount = sphereIndexCount_;
+        skyboxDraw.indexCount = sphereIndexCount_;
+        opaqueWorkload.indexedDraws.push_back(skyboxDraw);
         packet.workloads.push_back(std::move(opaqueWorkload));
 
         // 三个 Pass 放在同一次 Graphics Queue submission 中。passNames 的顺序还会接受
@@ -1127,16 +1443,23 @@ private:
         // Sampler/View/Texture。WaitIdle 保证 GPU 不再访问这些对象。
         device_->Destroy(pipeline_);
         device_->Destroy(shadowPipeline_);
+        device_->Destroy(skyboxPipeline_);
         device_->Destroy(pipelineLayout_);
         device_->Destroy(shadowPipelineLayout_);
+        device_->Destroy(skyboxPipelineLayout_);
         device_->Destroy(sphereBindSet_);
         device_->Destroy(planeBindSet_);
         device_->Destroy(shadowSphereBindSet_);
+        device_->Destroy(skyboxBindSet_);
         device_->Destroy(bindSetLayout_);
         device_->Destroy(shadowBindSetLayout_);
+        device_->Destroy(skyboxBindSetLayout_);
         device_->Destroy(shadowSampler_);
         device_->Destroy(shadowView_);
         device_->Destroy(shadowTexture_);
+        device_->Destroy(skyboxSampler_);
+        device_->Destroy(skyboxView_);
+        device_->Destroy(skyboxTexture_);
         device_->Destroy(sphereUniformBuffer_);
         device_->Destroy(planeUniformBuffer_);
         device_->Destroy(indexBuffer_);
@@ -1156,6 +1479,7 @@ private:
 
 int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
     try {
+        const ComApartment comApartment;
         PBRDemoApp app(ParseOptions(commandLine != nullptr ? commandLine : ""));
         app.Run(instance);
         return EXIT_SUCCESS;
