@@ -276,35 +276,48 @@ Mesh MakePlane(float halfSize = 3.25F) {
 }
 
 /// 通过经纬线参数化生成单位法线平滑的 UV 球体。
-Mesh MakeSphere(rhi::u32 rings, rhi::u32 segments, float radius = 1.0F) {
+Mesh MakeSphere(
+    rhi::u32 latitudeCount,
+    rhi::u32 longitudeCount,
+    float radius = 1.0F) {
     Mesh mesh{};
-    mesh.vertices.reserve((rings + 1) * (segments + 1));
-    mesh.indices.reserve(rings * segments * 6);
+    mesh.vertices.reserve((latitudeCount + 1) * (longitudeCount + 1));
+    mesh.indices.reserve(latitudeCount * longitudeCount * 6);
 
-    for (rhi::u32 ring = 0; ring <= rings; ++ring) {
-        for (rhi::u32 segment = 0; segment <= segments; ++segment) {
-            const float u = static_cast<float>(segment) / static_cast<float>(segments);
-            const float v = static_cast<float>(ring) / static_cast<float>(rings);
-            const float theta = u * 2.0F * PI;
-            const float phi = v * PI;
-            const float sinPhi = std::sin(phi);
+    for (rhi::u32 latitudeIndex = 0; latitudeIndex <= latitudeCount; ++latitudeIndex) {
+        for (rhi::u32 longitudeIndex = 0; longitudeIndex <= longitudeCount; ++longitudeIndex) {
+            const float longitudeRatio =
+                static_cast<float>(longitudeIndex) / static_cast<float>(longitudeCount);
+            const float latitudeRatio =
+                static_cast<float>(latitudeIndex) / static_cast<float>(latitudeCount);
+            const float longitudeAngle = longitudeRatio * 2.0F * PI;
+            const float latitudeAngle = latitudeRatio * PI;
+            const float sinLatitude = std::sin(latitudeAngle);
             const float3 normal{
-                -std::cos(theta) * sinPhi,
-                std::cos(phi),
-                std::sin(theta) * sinPhi};
-            mesh.vertices.push_back(Vertex{normal * radius, normal, {u, v}});
+                -std::cos(longitudeAngle) * sinLatitude,
+                std::cos(latitudeAngle),
+                std::sin(longitudeAngle) * sinLatitude};
+            mesh.vertices.push_back(
+                Vertex{normal * radius, normal, {longitudeRatio, latitudeRatio}});
         }
     }
 
-    for (rhi::u32 ring = 0; ring < rings; ++ring) {
-        for (rhi::u32 segment = 0; segment < segments; ++segment) {
-            const rhi::u32 row0 = ring * (segments + 1);
-            const rhi::u32 row1 = (ring + 1) * (segments + 1);
-            const rhi::u32 a = row0 + segment;
-            const rhi::u32 b = row1 + segment;
-            const rhi::u32 c = row1 + segment + 1;
-            const rhi::u32 d = row0 + segment + 1;
-            mesh.indices.insert(mesh.indices.end(), {a, b, c, a, c, d});
+    // 相邻两条纬线构成一条纬度带；每次外层循环为该带生成一整圈三角形。
+    for (rhi::u32 latitudeIndex = 0; latitudeIndex < latitudeCount; ++latitudeIndex) {
+        // 相邻两条经线把纬度带切成一个四边形网格。
+        for (rhi::u32 longitudeIndex = 0; longitudeIndex < longitudeCount; ++longitudeIndex) {
+            // 每行有 longitudeCount + 1 个顶点，因为 U=0 和 U=1 在接缝处位置相同，
+            // 但需要保留两份顶点以分别保存纹理坐标 0 和 1。
+            const rhi::u32 upperRow = latitudeIndex * (longitudeCount + 1);
+            const rhi::u32 lowerRow = (latitudeIndex + 1) * (longitudeCount + 1);
+            const rhi::u32 upperLeft = upperRow + longitudeIndex;
+            const rhi::u32 lowerLeft = lowerRow + longitudeIndex;
+            const rhi::u32 lowerRight = lowerRow + longitudeIndex + 1;
+            const rhi::u32 upperRight = upperRow + longitudeIndex + 1;
+            // 按逆时针顺序把四边形拆成两个三角形，使右手坐标系下的正面朝向球外。
+            mesh.indices.insert(
+                mesh.indices.end(),
+                {upperLeft, lowerLeft, lowerRight, upperLeft, lowerRight, upperRight});
         }
     }
     return mesh;
