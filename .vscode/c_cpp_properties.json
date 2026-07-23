@@ -2,7 +2,6 @@
     "configurations": [
         {
             "name": "Windows-MSVC-x64",
-            "configurationProvider": "ms-vscode.cmake-tools",
             "compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe",
             "intelliSenseMode": "windows-msvc-x64",
             "windowsSdkVersion": "10.0.22621.0",
@@ -22,7 +21,6 @@
             ],
             "includePath": [
                 "${workspaceFolder}",
-                "${workspaceFolder}/third_party/glm-1.0.1",
                 "${workspaceFolder}/build_rhi/PBRDemo/generated",
                 "C:/vcpkg/installed/x64-windows/include",
                 "C:/VulkanSDK/1.3.290.0/Include"
@@ -30,7 +28,6 @@
             "browse": {
                 "path": [
                     "${workspaceFolder}",
-                    "${workspaceFolder}/third_party/glm-1.0.1",
                     "${workspaceFolder}/build_rhi/PBRDemo/generated",
                     "C:/vcpkg/installed/x64-windows/include",
                     "C:/VulkanSDK/1.3.290.0/Include"

@@ -2,7 +2,6 @@
     "cmake.buildDirectory": "${workspaceFolder}/build_rhi",
     "cmake.configureOnOpen": true,
     "cmake.generator": "Visual Studio 17 2022",
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "C_Cpp.default.compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe",
     "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
     "C_Cpp.default.windowsSdkVersion": "10.0.22621.0",
@@ -10,7 +9,6 @@
     "C_Cpp.default.cStandard": "c17",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}",
-        "${workspaceFolder}/third_party/glm-1.0.1",
         "${workspaceFolder}/build_rhi/PBRDemo/generated",
         "C:/vcpkg/installed/x64-windows/include",
         "C:/VulkanSDK/1.3.290.0/Include"
@@ -28,6 +26,16 @@
         "/utf-8"
     ],
     "C_Cpp.intelliSenseCachePath": "${workspaceFolder}/build_rhi/.vscode-ipch",
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.errorSquiggles": "enabledIfIncludesResolve",
+    "glsllint.glslangValidatorPath": "C:/VulkanSDK/1.3.290.0/Bin/glslangValidator.exe",
+    "glsllint.glslangValidatorArgs": [
+        "-V"
+    ],
+    "glsl-linter.validatorPath": "C:/VulkanSDK/1.3.290.0/Bin/glslangValidator.exe",
+    "glsl-linter.validatorArgs": [
+        "-V"
+    ],
     "files.associations": {
         "*.inl": "cpp"
     },
