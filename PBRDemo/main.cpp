@@ -34,38 +34,38 @@
 
 namespace {
 
-constexpr rhi::u32 WINDOW_WIDTH = 1280;
-constexpr rhi::u32 WINDOW_HEIGHT = 800;
-constexpr rhi::u32 FRAMES_IN_FLIGHT = 2;
-// Shadow Map 分辨率只影响光源深度图，不必与窗口分辨率相同。
-// 分辨率越高，阴影轮廓越精细，但显存、清理和采样开销也越大；2048 是演示用的折中值。
-constexpr rhi::u32 SHADOW_MAP_SIZE = 2048;
-constexpr float PI = 3.14159265359F;
+constexpr rhi::u32 WINDOW_WIDTH = 1280;     ///< 窗口模式下的默认客户区宽度。
+constexpr rhi::u32 WINDOW_HEIGHT = 800;     ///< 窗口模式下的默认客户区高度。
+constexpr rhi::u32 FRAMES_IN_FLIGHT = 2;    ///< CPU 可提前准备的最大帧数，也是二进制信号的轮转数量。
+constexpr rhi::u32 SHADOW_MAP_SIZE = 2048;  ///< 阴影图边长；精度与显存、清理和采样成本之间的折中。
+constexpr float PI = 3.14159265359F;        ///< 球面参数化使用的单精度圆周率。
 
+/// PBR 与 Shadow Pipeline 共用的交错顶点格式。
 struct Vertex {
-    float3 position{};
-    float3 normal{};
-    float2 uv{};
+    float3 position{};  ///< 模型空间位置。
+    float3 normal{};    ///< 模型空间单位法线。
+    float2 uv{};        ///< 纹理坐标；当前材质仍保留它以演示完整顶点布局。
 };
 
+/// 与 GLSL std140/HLSL cbuffer 对应的每物体常量数据，16 字节对齐后可跨后端上传。
 struct alignas(16) UniformBufferObject {
     // 主相机和物体变换。Shader 中按 projection * view * model * position 使用。
-    float4x4 model{1.0F};
-    float4x4 view{1.0F};
-    float4x4 projection{1.0F};
+    float4x4 model{1.0F};       ///< 模型空间到世界空间。
+    float4x4 view{1.0F};        ///< 世界空间到主相机观察空间。
+    float4x4 projection{1.0F};  ///< 主相机观察空间到裁剪空间。
 
     // lightDirection.xyz 表示光线传播方向，因此 Shader 取反得到“表面指向光源”的 L。
     // vec4 可让 C++、GLSL std140 和 HLSL cbuffer 都自然满足 16 字节对齐。
-    float4 lightDirection{};
-    float4 lightColor{};
-    float4 cameraPosition{};
-    float4 baseColor{};           // rgb = albedo，a = metallic。
-    float4 materialParameters{};  // x = roughness，y = AO。
+    float4 lightDirection{};      ///< xyz 为世界空间光线传播方向，w 未使用。
+    float4 lightColor{};          ///< rgb 为线性空间光强，a 未使用。
+    float4 cameraPosition{};      ///< xyz 为世界空间相机位置，w 固定为 1。
+    float4 baseColor{};           ///< rgb 为 albedo，a 为 metallic。
+    float4 materialParameters{};  ///< x 为 roughness，y 为 AO，zw 保留。
 
-    // 把世界空间位置变换到“光源相机”的裁剪空间，是生成和查询 Shadow Map 的共同坐标系。
-    float4x4 lightViewProjection{1.0F};
-    // xy = 单个阴影 texel 的 UV 尺寸，z = 最小 bias，w = 随法线斜率增长的 bias。
-    float4 shadowParameters{};
+    // lightViewProjection 是生成/查询 Shadow Map 的共同坐标系；shadowParameters 的
+    // xy 是单个 texel 的 UV 尺寸，z 是最小 bias，w 是随法线斜率增长的 bias。
+    float4x4 lightViewProjection{1.0F};  ///< 世界空间到光源裁剪空间。
+    float4 shadowParameters{};           ///< PCF texel 步长与深度比较偏移。
 };
 
 /// Math 的 Matrix 是行主序；两个 shader 均按 column_major 接收，因此上传前转置。
@@ -73,11 +73,13 @@ struct alignas(16) UniformBufferObject {
     return Transpose(matrix);
 }
 
+/// CPU 侧临时网格，创建 GPU buffer 后即可释放。
 struct Mesh {
-    std::vector<Vertex> vertices;
-    std::vector<rhi::u32> indices;
+    std::vector<Vertex> vertices;   ///< 交错顶点数组。
+    std::vector<rhi::u32> indices;  ///< 32 位三角形索引数组。
 };
 
+/// 用 RAII 管理当前线程的 COM 初始化，供 Windows Imaging Component 解码 PNG。
 class ComApartment {
 public:
     ComApartment() {
@@ -94,9 +96,10 @@ public:
     }
 
 private:
-    HRESULT result_ = E_FAIL;
+    HRESULT result_ = E_FAIL;  ///< 保存初始化结果，仅成功初始化时调用 CoUninitialize。
 };
 
+/// 将失败的 HRESULT 转成包含操作名称的 C++ 异常。
 void ThrowIfFailed(HRESULT result, const char* operation) {
     if (FAILED(result)) {
         throw std::runtime_error(
@@ -105,6 +108,7 @@ void ThrowIfFailed(HRESULT result, const char* operation) {
     }
 }
 
+/// 将 UTF-8 资源路径转换为 Win32/WIC 使用的 UTF-16 字符串。
 std::wstring Utf8ToWide(std::string_view text) {
     if (text.empty()) {
         return {};
@@ -132,12 +136,14 @@ std::wstring Utf8ToWide(std::string_view text) {
     return wide;
 }
 
+/// WIC 统一转换后的 RGBA8 图像。
 struct DecodedImage {
-    rhi::u32 width = 0;
-    rhi::u32 height = 0;
-    std::vector<std::byte> pixels;
+    rhi::u32 width = 0;             ///< 像素宽度。
+    rhi::u32 height = 0;            ///< 像素高度。
+    std::vector<std::byte> pixels;  ///< 从左上角开始的紧密 RGBA8 像素。
 };
 
+/// 通过 WIC 解码 PNG，并强制转换为每像素 4 字节的 RGBA8 数据。
 DecodedImage LoadPngRGBA8(std::string_view utf8Path) {
     using Microsoft::WRL::ComPtr;
 
@@ -203,11 +209,13 @@ DecodedImage LoadPngRGBA8(std::string_view utf8Path) {
     return result;
 }
 
+/// 从 WinMain 命令行读取的 Demo 启动配置。
 struct DemoOptions {
-    rhi::RHIGraphicsAPI api = rhi::RHIGraphicsAPI::Vulkan;
-    rhi::u64 maxFrames = 0;
+    rhi::RHIGraphicsAPI api = rhi::RHIGraphicsAPI::Vulkan;  ///< `--api=` 选择的 RHI 后端。
+    rhi::u64 maxFrames = 0;                                 ///< `--frames=` 上限；0 表示持续运行。
 };
 
+/// 解析 `--api=vulkan|d3d11|d3d12` 和可选的 `--frames=N`。
 DemoOptions ParseOptions(std::string_view commandLine) {
     DemoOptions options{};
     std::istringstream arguments{std::string(commandLine)};
@@ -243,15 +251,17 @@ DemoOptions ParseOptions(std::string_view commandLine) {
     return options;
 }
 
+/// 返回适合显示在 Win32 标题栏中的后端名称。
 const wchar_t* ApiDisplayName(rhi::RHIGraphicsAPI api) noexcept {
     switch (api) {
-    case rhi::RHIGraphicsAPI::Vulkan:     return L"Vulkan";
-    case rhi::RHIGraphicsAPI::D3D11: return L"Direct3D 11";
-    case rhi::RHIGraphicsAPI::D3D12: return L"Direct3D 12";
-    default:                              return L"Unknown";
+    case rhi::RHIGraphicsAPI::Vulkan: return L"Vulkan";
+    case rhi::RHIGraphicsAPI::D3D11:  return L"Direct3D 11";
+    case rhi::RHIGraphicsAPI::D3D12:  return L"Direct3D 12";
+    default:                           return L"Unknown";
     }
 }
 
+/// 创建位于 XZ 平面的方形接收面，正面朝向 +Y。
 Mesh MakePlane(float halfSize = 3.25F) {
     Mesh mesh{};
     mesh.vertices = {
@@ -265,6 +275,7 @@ Mesh MakePlane(float halfSize = 3.25F) {
     return mesh;
 }
 
+/// 通过经纬线参数化生成单位法线平滑的 UV 球体。
 Mesh MakeSphere(rhi::u32 rings, rhi::u32 segments, float radius = 1.0F) {
     Mesh mesh{};
     mesh.vertices.reserve((rings + 1) * (segments + 1));
@@ -299,6 +310,7 @@ Mesh MakeSphere(rhi::u32 rings, rhi::u32 segments, float radius = 1.0F) {
     return mesh;
 }
 
+/// 将连续 trivially-copyable 元素复制为 RHI 上传队列使用的字节数组。
 template <typename Type>
 std::vector<std::byte> ToBytes(const std::vector<Type>& values) {
     std::vector<std::byte> result(values.size() * sizeof(Type));
@@ -308,6 +320,7 @@ std::vector<std::byte> ToBytes(const std::vector<Type>& values) {
     return result;
 }
 
+/// 将单个 trivially-copyable 对象复制为 RHI 上传队列使用的字节数组。
 template <typename Type>
 std::vector<std::byte> ToBytes(const Type& value) {
     std::vector<std::byte> result(sizeof(Type));
@@ -315,12 +328,15 @@ std::vector<std::byte> ToBytes(const Type& value) {
     return result;
 }
 
+/// 串联 Win32 窗口、RHI 资源、RenderGraph 构建和逐帧提交的 PBR 演示程序。
 class PBRDemoApp {
 public:
+    /// 保存启动选项；实际系统资源统一由 Run 按依赖顺序创建。
     explicit PBRDemoApp(DemoOptions options)
         : options_(options) {
     }
 
+    /// 执行完整应用生命周期，并在主循环退出后释放全部 RHI 资源。
     void Run(HINSTANCE instance) {
         CreateWindowHandle(instance);
         CreateDevice(instance);
@@ -331,25 +347,24 @@ public:
     }
 
 private:
-    DemoOptions options_{};
-    HWND window_ = nullptr;
-    bool running_ = true;
-    bool framebufferResized_ = false;
-    // true：无边框全屏并覆盖主显示器；false：使用原来的 1280x800 窗口模式。
-    bool isFullscreen_ = false;
+    DemoOptions options_{};            ///< 后端和自动退出帧数等启动配置。
+    HWND window_ = nullptr;            ///< swapchain 绑定的 Win32 窗口。
+    bool running_ = true;              ///< 主消息循环继续运行的标志。
+    bool framebufferResized_ = false;  ///< WM_SIZE 或 acquire/submit 失败后请求重建 swapchain。
+    bool isFullscreen_ = false;        ///< true 为覆盖主显示器的无边框全屏，false 为 1280x800 窗口。
 
-    std::unique_ptr<rhi::RHIDevice> device_;
-    rhi::RHISwapchain swapchain_{};
-    std::vector<rhi::RHITexture> swapchainImages_;
-    rhi::RHIFormat swapchainFormat_ = rhi::RHIFormat::Undefined;
-    rhi::RHIExtent2D swapchainExtent_{};
-    rhi::RHITexture depthTexture_{};
-    rhi::RHITextureView depthView_{};
+    std::unique_ptr<rhi::RHIDevice> device_;                      ///< 当前选择的 Vulkan/D3D 设备门面。
+    rhi::RHISwapchain swapchain_{};                               ///< 窗口呈现链。
+    std::vector<rhi::RHITexture> swapchainImages_;                ///< swapchain 暴露的可呈现颜色纹理。
+    rhi::RHIFormat swapchainFormat_ = rhi::RHIFormat::Undefined;  ///< Pipeline color attachment 必须匹配的格式。
+    rhi::RHIExtent2D swapchainExtent_{};                          ///< 当前可呈现区域的像素尺寸。
+    rhi::RHITexture depthTexture_{};                              ///< 与窗口尺寸一致的主相机深度纹理。
+    rhi::RHITextureView depthView_{};                             ///< 主深度纹理的 depth aspect 视图。
 
-    rhi::RHIBuffer vertexBuffer_{};
-    rhi::RHIBuffer indexBuffer_{};
-    rhi::RHIBuffer sphereUniformBuffer_{};
-    rhi::RHIBuffer planeUniformBuffer_{};
+    rhi::RHIBuffer vertexBuffer_{};         ///< 球体与地面共享的交错顶点缓冲。
+    rhi::RHIBuffer indexBuffer_{};          ///< 球体与地面共享的 32 位索引缓冲。
+    rhi::RHIBuffer sphereUniformBuffer_{};  ///< 球体每帧 UBO。
+    rhi::RHIBuffer planeUniformBuffer_{};   ///< 地面每帧 UBO。
 
     // Shadow Mapping 的核心资源：
     // 1. ShadowMap Pass 从光源视角把最近深度写入 shadowTexture_；
@@ -358,52 +373,59 @@ private:
     //
     // Texture 是实际显存资源，View 说明如何解释其 depth aspect，Sampler 说明过滤、
     // 越界和深度比较规则。三者职责不同，所以 RHI 将它们拆成三个对象。
-    rhi::RHITexture shadowTexture_{};
-    rhi::RHITextureView shadowView_{};
-    rhi::RHISampler shadowSampler_{};
+    rhi::RHITexture shadowTexture_{};   ///< Shadow Pass 写入、PBR Pass 采样的 D32 深度纹理。
+    rhi::RHITextureView shadowView_{};  ///< 仅暴露 shadowTexture_ 的 depth aspect。
+    rhi::RHISampler shadowSampler_{};   ///< 执行 LessOrEqual 深度比较和 PCF 基础过滤。
 
-    rhi::RHIBindSetLayout bindSetLayout_{};
-    rhi::RHIBindSet sphereBindSet_{};
-    rhi::RHIBindSet planeBindSet_{};
-    rhi::RHIPipelineLayout pipelineLayout_{};
-    rhi::RHIPipeline pipeline_{};
+    rhi::RHIBindSetLayout bindSetLayout_{};    ///< 主 PBR 的 UBO、阴影图和 skybox 资源布局。
+    rhi::RHIBindSet sphereBindSet_{};          ///< 球体 UBO 与场景共享纹理绑定。
+    rhi::RHIBindSet planeBindSet_{};           ///< 地面 UBO 与场景共享纹理绑定。
+    rhi::RHIPipelineLayout pipelineLayout_{};  ///< 主 PBR Pipeline 使用的资源布局集合。
+    rhi::RHIPipeline pipeline_{};              ///< 主相机绘制球体和地面的 PBR 图形管线。
 
     // Shadow Pass 只需要物体 UBO，不需要读取 Shadow Map 自己，因此使用独立 BindSet。
     // 如果直接复用主 PBR BindSet，就可能在同一时刻把 shadowTexture_ 同时绑定为：
     // - DSV/depth attachment：当前 Pass 正在写；
     // - SRV/sampled texture：Shader 准备读。
     // 这是资源读写冲突，D3D11 会强制解绑并报告警告，Vulkan/D3D12 则需要非法状态组合。
-    rhi::RHIBindSetLayout shadowBindSetLayout_{};
-    rhi::RHIBindSet shadowSphereBindSet_{};
-    rhi::RHIPipelineLayout shadowPipelineLayout_{};
-    rhi::RHIPipeline shadowPipeline_{};
+    rhi::RHIBindSetLayout shadowBindSetLayout_{};    ///< Shadow Pipeline 仅包含 UBO 的绑定布局。
+    rhi::RHIBindSet shadowSphereBindSet_{};          ///< 阴影投射球体使用的 UBO 绑定。
+    rhi::RHIPipelineLayout shadowPipelineLayout_{};  ///< depth-only Pipeline 的资源布局集合。
+    rhi::RHIPipeline shadowPipeline_{};              ///< 从光源视角写入 D32 的 depth-only 管线。
 
-    rhi::RHITexture skyboxTexture_{};
-    rhi::RHITextureView skyboxView_{};
-    rhi::RHISampler skyboxSampler_{};
-    rhi::RHIBindSetLayout skyboxBindSetLayout_{};
-    rhi::RHIBindSet skyboxBindSet_{};
-    rhi::RHIPipelineLayout skyboxPipelineLayout_{};
-    rhi::RHIPipeline skyboxPipeline_{};
+    // Cube texture 保存环境图，Cube view 负责方向采样，独立 Pipeline 在主深度之后绘制背景。
+    rhi::RHITexture skyboxTexture_{};                ///< 六层 RGBA8 sRGB cube-compatible 纹理。
+    rhi::RHITextureView skyboxView_{};               ///< 将六个 array layer 解释为 cubemap。
+    rhi::RHISampler skyboxSampler_{};                ///< ClampToEdge 线性采样器，避免面边缘重复。
+    rhi::RHIBindSetLayout skyboxBindSetLayout_{};    ///< Skybox UBO 与 cubemap 的资源布局。
+    rhi::RHIBindSet skyboxBindSet_{};                ///< 相机 UBO 和环境 cubemap 的实际绑定。
+    rhi::RHIPipelineLayout skyboxPipelineLayout_{};  ///< Skybox Pipeline 使用的布局集合。
+    rhi::RHIPipeline skyboxPipeline_{};              ///< 深度只读、LessOrEqual 的背景绘制管线。
 
-    std::vector<std::byte> initialVertexData_;
-    std::vector<std::byte> initialIndexData_;
-    std::array<std::vector<std::byte>, 6> initialSkyboxFaceData_{};
-    bool staticUploadsPending_ = true;
-    rhi::u32 skyboxWidth_ = 0;
-    rhi::u32 skyboxHeight_ = 0;
-    rhi::u32 sphereVertexCount_ = 0;
-    rhi::u32 sphereIndexCount_ = 0;
-    rhi::u32 planeIndexCount_ = 0;
-    rhi::u64 sphereIndexOffset_ = 0;
-    rhi::u64 planeIndexOffset_ = 0;
+    std::vector<std::byte> initialVertexData_;                       ///< 首帧上传的合并顶点数据。
+    std::vector<std::byte> initialIndexData_;                        ///< 首帧上传的合并索引数据。
+    std::array<std::vector<std::byte>, 6> initialSkyboxFaceData_{};  ///< 按 +X/-X/+Y/-Y/+Z/-Z 排列的六面像素。
+    bool staticUploadsPending_ = true;                               ///< 静态 buffer/cubemap 仅在首个成功帧前上传。
+    rhi::u32 skyboxWidth_ = 0;                                       ///< cubemap 单面的像素宽度。
+    rhi::u32 skyboxHeight_ = 0;                                      ///< cubemap 单面的像素高度。
+    rhi::u32 sphereVertexCount_ = 0;                                 ///< 计算地面 base-vertex 使用的球体顶点数。
+    rhi::u32 sphereIndexCount_ = 0;                                  ///< 球体 draw 的索引数量。
+    rhi::u32 planeIndexCount_ = 0;                                   ///< 地面 draw 的索引数量。
+    rhi::u64 sphereIndexOffset_ = 0;                                 ///< 合并索引 buffer 中球体的字节偏移。
+    rhi::u64 planeIndexOffset_ = 0;                                  ///< 合并索引 buffer 中地面的字节偏移。
 
-    std::array<rhi::RHIGPUWaitGPUSignal, FRAMES_IN_FLIGHT> imageAvailable_{};
-    std::array<rhi::RHIGPUWaitGPUSignal, FRAMES_IN_FLIGHT> renderFinished_{};
-    rhi::u32 frameSlot_ = 0;
-    rhi::u64 frameIndex_ = 0;
+    // 每个 frames-in-flight 槽位各自持有 acquire/present 二进制同步信号。
+    std::array<rhi::RHIGPUWaitGPUSignal, FRAMES_IN_FLIGHT> imageAvailable_{};  ///< acquire 完成后由提交等待。
+    std::array<rhi::RHIGPUWaitGPUSignal, FRAMES_IN_FLIGHT> renderFinished_{};  ///< 图形提交完成后由 present 等待。
+
+    // 只有成功提交后才推进槽位和累计帧号。
+    rhi::u32 frameSlot_ = 0;   ///< 当前轮转的 frames-in-flight 槽位。
+    rhi::u64 frameIndex_ = 0;  ///< 已成功提交的累计帧号。
+
+    /// 球体旋转动画使用的单调时钟原点。
     std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now();
 
+    /// 将 Win32 消息转发给实例，并把 resize/close 转为主循环状态。
     static LRESULT CALLBACK WindowProcedure(
         HWND window,
         UINT message,
@@ -433,6 +455,7 @@ private:
         return DefWindowProcW(window, message, wParam, lParam);
     }
 
+    /// 注册窗口类并创建窗口模式或无边框全屏窗口。
     void CreateWindowHandle(HINSTANCE instance) {
         WNDCLASSEXW windowClass{};
         windowClass.cbSize = sizeof(windowClass);
@@ -495,6 +518,7 @@ private:
         }
     }
 
+    /// 初始化所选 RHI 后端，并创建每帧 acquire/present 二进制信号。
     void CreateDevice(HINSTANCE instance) {
         rhi::RHIDeviceCreateDesc desc{};
         desc.backend.applicationName = "RHI RenderGraph PBR Demo";
@@ -547,6 +571,7 @@ private:
         }
     }
 
+    /// 创建与窗口尺寸无关的几何、UBO、阴影、skybox、布局和绑定资源。
     void CreateStaticResources() {
         const Mesh sphere = MakeSphere(32, 64);
         const Mesh plane = MakePlane();
@@ -554,6 +579,8 @@ private:
         sphereIndexCount_ = static_cast<rhi::u32>(sphere.indices.size());
         planeIndexCount_ = static_cast<rhi::u32>(plane.indices.size());
 
+        // 球体和地面合并进同一对 GPU buffer。地面 draw 通过 vertexOffsetElements
+        // 跳过球体顶点，通过 planeIndexOffset_ 跳过球体索引。
         std::vector<Vertex> vertices = sphere.vertices;
         vertices.insert(vertices.end(), plane.vertices.begin(), plane.vertices.end());
         std::vector<rhi::u32> indices = sphere.indices;
@@ -586,6 +613,7 @@ private:
         uniformDesc.debugName = "PBR.PlaneUniform";
         planeUniformBuffer_ = device_->CreateBuffer(uniformDesc);
 
+        // 文件顺序必须与 cubemap array layer 约定一致，否则方向采样会看到错位或旋转的面。
         constexpr std::array<std::string_view, 6> faceFiles = {
             "px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"};
         const std::string skyboxDirectory =
@@ -606,6 +634,8 @@ private:
             initialSkyboxFaceData_[face] = std::move(image.pixels);
         }
 
+        // 环境图是显示颜色，所以使用 sRGB 格式让采样阶段自动解码到线性空间参与 PBR。
+        // CubeCompatible 允许同一个 6-layer Texture2D 建立 Cube view。
         rhi::RHITextureDesc skyboxTextureDesc{};
         skyboxTextureDesc.debugName = "PBR.SkyboxCube";
         skyboxTextureDesc.dimension = rhi::RHITextureDimension::Texture2D;
@@ -637,6 +667,8 @@ private:
         skyboxSamplerDesc.maxLod = 0.0F;
         skyboxSampler_ = device_->CreateSampler(skyboxSamplerDesc);
 
+        // binding 0 提供相机矩阵，由 Skybox Vertex Shader 去除观察平移；binding 2
+        // 提供环境 cubemap。编号与 PBR layout 一致，方便 GLSL/HLSL 共享资源槽约定。
         rhi::RHIBindSetLayoutDesc skyboxBindLayoutDesc{};
         skyboxBindLayoutDesc.debugName = "PBR.SkyboxBindSetLayout";
         skyboxBindLayoutDesc.set = 0;
@@ -775,6 +807,7 @@ private:
             shadowPipelineLayoutDesc);
     }
 
+    /// 为一个物体绑定独立 UBO，并复用全场景的阴影图与环境 cubemap。
     rhi::RHIBindSet CreatePBRBindSet(const char* name, rhi::RHIBuffer buffer) {
         // 球和 Plane 各有自己的 UBO（model、材质不同），但共享同一张阴影图。
         // BindSet 把“这个 draw 实际使用哪些资源”与 Pipeline 的静态布局分离。
@@ -804,6 +837,7 @@ private:
         return device_->CreateBindSet(desc);
     }
 
+    /// 为 Shadow Pass 创建只包含物体 UBO 的绑定，避免边写边采样 shadowTexture_。
     rhi::RHIBindSet CreateShadowBindSet(
         const char* name,
         rhi::RHIBuffer buffer) {
@@ -822,6 +856,7 @@ private:
         return device_->CreateBindSet(desc);
     }
 
+    /// 查询当前 Win32 客户区尺寸；窗口最小化时允许返回 0x0。
     rhi::RHIExtent2D ClientExtent() const {
         RECT rectangle{};
         GetClientRect(window_, &rectangle);
@@ -830,6 +865,7 @@ private:
             static_cast<rhi::u32>(std::max<LONG>(0, rectangle.bottom - rectangle.top))};
     }
 
+    /// 创建随窗口尺寸变化的 swapchain、主深度资源，并按需创建图形管线。
     void CreateSwapchainResources() {
         const rhi::RHIExtent2D extent = ClientExtent();
         if (extent.width == 0 || extent.height == 0) {
@@ -866,6 +902,7 @@ private:
         }
     }
 
+    /// 根据当前后端选择 SPIR-V/HLSL，并创建 PBR、Shadow 和 Skybox 三条管线。
     void CreatePipeline() {
         rhi::RHIShaderDesc vertexShader{};
         vertexShader.debugName = "PBR.VertexShader";
@@ -966,6 +1003,8 @@ private:
         shadowPipelineDesc.depthStencilFormat = rhi::RHIFormat::D32_Float;
         shadowPipeline_ = device_->CreateGraphicsPipeline(shadowPipelineDesc);
 
+        // Skybox 复用球体 POSITION 作为方向。Vertex Shader 把深度固定在远平面，
+        // LessOrEqual 且关闭深度写入，使它只填充尚未被场景几何覆盖的背景像素。
         rhi::RHIShaderDesc skyboxVertexShader{};
         skyboxVertexShader.debugName = "PBR.SkyboxVertexShader";
         skyboxVertexShader.stage = rhi::RHIShaderStage::Vertex;
@@ -1006,6 +1045,7 @@ private:
         skyboxPipeline_ = device_->CreateGraphicsPipeline(skyboxPipelineDesc);
     }
 
+    /// 等待旧呈现资源空闲后重建窗口尺寸相关资源；静态场景资源保持不变。
     void RecreateSwapchain() {
         const rhi::RHIExtent2D extent = ClientExtent();
         if (extent.width == 0 || extent.height == 0) {
@@ -1023,6 +1063,7 @@ private:
         framebufferResized_ = false;
     }
 
+    /// 为球体或地面生成当前帧的相机、光源、阴影和材质常量。
     UniformBufferObject MakeUniform(bool sphere) const {
         const float time = std::chrono::duration<float>(
                                std::chrono::steady_clock::now() - startTime_)
@@ -1116,6 +1157,7 @@ private:
         return uniform;
     }
 
+    /// 将资源上传、RenderGraph、draw workload、队列同步和 present 组装为一帧 packet。
     rhi::RHIFramePacket BuildFrame(rhi::u32 imageIndex) {
         rhi::RHIFramePacket packet{};
         packet.settings.drawableSize = swapchainExtent_;
@@ -1130,6 +1172,7 @@ private:
         packet.settings.frameIndex = frameIndex_;
         packet.settings.maxFramesInFlight = FRAMES_IN_FLIGHT;
 
+        // 静态几何和六面 cubemap 只上传一次；UBO 则因动画和相机参数每帧更新。
         if (staticUploadsPending_) {
             packet.uploads.buffers.push_back({vertexBuffer_, 0, initialVertexData_});
             packet.uploads.buffers.push_back({indexBuffer_, 0, initialIndexData_});
@@ -1147,6 +1190,7 @@ private:
         packet.uploads.buffers.push_back(
             {planeUniformBuffer_, 0, ToBytes(MakeUniform(false))});
 
+        // RenderGraph 只引用长期存在的外部 RHI 句柄，不接管这些 buffer 的生命周期。
         const auto importBuffer = [&](
             const char* name,
             rhi::RHIBuffer handle,
@@ -1166,6 +1210,7 @@ private:
         importBuffer("SphereUniform", sphereUniformBuffer_, sizeof(UniformBufferObject), rhi::RHIBufferUsage::Uniform);
         importBuffer("PlaneUniform", planeUniformBuffer_, sizeof(UniformBufferObject), rhi::RHIBufferUsage::Uniform);
 
+        // swapchain image 和主深度均由图外创建，本帧只声明它们的用途和初始状态。
         rhi::RHIRenderGraphTextureDesc backBuffer{};
         backBuffer.name = "BackBuffer";
         backBuffer.imported = true;
@@ -1202,6 +1247,7 @@ private:
                                  rhi::RHITextureUsage::Sampled;
         packet.graph.textures.push_back(shadowDepth);
 
+        // Cubemap 本帧仅在 Fragment Shader 中读取；首帧上传由 packet.uploads 先行完成。
         rhi::RHIRenderGraphTextureDesc skybox{};
         skybox.name = "SkyboxCube";
         skybox.imported = true;
@@ -1276,6 +1322,7 @@ private:
         opaque.depthStencilAttachment = depthAttachment;
         packet.graph.passes.push_back(opaque);
 
+        // Present Pass 把 BackBuffer 从 color attachment 状态转换回呈现状态。
         rhi::RHIRenderGraphPassDesc presentPass{};
         presentPass.name = "Present";
         presentPass.type = rhi::RHIRenderGraphPassType::Present;
@@ -1315,6 +1362,7 @@ private:
         shadowWorkload.indexedDraws.push_back(shadowSphereDraw);
         packet.workloads.push_back(std::move(shadowWorkload));
 
+        // 主 workload 依次绘制球、地面和背景。Skybox 不写深度，因此放在最后不会覆盖物体。
         rhi::RHIRenderPassWorkload opaqueWorkload{};
         opaqueWorkload.passName = "OpaquePBR";
         opaqueWorkload.viewport = packet.settings.viewport;
@@ -1368,6 +1416,7 @@ private:
         submit.signals.push_back({renderFinished_[frameSlot_], 0});
         packet.submissions.push_back(submit);
 
+        // acquire signal 保证 backbuffer 可写，render-finished signal 保证 present 只读取完成帧。
         packet.present = rhi::RHIPresentDesc{
             swapchain_,
             imageIndex,
@@ -1377,6 +1426,7 @@ private:
         return packet;
     }
 
+    /// 获取一张 swapchain image，提交 RenderGraph 帧，并推进同步槽位和累计帧号。
     void DrawFrame() {
         if (!swapchain_) {
             return;
@@ -1405,6 +1455,7 @@ private:
         ++frameIndex_;
     }
 
+    /// 处理 Win32 消息、最小化等待、swapchain 重建和逐帧渲染。
     void MainLoop() {
         MSG message{};
         while (running_) {
@@ -1434,6 +1485,7 @@ private:
         }
     }
 
+    /// 等待 GPU 空闲，并按“使用者先于被引用资源”的逆依赖顺序销毁对象。
     void Cleanup() noexcept {
         if (device_ == nullptr) {
             return;
@@ -1477,6 +1529,7 @@ private:
 
 } // namespace
 
+/// Windows GUI 入口：初始化 COM、运行 Demo，并将异常显示为消息框。
 int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
     try {
         const ComApartment comApartment;
