@@ -705,6 +705,480 @@
                 break-inside: avoid;
             }
         }
+
+        /* ProcessOn-inspired canvas shell: the map is the document entry point,
+           while the sections below remain the detailed reference. */
+        :root {
+            --paper: #eef1f3;
+            --surface: #ffffff;
+            --surface-alt: #f7f9fa;
+            --ink: #1d2924;
+            --muted: #63706a;
+            --line: #d7dfdb;
+            --line-strong: #aebcb5;
+            --green: #146a4d;
+            --green-soft: #e4f1e9;
+            --rust: #a6472c;
+            --rust-soft: #f8e9e3;
+            --blue: #27649a;
+            --blue-soft: #e7f0f8;
+            --gold: #8a6510;
+            --gold-soft: #f7f0db;
+        }
+
+        body {
+            background: var(--paper);
+            line-height: 1.7;
+        }
+
+        .layout {
+            display: block;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            position: sticky;
+            z-index: 20;
+            top: 0;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            width: 100%;
+            height: auto;
+            min-height: 64px;
+            padding: 10px max(22px, calc((100vw - 1480px) / 2));
+            overflow: visible;
+            background: rgba(255, 255, 255, 0.97);
+            border-right: 0;
+            border-bottom: 1px solid var(--line);
+            box-shadow: 0 2px 12px rgba(32, 48, 39, 0.05);
+        }
+
+        .sidebar-title {
+            position: relative;
+            flex: 0 0 auto;
+            margin: 0;
+            padding-left: 16px;
+            color: var(--ink);
+            font-size: 17px;
+        }
+
+        .sidebar-title::before {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 8px;
+            height: 22px;
+            content: "";
+            background: var(--green);
+            border-radius: 2px;
+            transform: translateY(-50%);
+        }
+
+        .sidebar-subtitle,
+        .toc-label {
+            display: none;
+        }
+
+        .toc {
+            display: flex;
+            flex: 1 1 auto;
+            gap: 2px;
+            min-width: 0;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .toc a {
+            flex: 0 0 auto;
+            padding: 7px 9px;
+            color: #4a5851;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .toc a:hover,
+        .toc a.active {
+            color: var(--green);
+            background: var(--green-soft);
+            border-color: #bfddcc;
+            border-left-color: #bfddcc;
+        }
+
+        main {
+            overflow-x: clip;
+        }
+
+        .hero {
+            width: min(1480px, calc(100% - 48px));
+            margin: 0 auto;
+            padding: 30px 0 22px;
+            color: var(--ink);
+            background: transparent;
+            border: 0;
+        }
+
+        .hero-kicker {
+            margin-bottom: 7px;
+            color: var(--green);
+            font-size: 12px;
+        }
+
+        h1 {
+            max-width: 1000px;
+            font-size: 34px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            max-width: 900px;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .mindmap-workspace {
+            width: min(1480px, calc(100% - 48px));
+            margin: 0 auto 24px;
+            padding: 18px;
+            background: var(--surface-alt);
+            border: 1px solid var(--line);
+            box-shadow: 0 16px 36px rgba(31, 48, 40, 0.08);
+        }
+
+        .canvas-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 36px;
+            padding: 0 4px 14px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .canvas-header strong {
+            font-size: 15px;
+        }
+
+        .canvas-legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .canvas-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .canvas-legend i {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border: 2px solid currentColor;
+            border-radius: 2px;
+        }
+
+        .canvas-legend .map-input { color: var(--blue); }
+        .canvas-legend .map-compile { color: var(--rust); }
+        .canvas-legend .map-plan { color: var(--green); }
+        .canvas-legend .map-execute { color: var(--gold); }
+
+        .mindmap-canvas {
+            margin-top: 16px;
+            padding: 26px;
+            overflow-x: auto;
+            background: #f4f6f7;
+            border: 1px solid #d9e0dd;
+        }
+
+        .mindmap-grid {
+            display: grid;
+            grid-template-columns: minmax(190px, 1fr) 62px minmax(250px, 1.15fr) 62px minmax(190px, 1fr);
+            grid-template-rows: repeat(3, minmax(104px, auto));
+            gap: 16px 0;
+            min-width: 980px;
+            align-items: center;
+        }
+
+        .mind-node {
+            position: relative;
+            display: flex;
+            min-width: 0;
+            min-height: 88px;
+            padding: 13px 15px;
+            flex-direction: column;
+            justify-content: center;
+            color: var(--ink);
+            background: #ffffff;
+            border: 2px solid var(--line-strong);
+            border-radius: 5px;
+            box-shadow: 0 5px 14px rgba(32, 46, 39, 0.06);
+            text-decoration: none;
+            transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+        }
+
+        .mind-node:hover,
+        .mind-node:focus-visible {
+            z-index: 2;
+            color: var(--ink);
+            border-color: var(--ink);
+            box-shadow: 0 10px 22px rgba(32, 46, 39, 0.14);
+            outline: none;
+            transform: translateY(-2px);
+        }
+
+        .mind-node .node-kicker {
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .mind-node strong {
+            font-size: 16px;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .mind-node small {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+
+        .mind-node.input { background: var(--blue-soft); border-color: #8eadc6; }
+        .mind-node.compile { background: var(--rust-soft); border-color: #c98d78; }
+        .mind-node.plan { background: var(--green-soft); border-color: #78ad96; }
+        .mind-node.execute { background: var(--gold-soft); border-color: #baa064; }
+
+        .mind-node.root {
+            grid-column: 3;
+            grid-row: 1 / 4;
+            align-self: stretch;
+            color: #ffffff;
+            text-align: center;
+            background: #263e33;
+            border-color: #263e33;
+            box-shadow: 0 12px 25px rgba(25, 53, 42, 0.18);
+        }
+
+        .mind-node.root .node-kicker,
+        .mind-node.root small {
+            color: #c7d8ce;
+        }
+
+        .mind-node.root strong {
+            font-size: 23px;
+        }
+
+        .map-left-1 { grid-column: 1; grid-row: 1; }
+        .map-left-2 { grid-column: 1; grid-row: 2; }
+        .map-left-3 { grid-column: 1; grid-row: 3; }
+        .map-right-1 { grid-column: 5; grid-row: 1; }
+        .map-right-2 { grid-column: 5; grid-row: 2; }
+        .map-right-3 { grid-column: 5; grid-row: 3; }
+
+        .map-connector {
+            position: relative;
+            height: 2px;
+            background: var(--line-strong);
+        }
+
+        .map-connector::after {
+            position: absolute;
+            top: 50%;
+            right: 0;
+            width: 9px;
+            height: 9px;
+            content: "";
+            background: #f4f6f7;
+            border-top: 2px solid var(--line-strong);
+            border-right: 2px solid var(--line-strong);
+            transform: translateY(-50%) rotate(45deg);
+        }
+
+        .map-line-left-1 { grid-column: 2; grid-row: 1; }
+        .map-line-left-2 { grid-column: 2; grid-row: 2; }
+        .map-line-left-3 { grid-column: 2; grid-row: 3; }
+        .map-line-right-1 { grid-column: 4; grid-row: 1; }
+        .map-line-right-2 { grid-column: 4; grid-row: 2; }
+        .map-line-right-3 { grid-column: 4; grid-row: 3; }
+
+        .canvas-note {
+            margin: 16px 0 0;
+            padding: 12px 14px;
+            color: #425049;
+            background: #e8eeea;
+            border-left: 4px solid var(--green);
+        }
+
+        .content {
+            width: min(1180px, calc(100% - 48px));
+            padding: 0 0 84px;
+        }
+
+        section {
+            padding: 52px 0;
+            border-bottom-color: var(--line);
+            scroll-margin-top: 78px;
+        }
+
+        .content section > h2 {
+            padding-left: 14px;
+            border-left: 5px solid var(--green);
+            font-size: 28px;
+        }
+
+        .lead {
+            max-width: 960px;
+            color: var(--muted);
+            font-size: 17px;
+        }
+
+        .diagram {
+            padding: 22px;
+            background: var(--surface-alt);
+            border-color: var(--line);
+            border-radius: 4px;
+            box-shadow: none;
+        }
+
+        .flow-node,
+        .panel {
+            border-radius: 4px;
+            box-shadow: none;
+        }
+
+        .flow-node {
+            background: #ffffff;
+        }
+
+        .panel {
+            border-top: 3px solid var(--green);
+        }
+
+        .panel:nth-child(3n + 2) {
+            border-top-color: var(--blue);
+        }
+
+        .panel:nth-child(3n) {
+            border-top-color: var(--rust);
+        }
+
+        .table-wrap {
+            border-radius: 4px;
+        }
+
+        @media (max-width: 980px) {
+            .sidebar {
+                gap: 14px;
+                padding: 9px 20px;
+            }
+
+            .hero,
+            .mindmap-workspace,
+            .content {
+                width: min(100% - 40px, 1480px);
+            }
+
+            .mindmap-grid {
+                min-width: 820px;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .sidebar {
+                position: static;
+                display: block;
+                padding: 12px 16px 8px;
+            }
+
+            .sidebar-title {
+                display: inline-block;
+            }
+
+            .toc {
+                margin-top: 8px;
+            }
+
+            .hero,
+            .mindmap-workspace,
+            .content {
+                width: calc(100% - 24px);
+            }
+
+            .hero {
+                padding: 24px 0 16px;
+            }
+
+            h1 {
+                font-size: 27px;
+            }
+
+            .mindmap-workspace {
+                padding: 10px;
+            }
+
+            .canvas-header {
+                display: block;
+            }
+
+            .canvas-legend {
+                justify-content: flex-start;
+                margin-top: 8px;
+            }
+
+            .mindmap-canvas {
+                padding: 14px;
+                overflow: visible;
+            }
+
+            .mindmap-grid {
+                display: flex;
+                min-width: 0;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .mind-node.root {
+                min-height: 116px;
+                order: -1;
+            }
+
+            .map-connector {
+                display: none;
+            }
+
+            .mind-node {
+                width: 100%;
+                min-height: 0;
+            }
+
+            .content section > h2 {
+                font-size: 24px;
+            }
+        }
+
+        @media print {
+            .sidebar {
+                display: none;
+            }
+
+            .mindmap-workspace {
+                width: 100%;
+                box-shadow: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -714,11 +1188,12 @@
         <p class="sidebar-subtitle">基于当前仓库实现整理的代码流程、设计结构与后端执行说明。</p>
         <div class="toc-label">Contents</div>
         <nav class="toc">
+            <a href="#mindmap">脑图总览</a>
             <a href="#overview">1. 总体定位</a>
             <a href="#layers">2. 分层结构</a>
             <a href="#packet">3. 帧数据组织</a>
             <a href="#flow">4. 完整帧流程</a>
-            <a href="#compile">5. 编译九阶段</a>
+            <a href="#compile">5. 编译十阶段</a>
             <a href="#hazards">6. 依赖与裁剪</a>
             <a href="#lifetime">7. 生命周期与别名</a>
             <a href="#barrier">8. Barrier 生成</a>
@@ -734,8 +1209,74 @@
         <header class="hero">
             <p class="hero-kicker">VulkanLearn · 当前 RHI 实现说明</p>
             <h1>RHI 与 RenderGraph：代码流程、逻辑与设计结构</h1>
-            <p>从分离的场景输入，到帧图编译、依赖分析、临时资源复用，再到 Vulkan、D3D11、D3D12 的真实命令执行。</p>
+            <p>从一帧声明、图编译、临时资源复用，到 Vulkan、D3D11、D3D12 的真实命令执行。脑图节点直接连接下方的对应源码说明。</p>
         </header>
+
+        <section class="mindmap-workspace" id="mindmap" aria-label="RenderGraph 架构脑图">
+            <div class="canvas-header">
+                <strong>RenderGraph 架构画布</strong>
+                <div class="canvas-legend" aria-label="节点类型">
+                    <span class="map-input"><i></i>输入声明</span>
+                    <span class="map-compile"><i></i>CPU 编译</span>
+                    <span class="map-plan"><i></i>稳定计划</span>
+                    <span class="map-execute"><i></i>后端执行</span>
+                </div>
+            </div>
+
+            <div class="mindmap-canvas">
+                <div class="mindmap-grid">
+                    <a class="mind-node root" href="#overview">
+                        <span class="node-kicker">帧任务编译器</span>
+                        <strong>RenderGraph</strong>
+                        <small>把“资源如何流动”的声明编译为后端可线性执行的 ExecutionPlan</small>
+                    </a>
+
+                    <a class="mind-node input map-left-1" href="#packet">
+                        <span class="node-kicker">当前帧输入</span>
+                        <strong>RHIFramePacket</strong>
+                        <small>资源、Pass、Workload、Upload、Submit、Present</small>
+                    </a>
+                    <div class="map-connector map-line-left-1" aria-hidden="true"></div>
+
+                    <a class="mind-node compile map-left-2" href="#compile">
+                        <span class="node-kicker">CPU 编译</span>
+                        <strong>依赖与排序</strong>
+                        <small>名称解析、RAW/WAR/WAW、两次稳定拓扑排序</small>
+                    </a>
+                    <div class="map-connector map-line-left-2" aria-hidden="true"></div>
+
+                    <a class="mind-node compile map-left-3" href="#hazards">
+                        <span class="node-kicker">活性分析</span>
+                        <strong>裁剪与资源生存期</strong>
+                        <small>从输出根反向标记，删除无效 Pass</small>
+                    </a>
+                    <div class="map-connector map-line-left-3" aria-hidden="true"></div>
+
+                    <div class="map-connector map-line-right-1" aria-hidden="true"></div>
+                    <a class="mind-node plan map-right-1" href="#lifetime">
+                        <span class="node-kicker">静态输出</span>
+                        <strong>ExecutionPlan</strong>
+                        <small>Compiled Pass、Lifetime、Allocation Slot</small>
+                    </a>
+
+                    <div class="map-connector map-line-right-2" aria-hidden="true"></div>
+                    <a class="mind-node plan map-right-2" href="#barrier">
+                        <span class="node-kicker">同步要求</span>
+                        <strong>Transitions</strong>
+                        <small>state、stage、access、queue、aliasing</small>
+                    </a>
+
+                    <div class="map-connector map-line-right-3" aria-hidden="true"></div>
+                    <a class="mind-node execute map-right-3" href="#backends">
+                        <span class="node-kicker">原生执行</span>
+                        <strong>Vulkan · D3D11 · D3D12</strong>
+                        <small>解析资源、录制命令、提交并 Present</small>
+                    </a>
+                </div>
+            </div>
+
+            <p class="canvas-note"><strong>阅读路径：</strong>先从左侧定义“这一帧需要什么”，再从右侧观察编译后“后端实际按什么顺序执行”。<a href="#pbr">PBRDemo</a> 是这条路径的真实端到端样例。</p>
+        </section>
 
         <div class="content">
             <section id="overview">
@@ -876,7 +1417,7 @@ workload.indexedDraws.push_back(draw);</code></pre>
             </section>
 
             <section id="compile">
-                <h2>5. RenderGraph 编译九阶段</h2>
+                <h2>5. RenderGraph 编译十阶段（0–9）</h2>
                 <p class="lead"><code>CompileRHIRenderGraph</code> 把容易编写、包含字符串的声明转换成后端友好的整数计划。编译不是录制 GPU 命令，它只做 CPU 侧分析。</p>
 
                 <div class="table-wrap">
@@ -1090,16 +1631,18 @@ discard = true, aliasing = true
 
             <section id="pbr">
                 <h2>10. PBRDemo 的实际一帧</h2>
-                <p class="lead">当前示例不是抽象伪代码。它导入已有 GPU 资源，构建一个光栅 pass 和一个 present pass，在同一个 workload 中提交球体与平面的索引绘制。</p>
+                <p class="lead">当前示例不是抽象伪代码。它导入长期存在的 GPU 资源，先生成球体的 Shadow Map，再绘制球体、地面和天空盒，最后把 swapchain image 呈现到屏幕。</p>
 
                 <div class="diagram">
                     <p class="diagram-title">PBRDemo pass 与资源流</p>
                     <div class="flow">
                         <div class="flow-node blue"><strong>Acquire</strong><span>BackBuffer: Present</span></div>
                         <div class="arrow">→</div>
-                        <div class="flow-node"><strong>Uploads</strong><span>Vertex / Index / 2 Uniforms</span></div>
+                        <div class="flow-node"><strong>Uploads</strong><span>Mesh / Cubemap 首帧 · UBO 每帧</span></div>
                         <div class="arrow">→</div>
-                        <div class="flow-node rust"><strong>OpaquePBR</strong><span>Clear color/depth · Draw Sphere · Draw Plane</span></div>
+                        <div class="flow-node rust"><strong>ShadowMap</strong><span>Depth-only Sphere → ShadowDepth</span></div>
+                        <div class="arrow">→</div>
+                        <div class="flow-node rust"><strong>OpaquePBR</strong><span>Read Shadow/Skybox · Draw Sphere/Plane/Skybox</span></div>
                         <div class="arrow">→</div>
                         <div class="flow-node blue"><strong>Present</strong><span>BackBuffer → Present state</span></div>
                     </div>
@@ -1107,24 +1650,27 @@ discard = true, aliasing = true
 
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Graph 名称</th><th>来源</th><th>OpaquePBR 用途</th><th>生命周期</th></tr></thead>
+                        <thead><tr><th>Graph 名称</th><th>来源</th><th>Pass 用途</th><th>生命周期</th></tr></thead>
                         <tbody>
-                        <tr><td><code>Vertices</code></td><td>外部 vertex buffer</td><td>VertexBuffer / VertexInput</td><td>Imported</td></tr>
-                        <tr><td><code>Indices</code></td><td>外部 index buffer</td><td>IndexBuffer / VertexInput</td><td>Imported</td></tr>
-                        <tr><td><code>SphereUniform</code></td><td>球体常量缓冲</td><td>ConstantBuffer / VS + FS</td><td>Imported，每帧上传</td></tr>
-                        <tr><td><code>PlaneUniform</code></td><td>平面常量缓冲</td><td>ConstantBuffer / VS + FS</td><td>Imported，每帧上传</td></tr>
-                        <tr><td><code>BackBuffer</code></td><td>当前 swapchain image</td><td>Color attachment，之后 Present</td><td>Imported</td></tr>
-                        <tr><td><code>Depth</code></td><td>外部深度纹理</td><td>Depth attachment</td><td>Imported</td></tr>
+                        <tr><td><code>Vertices</code></td><td>外部 vertex buffer</td><td>ShadowMap / OpaquePBR 的 VertexBuffer</td><td>Imported</td></tr>
+                        <tr><td><code>Indices</code></td><td>外部 index buffer</td><td>ShadowMap 只画球；OpaquePBR 画球、地面、天空盒</td><td>Imported</td></tr>
+                        <tr><td><code>SphereUniform</code></td><td>球体常量缓冲</td><td>ShadowMap 的 VS；OpaquePBR 的 VS + FS</td><td>Imported，每帧上传</td></tr>
+                        <tr><td><code>PlaneUniform</code></td><td>平面常量缓冲</td><td>OpaquePBR 的 VS + FS</td><td>Imported，每帧上传</td></tr>
+                        <tr><td><code>ShadowDepth</code></td><td>外部 D32 深度图</td><td>ShadowMap DepthWrite → OpaquePBR ShaderRead</td><td>Imported</td></tr>
+                        <tr><td><code>SkyboxCube</code></td><td>外部六面 sRGB cubemap</td><td>OpaquePBR Fragment Shader 读取</td><td>Imported，首帧上传</td></tr>
+                        <tr><td><code>BackBuffer</code></td><td>当前 swapchain image</td><td>OpaquePBR Color attachment，之后 Present</td><td>Imported</td></tr>
+                        <tr><td><code>Depth</code></td><td>外部 D32 深度纹理</td><td>OpaquePBR Depth attachment</td><td>Imported</td></tr>
                         </tbody>
                     </table>
                 </div>
 
                 <h3>编译结果如何形成</h3>
                 <ol>
-                    <li><code>OpaquePBR</code> 写 BackBuffer attachment；<code>Present</code> 读同一资源并要求 Present 状态，因此产生 RAW 边。</li>
-                    <li><code>OpaquePBR</code> 写入 imported BackBuffer/Depth，属于根 pass；<code>Present</code> 本身也是根，两者都不会被裁剪。</li>
+                    <li><code>ShadowMap</code> 写 ShadowDepth；<code>OpaquePBR</code> 读同一纹理并要求 ShaderRead，因此产生 ShadowMap → OpaquePBR 的 RAW 边和 DepthWrite → ShaderRead transition。</li>
+                    <li><code>OpaquePBR</code> 写 BackBuffer attachment；<code>Present</code> 读同一资源并要求 Present 状态，因此产生第二条 RAW 边。</li>
+                    <li><code>OpaquePBR</code> 写入 imported BackBuffer/Depth，<code>Present</code> 本身也是根；反向遍历会保留三个 Pass。</li>
                     <li>BackBuffer 从后端真实 Present 状态转换到 RenderTarget，再在帧尾转回 Present。</li>
-                    <li>workload 的第一条 indexed draw 使用球体 bind set 和 index 区间；第二条使用平面 bind set、平面 index offset 和 vertex offset。</li>
+                    <li>ShadowMap workload 只提交球体的 depth-only indexed draw；OpaquePBR workload 依次绘制球体、地面和天空盒。</li>
                     <li>当前示例所有 graph 资源都是 imported，因此不会展示 transient physical slot alias；相关行为由单元测试覆盖。</li>
                 </ol>
 
@@ -1268,7 +1814,7 @@ commands.dispatches.push_back({ /* pipeline, bind sets, group counts */ });</cod
                     <li><a href="../Vulkan/RHIVulkanFrame.inl">Vulkan/RHIVulkanFrame.inl</a><span>Vulkan upload、barrier、dynamic rendering、timeline 提交</span></li>
                     <li><a href="../D3D11/RHID3D11Frame.inl">D3D11/RHID3D11Frame.inl</a><span>D3D11 immediate context 计划执行</span></li>
                     <li><a href="../D3D12/RHID3D12Frame.inl">D3D12/RHID3D12Frame.inl</a><span>D3D12 command list、descriptor heap、fence 与 barrier</span></li>
-                    <li><a href="../PBRDemo/main.cpp">PBRDemo/main.cpp</a><span>真实 FramePacket、OpaquePBR 与 Present</span></li>
+                    <li><a href="../PBRDemo/main.cpp">PBRDemo/main.cpp</a><span>真实 FramePacket、ShadowMap、OpaquePBR、天空盒与 Present</span></li>
                     <li><a href="../Tests/RHIRenderGraphTests.cpp">Tests/RHIRenderGraphTests.cpp</a><span>编译器行为测试</span></li>
                     <li><a href="../Tests/RHIBackendGraphTests.cpp">Tests/RHIBackendGraphTests.cpp</a><span>三后端执行测试</span></li>
                 </ul>
