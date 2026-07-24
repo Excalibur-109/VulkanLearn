@@ -390,20 +390,20 @@ void RHIVulkan::Shutdown() noexcept {
     // 销毁顺序按依赖反向来：swapchain/image view 依赖 texture，bind set 依赖 layout，
     // pipeline 依赖 pipeline layout，底层 buffer/texture 最后释放。Vulkan 对象销毁时
     // 不会自动追踪这些关系，所以后端需要保持明确顺序。
-    for (u64 i = impl_->swapchains.size(); i > 0; --i)       Destroy(RHISwapchain(i));
-    for (u64 i = impl_->pipelines.size(); i > 0; --i)        Destroy(RHIPipeline(i));
-    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)   Destroy(RHIPipelineCache(i));
-    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)  Destroy(RHIPipelineLayout(i));
-    for (u64 i = impl_->bindSets.size(); i > 0; --i)       Destroy(RHIBindSet(i));
-    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i) Destroy(RHIBindSetLayout(i));
-    for (u64 i = impl_->queryPools.size(); i > 0; --i)       Destroy(RHIQueryPool(i));
-    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)       Destroy(RHIGPUWaitGPUSignal(i));
-    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)           Destroy(RHICPUWaitGPUSignal(i));
-    for (u64 i = impl_->shaders.size(); i > 0; --i)          Destroy(RHIShader(i));
-    for (u64 i = impl_->samplers.size(); i > 0; --i)         Destroy(RHISampler(i));
-    for (u64 i = impl_->textureViews.size(); i > 0; --i)     Destroy(RHITextureView(i));
-    for (u64 i = impl_->textures.size(); i > 0; --i)         Destroy(RHITexture(i));
-    for (u64 i = impl_->buffers.size(); i > 0; --i)          Destroy(RHIBuffer(i));
+    for (u64 i = impl_->swapchains.size(); i > 0; --i)          Destroy(RHISwapchain(i));
+    for (u64 i = impl_->pipelines.size(); i > 0; --i)           Destroy(RHIPipeline(i));
+    for (u64 i = impl_->pipelineCaches.size(); i > 0; --i)      Destroy(RHIPipelineCache(i));
+    for (u64 i = impl_->pipelineLayouts.size(); i > 0; --i)     Destroy(RHIPipelineLayout(i));
+    for (u64 i = impl_->bindSets.size(); i > 0; --i)            Destroy(RHIBindSet(i));
+    for (u64 i = impl_->bindSetLayouts.size(); i > 0; --i)      Destroy(RHIBindSetLayout(i));
+    for (u64 i = impl_->queryPools.size(); i > 0; --i)          Destroy(RHIQueryPool(i));
+    for (u64 i = impl_->gpuWaitGPUSignals.size(); i > 0; --i)   Destroy(RHIGPUWaitGPUSignal(i));
+    for (u64 i = impl_->cpuWaitGPUSignals.size(); i > 0; --i)   Destroy(RHICPUWaitGPUSignal(i));
+    for (u64 i = impl_->shaders.size(); i > 0; --i)             Destroy(RHIShader(i));
+    for (u64 i = impl_->samplers.size(); i > 0; --i)            Destroy(RHISampler(i));
+    for (u64 i = impl_->textureViews.size(); i > 0; --i)        Destroy(RHITextureView(i));
+    for (u64 i = impl_->textures.size(); i > 0; --i)            Destroy(RHITexture(i));
+    for (u64 i = impl_->buffers.size(); i > 0; --i)             Destroy(RHIBuffer(i));
 
     for (Impl::FrameContext& frame : impl_->frameContexts) {
         impl_->releaseStagingResources(frame);

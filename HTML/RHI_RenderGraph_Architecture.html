@@ -678,6 +678,194 @@
             }
         }
 
+        /* ProcessOn-style hierarchical mind map. */
+        .mindmap-canvas {
+            padding: 18px;
+            background: #f3f6f5;
+        }
+
+        .mindmap-tree {
+            position: relative;
+            min-width: 1240px;
+            height: 650px;
+            overflow: hidden;
+            background-color: #f8faf9;
+            background-image:
+                linear-gradient(rgba(75, 98, 88, 0.07) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(75, 98, 88, 0.07) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .mindmap-links {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .mindmap-links path {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .mindmap-links .link-input { stroke: #7ba0bf; }
+        .mindmap-links .link-compile { stroke: #c4826c; }
+        .mindmap-links .link-plan { stroke: #6fa28b; }
+        .mindmap-links .link-execute { stroke: #af9350; }
+
+        .mindmap-tree .mind-node {
+            position: absolute;
+            box-sizing: border-box;
+            display: flex;
+            width: 172px;
+            min-height: 70px;
+            padding: 10px 12px;
+            flex-direction: column;
+            justify-content: center;
+            color: var(--ink);
+            background: #ffffff;
+            border: 1px solid var(--line-strong);
+            border-left: 4px solid var(--line-strong);
+            border-radius: 4px;
+            box-shadow: 0 3px 9px rgba(32, 46, 39, 0.06);
+            text-decoration: none;
+        }
+
+        .mindmap-tree .mind-node:hover,
+        .mindmap-tree .mind-node:focus-visible {
+            z-index: 2;
+            color: var(--ink);
+            border-color: var(--ink);
+            box-shadow: 0 10px 22px rgba(32, 46, 39, 0.14);
+            outline: none;
+            transform: translateY(-2px);
+        }
+
+        .mindmap-tree .mind-node .node-kicker {
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .mindmap-tree .mind-node strong {
+            font-size: 15px;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .mindmap-tree .mind-node small {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+
+        .mindmap-tree .mind-node.input { background: var(--blue-soft); border-color: #8eadc6; border-left-color: #5788af; }
+        .mindmap-tree .mind-node.compile { background: var(--rust-soft); border-color: #c98d78; border-left-color: #b86f56; }
+        .mindmap-tree .mind-node.plan { background: var(--green-soft); border-color: #78ad96; border-left-color: #4e9075; }
+        .mindmap-tree .mind-node.execute { background: var(--gold-soft); border-color: #baa064; border-left-color: #967a37; }
+
+        .mindmap-tree .mind-node.root {
+            top: 273px;
+            left: 520px;
+            width: 200px;
+            min-height: 104px;
+            padding: 15px;
+            color: #ffffff;
+            text-align: center;
+            background: #263e33;
+            border-color: #263e33;
+            border-left-color: #263e33;
+            box-shadow: 0 12px 25px rgba(25, 53, 42, 0.18);
+        }
+
+        .mindmap-tree .mind-node.root .node-kicker,
+        .mindmap-tree .mind-node.root small {
+            color: #c7d8ce;
+        }
+
+        .mindmap-tree .mind-node.root strong { font-size: 23px; }
+
+        .mindmap-tree .mind-node.primary {
+            width: 164px;
+            min-height: 82px;
+        }
+
+        .mindmap-tree .mind-node.leaf {
+            width: 194px;
+            min-height: 62px;
+        }
+
+        .mindmap-tree .mind-node.leaf strong { font-size: 14px; }
+        .mindmap-tree .mind-node.leaf small { margin-top: 3px; font-size: 11px; }
+
+        .map-frame { top: 105px; left: 350px; }
+        .map-compiler { top: 456px; left: 350px; }
+        .map-plan { top: 105px; left: 726px; }
+        .map-backend { top: 456px; left: 726px; }
+
+        .map-resources { top: 36px; left: 70px; }
+        .map-workloads { top: 160px; left: 70px; }
+        .map-dependencies { top: 372px; left: 70px; }
+        .map-culling { top: 484px; left: 70px; }
+        .map-barriers { top: 576px; left: 70px; }
+
+        .map-passes { top: 36px; left: 976px; }
+        .map-allocation { top: 140px; left: 976px; }
+        .map-transitions { top: 244px; left: 976px; }
+        .map-vulkan { top: 372px; left: 976px; }
+        .map-d3d11 { top: 484px; left: 976px; }
+        .map-d3d12 { top: 576px; left: 976px; }
+
+        @media (max-width: 980px) {
+            .mindmap-tree { min-width: 1240px; }
+        }
+
+        @media (max-width: 700px) {
+            .mindmap-canvas {
+                padding: 14px;
+                overflow: visible;
+            }
+
+            .mindmap-tree {
+                display: flex;
+                min-width: 0;
+                height: auto;
+                padding: 14px;
+                flex-direction: column;
+                gap: 10px;
+                background-image: none;
+            }
+
+            .mindmap-links { display: none; }
+
+            .mindmap-tree .mind-node,
+            .mindmap-tree .mind-node.primary,
+            .mindmap-tree .mind-node.leaf,
+            .mindmap-tree .mind-node.root {
+                position: relative;
+                top: auto;
+                left: auto;
+                width: 100%;
+                min-height: 0;
+            }
+
+            .mindmap-tree .mind-node.root {
+                min-height: 96px;
+                order: -1;
+            }
+
+            .mindmap-tree .mind-node.leaf {
+                width: calc(100% - 18px);
+                margin-left: 18px;
+            }
+        }
+
         @media print {
             .layout {
                 display: block;
@@ -1224,53 +1412,100 @@
             </div>
 
             <div class="mindmap-canvas">
-                <div class="mindmap-grid">
+                <div class="mindmap-tree">
+                    <svg class="mindmap-links" viewBox="0 0 1240 650" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="link-input" d="M520 325 C492 325 488 146 514 146"></path>
+                        <path class="link-input" d="M350 146 C319 146 305 67 264 67"></path>
+                        <path class="link-input" d="M350 146 C319 146 305 191 264 191"></path>
+
+                        <path class="link-compile" d="M520 325 C492 325 488 497 514 497"></path>
+                        <path class="link-compile" d="M350 497 C319 497 305 403 264 403"></path>
+                        <path class="link-compile" d="M350 497 C319 497 305 515 264 515"></path>
+                        <path class="link-compile" d="M350 497 C319 497 305 607 264 607"></path>
+
+                        <path class="link-plan" d="M720 325 C748 325 752 146 726 146"></path>
+                        <path class="link-plan" d="M890 146 C922 146 934 67 976 67"></path>
+                        <path class="link-plan" d="M890 146 C922 146 934 171 976 171"></path>
+                        <path class="link-plan" d="M890 146 C922 146 934 275 976 275"></path>
+
+                        <path class="link-execute" d="M720 325 C748 325 752 497 726 497"></path>
+                        <path class="link-execute" d="M890 497 C922 497 934 403 976 403"></path>
+                        <path class="link-execute" d="M890 497 C922 497 934 515 976 515"></path>
+                        <path class="link-execute" d="M890 497 C922 497 934 607 976 607"></path>
+                    </svg>
+
                     <a class="mind-node root" href="#overview">
                         <span class="node-kicker">帧任务编译器</span>
                         <strong>RenderGraph</strong>
-                        <small>把“资源如何流动”的声明编译为后端可线性执行的 ExecutionPlan</small>
+                        <small>把资源流动声明编译为可执行计划</small>
                     </a>
 
-                    <a class="mind-node input map-left-1" href="#packet">
-                        <span class="node-kicker">当前帧输入</span>
+                    <a class="mind-node primary input map-frame" href="#packet">
+                        <span class="node-kicker">输入分支</span>
                         <strong>RHIFramePacket</strong>
-                        <small>资源、Pass、Workload、Upload、Submit、Present</small>
+                        <small>描述本帧意图</small>
                     </a>
-                    <div class="map-connector map-line-left-1" aria-hidden="true"></div>
-
-                    <a class="mind-node compile map-left-2" href="#compile">
-                        <span class="node-kicker">CPU 编译</span>
-                        <strong>依赖与排序</strong>
-                        <small>名称解析、RAW/WAR/WAW、两次稳定拓扑排序</small>
+                    <a class="mind-node leaf input map-resources" href="#packet">
+                        <strong>资源声明</strong>
+                        <small>纹理、Buffer、Import、状态</small>
                     </a>
-                    <div class="map-connector map-line-left-2" aria-hidden="true"></div>
-
-                    <a class="mind-node compile map-left-3" href="#hazards">
-                        <span class="node-kicker">活性分析</span>
-                        <strong>裁剪与资源生存期</strong>
-                        <small>从输出根反向标记，删除无效 Pass</small>
+                    <a class="mind-node leaf input map-workloads" href="#packet">
+                        <strong>Pass 与 Workload</strong>
+                        <small>读写关系、Draw、Upload、Present</small>
                     </a>
-                    <div class="map-connector map-line-left-3" aria-hidden="true"></div>
 
-                    <div class="map-connector map-line-right-1" aria-hidden="true"></div>
-                    <a class="mind-node plan map-right-1" href="#lifetime">
-                        <span class="node-kicker">静态输出</span>
+                    <a class="mind-node primary compile map-compiler" href="#compile">
+                        <span class="node-kicker">编译分支</span>
+                        <strong>Graph Compiler</strong>
+                        <small>将声明转为纯索引计划</small>
+                    </a>
+                    <a class="mind-node leaf compile map-dependencies" href="#compile">
+                        <strong>依赖与稳定排序</strong>
+                        <small>名称解析、RAW / WAR / WAW</small>
+                    </a>
+                    <a class="mind-node leaf compile map-culling" href="#hazards">
+                        <strong>裁剪与生存期</strong>
+                        <small>反向活性分析、物理槽复用</small>
+                    </a>
+                    <a class="mind-node leaf compile map-barriers" href="#barrier">
+                        <strong>同步需求</strong>
+                        <small>stage、access、queue、aliasing</small>
+                    </a>
+
+                    <a class="mind-node primary plan map-plan" href="#overview">
+                        <span class="node-kicker">输出分支</span>
                         <strong>ExecutionPlan</strong>
-                        <small>Compiled Pass、Lifetime、Allocation Slot</small>
+                        <small>稳定、可缓存的执行蓝图</small>
                     </a>
-
-                    <div class="map-connector map-line-right-2" aria-hidden="true"></div>
-                    <a class="mind-node plan map-right-2" href="#barrier">
-                        <span class="node-kicker">同步要求</span>
+                    <a class="mind-node leaf plan map-passes" href="#compile">
+                        <strong>Compiled Pass</strong>
+                        <small>拓扑顺序与整数资源索引</small>
+                    </a>
+                    <a class="mind-node leaf plan map-allocation" href="#lifetime">
+                        <strong>Lifetime / Allocation</strong>
+                        <small>首末使用区间与物理分配槽</small>
+                    </a>
+                    <a class="mind-node leaf plan map-transitions" href="#barrier">
                         <strong>Transitions</strong>
-                        <small>state、stage、access、queue、aliasing</small>
+                        <small>资源状态切换与所有权同步</small>
                     </a>
 
-                    <div class="map-connector map-line-right-3" aria-hidden="true"></div>
-                    <a class="mind-node execute map-right-3" href="#backends">
-                        <span class="node-kicker">原生执行</span>
-                        <strong>Vulkan · D3D11 · D3D12</strong>
-                        <small>解析资源、录制命令、提交并 Present</small>
+                    <a class="mind-node primary execute map-backend" href="#backends">
+                        <span class="node-kicker">执行分支</span>
+                        <strong>RHI Backends</strong>
+                        <small>将计划映射为原生命令</small>
+                    </a>
+                    <a class="mind-node leaf execute map-vulkan" href="#backends">
+                        <strong>Vulkan</strong>
+                        <small>Barrier、Dynamic Rendering、Submit</small>
+                    </a>
+                    <a class="mind-node leaf execute map-d3d11" href="#backends">
+                        <strong>D3D11</strong>
+                        <small>Immediate Context 状态绑定</small>
+                    </a>
+                    <a class="mind-node leaf execute map-d3d12" href="#backends">
+                        <strong>D3D12</strong>
+                        <small>Command List、Fence、Barrier</small>
                     </a>
                 </div>
             </div>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="独立于图形 API 的 RenderGraph 原理、资源版本、编译、别名与同步。">
+    <title>RenderGraph 原理：声明、编译与执行</title>
+    <style>
+        :root { --page:#eef2f1; --surface:#fff; --ink:#18241f; --muted:#52625a; --line:#d4ddd7; --green:#237a5a; --green-soft:#e5f2eb; --blue:#367da8; --blue-soft:#e7f1f8; --rust:#b85f43; --rust-soft:#faebe5; --gold:#9b7621; --gold-soft:#faf2dc; }
+        * { box-sizing:border-box; }
+        html { scroll-behavior:smooth; }
+        body { margin:0; color:var(--ink); background:var(--page); font-family:"Segoe UI", "Microsoft YaHei", sans-serif; line-height:1.65; }
+        a { color:var(--blue); }
+        code { padding:1px 5px; color:#25483a; background:#e8f0eb; border-radius:3px; font-family:Consolas, "Courier New", monospace; font-size:.92em; }
+        h1, h2, h3, p { margin-top:0; }
+        .topbar { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:24px; min-height:62px; padding:0 28px; background:rgba(255,255,255,.96); border-bottom:1px solid var(--line); box-shadow:0 3px 14px rgba(36,57,46,.05); backdrop-filter:blur(10px); }
+        .brand { display:inline-flex; flex:0 0 auto; align-items:center; gap:10px; color:var(--ink); font-weight:800; text-decoration:none; }
+        .brand::before { width:7px; height:23px; content:""; background:var(--green); border-radius:2px; }
+        .toc { display:flex; gap:4px; overflow-x:auto; white-space:nowrap; }
+        .toc a { padding:7px 9px; color:#405149; font-size:13px; text-decoration:none; }
+        .toc a:hover, .toc a:focus-visible { color:var(--green); background:var(--green-soft); border-radius:3px; outline:none; }
+        .hero { width:min(1240px, calc(100% - 48px)); margin:0 auto; padding:52px 0 28px; }
+        .eyebrow { margin:0 0 8px; color:var(--green); font-size:13px; font-weight:800; }
+        h1 { max-width:900px; margin-bottom:12px; font-size:38px; line-height:1.17; }
+        .hero p:last-child { max-width:850px; margin-bottom:0; color:var(--muted); font-size:17px; }
+        .map-shell { width:min(1400px, calc(100% - 48px)); margin:0 auto 30px; padding:18px; background:var(--surface); border:1px solid var(--line); box-shadow:0 12px 32px rgba(27,47,38,.08); }
+        .map-title { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:0 4px 14px; border-bottom:1px solid var(--line); }
+        .legend { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; color:var(--muted); font-size:12px; }
+        .legend span { display:inline-flex; align-items:center; gap:5px; }
+        .legend i { width:9px; height:9px; border:2px solid currentColor; border-radius:2px; }
+        .legend .blue { color:var(--blue); } .legend .rust { color:var(--rust); } .legend .green { color:var(--green); } .legend .gold { color:var(--gold); }
+        .map-viewport { margin-top:16px; padding:18px; overflow-x:auto; background:#f3f6f5; border:1px solid #d9e0dd; }
+        .mindmap { position:relative; min-width:1320px; height:640px; overflow:hidden; background-color:#f9fbfa; background-image:linear-gradient(rgba(75,98,88,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(75,98,88,.07) 1px,transparent 1px); background-size:24px 24px; }
+        .mindmap svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+        .mindmap path { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+        .link-blue { stroke:#7ba0bf; } .link-rust { stroke:#c4826c; } .link-green { stroke:#6fa28b; } .link-gold { stroke:#af9350; }
+        .node { position:absolute; display:flex; width:182px; min-height:66px; padding:9px 12px; flex-direction:column; justify-content:center; color:var(--ink); background:#fff; border:1px solid #aebeb5; border-left:4px solid #aebeb5; border-radius:4px; box-shadow:0 3px 9px rgba(32,46,39,.06); text-decoration:none; transition:transform .14s ease,box-shadow .14s ease; }
+        .node:hover, .node:focus-visible { z-index:2; color:var(--ink); box-shadow:0 10px 22px rgba(32,46,39,.14); outline:none; transform:translateY(-2px); }
+        .node small { margin-top:3px; color:var(--muted); font-size:11px; line-height:1.35; }
+        .node strong { font-size:14px; line-height:1.25; }
+        .node .kicker { margin-bottom:3px; color:var(--muted); font-size:11px; font-weight:800; }
+        .node.primary { width:164px; min-height:80px; }
+        .node.blue { background:var(--blue-soft); border-color:#8eadc6; border-left-color:#5788af; }
+        .node.rust { background:var(--rust-soft); border-color:#c98d78; border-left-color:#b86f56; }
+        .node.green { background:var(--green-soft); border-color:#78ad96; border-left-color:#4e9075; }
+        .node.gold { background:var(--gold-soft); border-color:#baa064; border-left-color:#967a37; }
+        .root { top:268px; left:560px; width:200px; min-height:104px; padding:15px; color:#fff; text-align:center; background:#263e33; border-color:#263e33; border-left-color:#263e33; box-shadow:0 12px 25px rgba(25,53,42,.18); }
+        .root strong { font-size:23px; } .root small, .root .kicker { color:#c7d8ce; }
+        .declare { top:102px; left:370px; } .compile { top:454px; left:370px; } .plan { top:102px; left:786px; } .execute { top:454px; left:786px; }
+        .pass { top:38px; left:72px; } .resource { top:158px; left:72px; } .version { top:366px; left:72px; } .cull { top:478px; left:72px; } .alias { top:570px; left:72px; }
+        .order { top:38px; left:1066px; } .barrier { top:142px; left:1066px; } .queue { top:246px; left:1066px; } .record { top:366px; left:1066px; } .submit { top:478px; left:1066px; } .output { top:570px; left:1066px; }
+        .map-note { margin:16px 0 0; padding:11px 14px; color:#405149; background:#e8eeea; border-left:4px solid var(--green); }
+        .content { width:min(1120px, calc(100% - 48px)); margin:0 auto; padding-bottom:84px; }
+        section { padding:48px 0; border-bottom:1px solid var(--line); scroll-margin-top:76px; }
+        section:last-child { border-bottom:0; }
+        h2 { margin-bottom:16px; padding-left:14px; font-size:28px; line-height:1.3; border-left:5px solid var(--green); }
+        h3 { margin-bottom:8px; font-size:18px; }
+        .lead { max-width:920px; color:var(--muted); font-size:17px; }
+        .callout { margin:18px 0; padding:15px 17px; background:var(--green-soft); border-left:4px solid var(--green); }
+        .grid2, .grid3 { display:grid; gap:16px; } .grid2 { grid-template-columns:repeat(2,minmax(0,1fr)); } .grid3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .panel { padding:18px; background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--green); } .panel.blue { border-top-color:var(--blue); } .panel.rust { border-top-color:var(--rust); } .panel.gold { border-top-color:var(--gold); } .panel p:last-child { margin-bottom:0; }
+        .table-wrap { overflow-x:auto; border:1px solid var(--line); background:var(--surface); }
+        table { width:100%; border-collapse:collapse; min-width:720px; } th,td { padding:12px 14px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); } th { color:#33463c; background:#edf3ef; font-size:13px; } tbody tr:last-child td { border-bottom:0; }
+        pre { margin:18px 0; padding:17px; overflow-x:auto; color:#dcebe2; background:#21382d; border-radius:4px; line-height:1.55; } pre code { padding:0; color:inherit; background:none; }
+        .stages { display:grid; grid-template-columns:126px 1fr; margin:0; border-top:1px solid var(--line); } .stages dt,.stages dd { margin:0; padding:13px 15px; border-bottom:1px solid var(--line); } .stages dt { color:#234b3c; background:#edf3ef; font-weight:800; } .stages dd { background:var(--surface); }
+        .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:18px 0; } .step { position:relative; min-height:94px; padding:14px; background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--green); } .step:not(:last-child)::after { position:absolute; top:50%; right:-8px; z-index:1; width:15px; height:15px; content:""; background:var(--surface); border-top:1px solid #aebeb5; border-right:1px solid #aebeb5; transform:translateY(-50%) rotate(45deg); } .step strong { display:block; font-size:14px; } .step span { display:block; margin-top:5px; color:var(--muted); font-size:12px; line-height:1.4; } .step.blue { border-top-color:var(--blue); } .step.rust { border-top-color:var(--rust); } .step.gold { border-top-color:var(--gold); }
+        .comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:hidden; border:1px solid var(--line); } .comparison > div { padding:18px; background:var(--surface); } .comparison > div+div { border-left:1px solid var(--line); background:#faf4ef; } .comparison ul { padding-left:18px; margin-bottom:0; }
+        .footer { width:min(1120px, calc(100% - 48px)); margin:0 auto; padding:24px 0 42px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); }
+        @media (max-width:760px) { .topbar { position:static; display:block; padding:12px 16px 8px; } .toc { margin-top:8px; } .hero,.map-shell,.content,.footer { width:calc(100% - 24px); } .hero { padding:28px 0 18px; } h1 { font-size:29px; } h2 { font-size:24px; } .map-shell { padding:10px; } .map-title { display:block; } .legend { justify-content:flex-start; margin-top:8px; } .map-viewport { padding:14px; overflow:visible; } .mindmap { display:flex; min-width:0; height:auto; padding:14px; flex-direction:column; gap:10px; background-image:none; } .mindmap svg { display:none; } .node,.node.primary,.root { position:relative; top:auto; left:auto; width:100%; min-height:0; } .root { min-height:94px; order:-1; } .node:not(.root):not(.primary) { width:calc(100% - 18px); margin-left:18px; } .grid2,.grid3,.comparison { grid-template-columns:1fr; } .comparison > div+div { border-top:1px solid var(--line); border-left:0; } .flow { grid-template-columns:1fr; gap:0; } .step:not(:last-child)::after { top:auto; right:auto; bottom:-8px; left:50%; transform:translateX(-50%) rotate(135deg); } .stages { grid-template-columns:96px 1fr; } .stages dt,.stages dd { padding:11px; } }
+        @media print { .topbar { display:none; } .map-shell,.content { width:100%; } .map-shell { box-shadow:none; } }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="#top">RenderGraph 原理</a>
+        <nav class="toc" aria-label="文档目录">
+            <a href="#mindmap">脑图总览</a><a href="#essence">1. 本质</a><a href="#model">2. 图模型</a><a href="#versions">3. 资源版本</a><a href="#compile">4. 编译</a><a href="#lifetime">5. 生命周期</a><a href="#sync">6. 同步</a><a href="#queues">7. 多队列</a><a href="#execute">8. 执行</a><a href="#example">9. 示例</a><a href="#design">10. 设计边界</a>
+        </nav>
+    </header>
+    <main id="top">
+        <header class="hero">
+            <p class="eyebrow">独立于 Vulkan、Direct3D、Metal 与任何 RHI</p>
+            <h1>RenderGraph：把一帧意图编译成正确、高效的 GPU 工作计划</h1>
+            <p>RenderGraph 是一个面向帧的声明式编译器。上层只陈述 Pass 读取或写入哪些逻辑资源；它推导依赖、删除无用工作、安排资源复用与同步，再让任意后端执行一份明确的计划。</p>
+        </header>
+
+        <section class="map-shell" id="mindmap" aria-label="RenderGraph 原理脑图">
+            <div class="map-title"><strong>RenderGraph 原理脑图</strong><div class="legend" aria-label="节点类别"><span class="blue"><i></i>声明</span><span class="rust"><i></i>编译分析</span><span class="green"><i></i>编译计划</span><span class="gold"><i></i>执行</span></div></div>
+            <div class="map-viewport">
+                <div class="mindmap">
+                    <svg viewBox="0 0 1320 640" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="link-blue" d="M560 320 C530 320 526 142 534 142"></path><path class="link-blue" d="M370 142 C337 142 328 71 254 71"></path><path class="link-blue" d="M370 142 C337 142 328 191 254 191"></path>
+                        <path class="link-rust" d="M560 320 C530 320 526 494 534 494"></path><path class="link-rust" d="M370 494 C337 494 328 399 254 399"></path><path class="link-rust" d="M370 494 C337 494 328 511 254 511"></path><path class="link-rust" d="M370 494 C337 494 328 603 254 603"></path>
+                        <path class="link-green" d="M760 320 C790 320 794 142 786 142"></path><path class="link-green" d="M950 142 C983 142 991 71 1066 71"></path><path class="link-green" d="M950 142 C983 142 991 175 1066 175"></path><path class="link-green" d="M950 142 C983 142 991 279 1066 279"></path>
+                        <path class="link-gold" d="M760 320 C790 320 794 494 786 494"></path><path class="link-gold" d="M950 494 C983 494 991 399 1066 399"></path><path class="link-gold" d="M950 494 C983 494 991 511 1066 511"></path><path class="link-gold" d="M950 494 C983 494 991 603 1066 603"></path>
+                    </svg>
+                    <a class="node root" href="#essence"><span class="kicker">帧级声明式编译器</span><strong>RenderGraph</strong><small>逻辑资源 + Pass 用途 → GPU 执行计划</small></a>
+                    <a class="node primary blue declare" href="#model"><span class="kicker">输入分支</span><strong>图声明</strong><small>上层描述需要什么</small></a><a class="node blue pass" href="#model"><strong>Pass</strong><small>操作的最小语义单元</small></a><a class="node blue resource" href="#versions"><strong>逻辑资源与用途</strong><small>Read、Write、Attachment、Copy</small></a>
+                    <a class="node primary rust compile" href="#compile"><span class="kicker">分析分支</span><strong>Graph Compiler</strong><small>从声明推导正确性</small></a><a class="node rust version" href="#versions"><strong>版本与依赖</strong><small>生产者、消费者、RAW / WAR / WAW</small></a><a class="node rust cull" href="#compile"><strong>裁剪与排序</strong><small>从输出根回溯、拓扑排序</small></a><a class="node rust alias" href="#lifetime"><strong>生存期与别名</strong><small>区间分析、物理内存复用</small></a>
+                    <a class="node primary green plan" href="#compile"><span class="kicker">输出分支</span><strong>Compiled Plan</strong><small>后端无关的执行蓝图</small></a><a class="node green order" href="#compile"><strong>Pass Order</strong><small>合法的线性或分批顺序</small></a><a class="node green barrier" href="#sync"><strong>Barrier Plan</strong><small>布局、访问、所有权迁移</small></a><a class="node green queue" href="#queues"><strong>Queue Schedule</strong><small>并行批次与跨队列等待</small></a>
+                    <a class="node primary gold execute" href="#execute"><span class="kicker">执行分支</span><strong>Executor</strong><small>消费计划，不重做分析</small></a><a class="node gold record" href="#execute"><strong>命令录制</strong><small>根据 Pass 回调编码 GPU 命令</small></a><a class="node gold submit" href="#queues"><strong>提交与同步</strong><small>提交批次、signal / wait</small></a><a class="node gold output" href="#example"><strong>外部输出</strong><small>屏幕、读回或下一帧</small></a>
+                </div>
+            </div>
+            <p class="map-note"><strong>阅读方向：</strong>左侧是“声明的世界”，右侧是“编译后执行的世界”。中心不是渲染 API，而是将二者连接起来的纯图算法。</p>
+        </section>
+
+        <div class="content">
+            <section id="essence">
+                <h2>1. RenderGraph 的本质</h2>
+                <p class="lead">RenderGraph 不是一组画面效果，也不是图形 API 的薄封装。它是一次性的、面向单帧的依赖图编译：把“哪些工作产生或消费哪些资源”转化成可验证的顺序、内存与同步计划。</p>
+                <div class="comparison"><div><h3>上层只需要声明</h3><ul><li>本帧有哪些 Pass。</li><li>每个 Pass 读、写或创建什么资源版本。</li><li>访问用途：采样、颜色附件、深度写、拷贝等。</li><li>哪些结果是可观察的最终输出。</li></ul></div><div><h3>编译器负责推导</h3><ul><li>生产者和消费者之间的依赖边。</li><li>对最终输出没有贡献、可以删除的 Pass。</li><li>逻辑资源的生存区间和可复用物理内存。</li><li>访问之间的状态转换、屏障与等待。</li></ul></div></div>
+                <div class="callout"><strong>核心约束：</strong>Pass 不应隐式读取或写入图外状态。只有资源用途完整出现在声明中，编译器才有能力证明顺序正确、裁掉无效工作，并安全复用显存。</div>
+            </section>
+
+            <section id="model">
+                <h2>2. 图模型：Pass、逻辑资源和边</h2>
+                <p class="lead">最常用的模型是二部图：一类节点是 <strong>Pass</strong>，另一类节点是<strong>逻辑资源版本</strong>。写入形成 <code>Pass → ResourceVersion</code>，读取形成 <code>ResourceVersion → Pass</code>。投影到 Pass 后，便得到一个有向无环图。</p>
+                <div class="table-wrap"><table><thead><tr><th>概念</th><th>含义</th><th>必须记录的信息</th><th>不是</th></tr></thead><tbody><tr><td><strong>Pass</strong></td><td>一次有语义边界的 GPU 工作，例如绘制、计算或拷贝。</td><td>队列偏好、读集合、写集合、命令回调。</td><td>任意一段命令；粒度过细会增加调度成本。</td></tr><tr><td><strong>逻辑资源</strong></td><td>图中引用的纹理、Buffer、加速结构等。</td><td>描述、导入/临时属性、初始状态、子资源范围。</td><td>固定的物理对象或唯一显存地址。</td></tr><tr><td><strong>用途</strong></td><td>某 Pass 如何访问资源，例如采样读、附件写、拷贝源。</td><td>访问类型、阶段、子资源、队列。</td><td>单纯读写布尔值；用途决定同步细节。</td></tr><tr><td><strong>边</strong></td><td>生产版本和消费 Pass 间的先后关系。</td><td>资源版本、生产者、消费者、访问用途。</td><td>人工维护的 Pass 排序数组。</td></tr></tbody></table></div>
+                <pre><code>pass.read(gbufferColor, Usage::Sampled);  pass.read(depthBuffer, Usage::Sampled);  hdr = pass.write(hdr, Usage::StorageWrite);</code></pre>
+            </section>
+
+            <section id="versions">
+                <h2>3. 资源版本：让依赖成为显式数据</h2>
+                <p class="lead">资源版本是 RenderGraph 最重要的抽象。一个句柄不只指向“这张纹理”，还指向“这张纹理在第几次写之后的值”。读取者因此精确依赖某次生产，而不是模糊依赖某个资源名称。</p>
+                <div class="flow"><div class="step blue"><strong>导入 v0</strong><span>外部资源的已知初值。</span></div><div class="step rust"><strong>Pass A 写 v1</strong><span>写入创建下一版本。</span></div><div class="step rust"><strong>Pass B 写 v2</strong><span>若需要 A，显式读 v1。</span></div><div class="step blue"><strong>Pass C 读 v2</strong><span>消费者连到精确版本。</span></div><div class="step gold"><strong>导出 v2</strong><span>交给屏幕、读回或下一帧。</span></div></div>
+                <div class="grid2"><article class="panel blue"><h3>版本规则</h3><p><code>read(handle)</code> 保持版本；<code>write(handle)</code> 产生新版本；<code>create()</code> 产生无外部初值的首版本；<code>import()</code> 引入 v0。</p></article><article class="panel rust"><h3>依赖含义</h3><p><strong>RAW</strong> 是真实数据依赖：读者等待生产者。<strong>WAR</strong> 与 <strong>WAW</strong> 在显式版本模型中通常由版本链和物理复用约束体现；原地修改必须声明明确用途。</p></article></div>
+            </section>
+
+            <section id="compile">
+                <h2>4. 图编译：从声明到计划的十个阶段</h2>
+                <p class="lead">构图阶段追求易写和语义清楚；编译阶段追求正确性与可执行性。输出应尽量是稳定、紧凑的整数索引和批次数据，执行时不再做名称查找或依赖推导。</p>
+                <dl class="stages"><dt>0. 规范化</dt><dd>冻结本帧声明，为资源、Pass 和访问记录分配紧凑索引；处理默认描述与子资源范围。</dd><dt>1. 校验</dt><dd>检查重复名称、非法描述、未初始化读取、不兼容用途、同一 Pass 内矛盾访问与循环引用。</dd><dt>2. 版本解析</dt><dd>为每次写生成版本，记录版本唯一的生产者，并把每次读绑定到指定版本。</dd><dt>3. 建依赖图</dt><dd>从“生产版本 → 消费 Pass”建边；必要时补充原地读写、队列和别名所要求的顺序边。</dd><dt>4. 标记输出根</dt><dd>确定最终可观察结果，例如屏幕、导出纹理、读回 Buffer 或下一帧保存的历史资源。</dd><dt>5. 反向裁剪</dt><dd>从输出根沿依赖边反向遍历，只保留能影响输出的 Pass 与版本。</dd><dt>6. 拓扑排序</dt><dd>对保留的 DAG 稳定排序；同样的输入得到同样的计划，便于调试和缓存。</dd><dt>7. 生存期分析</dt><dd>在排序后记录每个临时资源的 firstUse / lastUse，得到逻辑生存区间。</dd><dt>8. 物理分配</dt><dd>将不重叠且兼容的临时区间映射到同一物理堆、页或资源对象，生成别名边界。</dd><dt>9. 同步与批次</dt><dd>比较相邻访问的用途和队列，生成状态转换、内存屏障、所有权迁移、signal / wait 与提交批次。</dd><dt>10. 固化计划</dt><dd>输出 Pass 顺序、资源表、物理槽、每 Pass 前后同步和跨队列提交信息。</dd></dl>
+                <pre><code>validate → resolveVersions → buildDependencies → cull → topologicalSort → lifetimes → allocateAndAlias → synchronization → CompiledPlan</code></pre>
+            </section>
+
+            <section id="lifetime">
+                <h2>5. 生命周期与内存别名：为什么它能省显存</h2>
+                <p class="lead">逻辑资源不等于物理资源。只要两个临时资源的有效使用区间不重叠，并且大小、格式、采样数、对齐和内存类型兼容，它们就可以复用同一块物理内存。</p>
+                <div class="grid3"><article class="panel blue"><h3>逻辑生存期</h3><p>从资源版本第一次被使用开始，到最后一次被使用结束。创建得早，不代表必须占用到帧尾。</p></article><article class="panel rust"><h3>物理槽</h3><p>分配器维护可复用槽。新资源优先放入已结束且描述兼容的槽；否则才扩容。</p></article><article class="panel gold"><h3>别名屏障</h3><p>同一物理区域从 A 切换给 B 时，某些平台需要显式别名屏障，防止缓存或元数据错误继承。</p></article></div>
+                <div class="callout"><strong>安全条件：</strong>“逻辑名字不同”不是别名条件；必须证明使用区间不重叠，并满足 API 的内存兼容要求。导入资源、历史资源和被外部持有的资源通常不能按帧随意别名。</div>
+            </section>
+
+            <section id="sync">
+                <h2>6. 同步：从用途变化推导 Barrier</h2>
+                <p class="lead">屏障不是资源的固有属性，而是两次访问之间的关系。编译器为连续访问记录 <code>stage</code>、<code>access</code>、<code>layout/state</code>、<code>queue</code> 与子资源范围，再在边界处生成最小同步。</p>
+                <div class="table-wrap"><table><thead><tr><th>前一次用途</th><th>后一次用途</th><th>必须解决的问题</th><th>典型同步内容</th></tr></thead><tbody><tr><td>颜色附件写入</td><td>片元采样读取</td><td>写入结果必须对纹理读取可见。</td><td>写入阶段 → 采样阶段；颜色写 → 着色器读；布局/状态转换。</td></tr><tr><td>计算存储写入</td><td>计算存储读取</td><td>同一队列内的 storage 数据依赖。</td><td>内存可见性屏障，通常无需布局转换。</td></tr><tr><td>拷贝写入</td><td>深度附件写入</td><td>传输完成后才能作为深度目标使用。</td><td>传输访问 → 深度测试访问；目标状态转换。</td></tr><tr><td>队列 A 写入</td><td>队列 B 读取</td><td>顺序、可见性和资源所有权都要跨队列建立。</td><td>A signal，B wait；必要时 release / acquire。</td></tr></tbody></table></div>
+                <p>同步粒度应尽可能使用真实子资源范围，例如 mip、array layer 或 Buffer range。把整张图像一律当作单一状态虽然简单，却会制造不必要屏障，阻断本可并行的工作。</p>
+            </section>
+
+            <section id="queues">
+                <h2>7. 多队列调度：并行不是免费获得的</h2>
+                <p class="lead">当硬件提供图形、计算和传输队列时，RenderGraph 可以把没有依赖的工作放进不同队列重叠执行。但跨队列需要额外同步，且共享内存带宽可能成为瓶颈，因此调度器必须比较收益和成本。</p>
+                <div class="grid2"><article class="panel gold"><h3>适合异步的工作</h3><p>长时间后处理、粒子模拟、纹理流送、预计算，以及与图形主链只有少量边界依赖的计算任务。它们应尽早开始、尽晚等待。</p></article><article class="panel rust"><h3>常见反效果</h3><p>极短计算 Pass、频繁读写同一资源、过多跨队列往返，以及为了并行而拆得太碎的 Pass，会让同步和缓存抖动吞掉收益。</p></article></div>
+                <pre><code>Graphics: GBuffer ── wait ComputeLighting ─→ ToneMap  |  Compute: SSAO ─→ ComputeLighting  |  只在真实依赖边上 signal / wait。</code></pre>
+            </section>
+
+            <section id="execute">
+                <h2>8. 编译与执行必须分离</h2>
+                <p class="lead">RenderGraph 的核心价值在于把昂贵的全局分析放在编译期，把执行期变成对计划的线性解释。执行器应知道“做什么”，但不应在命令录制时重新决定“为什么先做这个”。</p>
+                <div class="grid2"><article class="panel"><h3>Compiled Plan 包含</h3><p>排序后的 Pass 索引、逻辑到物理资源映射、资源创建与销毁时机、Pass 前后同步、提交批次及跨队列等待关系。</p></article><article class="panel blue"><h3>每帧动态数据包含</h3><p>相机常量、draw 列表、上传字节、外部资源当前句柄、屏幕尺寸和 Pass 回调参数。这些不应被错误缓存到结构计划中。</p></article></div>
+                <h3>缓存的正确边界</h3><p>资源描述、Pass 拓扑和访问用途不变时，图结构通常可按 hash 缓存。分辨率、格式、启用效果、队列偏好或资源用途变化时必须失效并重新编译。动态常量变化不必重编译，但执行时必须读取本帧数据。</p>
+            </section>
+
+            <section id="example">
+                <h2>9. 一个完全通用的帧例子</h2>
+                <p class="lead">下例不依赖任何 RHI 或图形 API。它只说明资源版本和依赖；任何后端都可把编译结果翻译成自己的 command buffer、encoder 或 command list。</p>
+                <div class="flow"><div class="step blue"><strong>导入屏幕 v0</strong><span>外部可呈现目标。</span></div><div class="step rust"><strong>GBuffer</strong><span>写 Albedo v1、Normal v1、Depth v1。</span></div><div class="step rust"><strong>Lighting</strong><span>读三个 v1，写 HDR v1。</span></div><div class="step rust"><strong>ToneMap</strong><span>读 HDR v1，写屏幕 v1。</span></div><div class="step gold"><strong>导出屏幕 v1</strong><span>作为本帧输出交给呈现系统。</span></div></div>
+                <p>若另有调试 Pass 写入临时纹理但没有被任何导出结果读取，反向裁剪会删除它。若 SSAO 只读 Depth v1、写 AO v1，而 Lighting 读 AO v1，则编译器把 SSAO 放在 Lighting 之前；若硬件和同步成本允许，SSAO 可以和不依赖它的图形工作并行。</p>
+            </section>
+
+            <section id="design">
+                <h2>10. 设计边界、调试与测试</h2>
+                <p class="lead">RenderGraph 很适合解决帧内资源依赖，但它不能替代所有渲染架构。明确边界能避免把它变成难以维护的全局状态机。</p>
+                <div class="grid3"><article class="panel blue"><h3>它应该管理</h3><p>帧内 Pass、瞬态资源、导入资源访问、同步计划、跨队列批次与可视化调试信息。</p></article><article class="panel rust"><h3>它不应猜测</h3><p>游戏对象生命周期、业务逻辑、材质系统的全部语义、隐式全局状态和跨帧历史资源创建策略。</p></article><article class="panel gold"><h3>优先测试</h3><p>依赖方向、裁剪结果、拓扑稳定性、未初始化读取、别名合法性、Barrier 位置、跨队列 wait/signal 和缓存失效。</p></article></div>
+                <div class="callout"><strong>可视化是必要能力：</strong>调试视图至少应展示 Pass DAG、资源版本链、裁剪后的 Pass、每个资源的生存区间、物理槽复用、Barrier 和队列批次。能看见编译结果，RenderGraph 才容易被信任和维护。</div>
+            </section>
+        </div>
+    </main>
+    <footer class="footer">RenderGraph 原理文档：抽象层只使用 Pass、资源版本、用途和编译计划，不依赖任何特定 RHI 或图形 API 的类型名。</footer>
+</body>
+</html>
