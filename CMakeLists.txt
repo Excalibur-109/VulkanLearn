@@ -62,7 +62,7 @@ target_sources(Math INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/Math/Random.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Math/Rendering.hpp
 )
-target_include_directories(Math INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(Math INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}) 
 target_compile_features(Math INTERFACE cxx_std_20)
 if(NOT MATH_ENABLE_SIMD)
     target_compile_definitions(Math INTERFACE MATH_DISABLE_SIMD=1)

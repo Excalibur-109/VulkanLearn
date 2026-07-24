@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="通过动画图解 Repeat(value, length) 如何将任意浮点数循环映射到 [0, length)。">
+    <title>Repeat：循环映射动画图解</title>
+    <style>
+        :root {
+            --ink: #18241f;
+            --muted: #56655d;
+            --line: #d4ddd7;
+            --surface: #ffffff;
+            --page: #eef2f1;
+            --green: #237a5a;
+            --green-soft: #e5f2eb;
+            --blue: #367da8;
+            --blue-soft: #e7f1f8;
+            --rust: #b85f43;
+            --rust-soft: #faebe5;
+            --gold: #9b7621;
+            --gold-soft: #faf2dc;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { margin: 0; color: var(--ink); background: var(--page); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; line-height: 1.6; }
+        h1, h2, h3, p { margin-top: 0; }
+        code { padding: 1px 5px; color: #25483a; background: #e8f0eb; border-radius: 3px; font-family: Consolas, "Cascadia Code", monospace; font-size: 0.92em; }
+
+        .topbar { display: flex; align-items: center; min-height: 62px; padding: 0 28px; color: #eef7f2; background: #1d3028; border-bottom: 4px solid var(--green); }
+        .brand { display: inline-flex; align-items: center; gap: 10px; color: inherit; font-weight: 800; text-decoration: none; }
+        .brand::before { width: 7px; height: 23px; content: ""; background: #77c8a6; border-radius: 2px; }
+
+        main { width: min(1220px, calc(100% - 48px)); margin: 0 auto; padding: 44px 0 78px; }
+        .eyebrow { margin-bottom: 8px; color: var(--green); font-size: 13px; font-weight: 800; }
+        h1 { margin-bottom: 12px; font-size: 38px; line-height: 1.18; }
+        .lead { max-width: 860px; color: var(--muted); font-size: 17px; }
+
+        .tool { margin-top: 28px; padding: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(27, 47, 38, 0.08); }
+        .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; padding: 0 0 15px; border-bottom: 1px solid var(--line); }
+        .control { display: grid; gap: 5px; min-width: 156px; color: #394a41; font-size: 13px; font-weight: 700; }
+        .control output { color: var(--green); font-family: Consolas, monospace; font-weight: 700; }
+        input[type="range"] { width: 185px; accent-color: var(--green); }
+        input[type="number"] { width: 112px; padding: 7px 8px; color: var(--ink); background: #fff; border: 1px solid #aab8b0; border-radius: 4px; font: inherit; }
+        button { min-width: 76px; padding: 8px 12px; color: #fff; background: var(--green); border: 1px solid var(--green); border-radius: 4px; font: inherit; font-weight: 700; cursor: pointer; }
+        button:hover, button:focus-visible { background: #185e45; outline: 2px solid #9ed8c0; outline-offset: 2px; }
+        button.secondary { color: #405149; background: #fff; border-color: #aab8b0; }
+        button.secondary:hover, button.secondary:focus-visible { color: #18241f; background: #edf3ef; }
+
+        canvas { display: block; width: 100%; aspect-ratio: 11 / 5.3; margin-top: 16px; background: #f9fbfa; border: 1px solid var(--line); }
+        .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+        .legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .legend i { width: 13px; height: 3px; background: currentColor; }
+        .legend .blue { color: var(--blue); }
+        .legend .rust { color: var(--rust); }
+        .legend .green { color: var(--green); }
+        .legend .gold { color: var(--gold); }
+
+        .readout { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-top: 16px; border: 1px solid var(--line); }
+        .metric { min-height: 91px; padding: 13px 15px; background: #fff; border-right: 1px solid var(--line); }
+        .metric:last-child { border-right: 0; }
+        .metric strong { display: block; color: var(--muted); font-size: 12px; }
+        .metric output { display: block; margin-top: 6px; color: var(--ink); font-family: Consolas, monospace; font-size: 17px; font-weight: 800; }
+        .metric.result { background: var(--green-soft); }
+        .metric.result output { color: var(--green); }
+
+        section { padding: 45px 0; border-bottom: 1px solid var(--line); }
+        section:last-child { border-bottom: 0; }
+        h2 { margin-bottom: 16px; padding-left: 14px; font-size: 27px; line-height: 1.3; border-left: 5px solid var(--green); }
+        h3 { margin-bottom: 8px; font-size: 18px; }
+        .formula { margin: 18px 0; padding: 14px 16px; overflow-x: auto; color: #23483a; background: #f3f8f5; border-left: 4px solid var(--blue); font-family: "Cambria Math", Cambria, serif; font-size: 18px; }
+        .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+        .panel { padding: 18px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--green); }
+        .panel.blue { border-top-color: var(--blue); }
+        .panel.rust { border-top-color: var(--rust); }
+        .panel p:last-child { margin-bottom: 0; }
+        .callout { margin: 18px 0; padding: 15px 17px; background: var(--gold-soft); border-left: 4px solid var(--gold); }
+        .callout p:last-child { margin-bottom: 0; }
+        .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: #fff; }
+        table { width: 100%; border-collapse: collapse; min-width: 650px; }
+        th, td { padding: 11px 13px; text-align: left; border-bottom: 1px solid var(--line); }
+        th { background: #edf3ef; font-size: 13px; }
+        tbody tr:last-child td { border-bottom: 0; }
+
+        @media (max-width: 760px) {
+            .topbar { min-height: 56px; padding: 0 16px; }
+            main { width: calc(100% - 24px); padding: 28px 0 54px; }
+            h1 { font-size: 29px; }
+            h2 { font-size: 23px; }
+            .tool { padding: 10px; }
+            .toolbar { gap: 12px; }
+            .control { min-width: 0; }
+            input[type="range"] { width: min(200px, 65vw); }
+            canvas { aspect-ratio: 1 / 1.12; }
+            .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .metric { border-bottom: 1px solid var(--line); }
+            .metric:nth-child(2n) { border-right: 0; }
+            .metric:last-child { grid-column: 1 / -1; border-bottom: 0; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar"><a class="brand" href="#top">Math / Scalar · Repeat</a></header>
+    <main id="top">
+        <p class="eyebrow">循环映射的实时图解</p>
+        <h1><code>Repeat(value, length)</code> 如何让数值回绕</h1>
+        <p class="lead">动画中的点在原始数轴上持续向右移动。每穿过一个完整周期，底部结果就跳回 <code>0</code>，但始终落在 <code>[0, length)</code>。拖动“周期位置”可直接查看负数如何映射。</p>
+
+        <section class="tool" aria-label="Repeat 动画演示">
+            <div class="toolbar">
+                <button id="playButton" type="button" aria-pressed="true">暂停</button>
+                <button id="resetButton" class="secondary" type="button">重置</button>
+                <label class="control">周期长度 length<input id="lengthInput" type="number" min="0.25" max="5" step="0.25" value="1"><output id="lengthOutput">1.00</output></label>
+                <label class="control">周期位置 value / length<input id="cycleInput" type="range" min="-2.5" max="3.5" step="0.01" value="-0.25"><output id="cycleOutput">-0.25</output></label>
+                <label class="control">动画速度<input id="speedInput" type="range" min="0.2" max="2.5" step="0.1" value="0.8"><output id="speedOutput">0.8 周期/秒</output></label>
+            </div>
+
+            <canvas id="repeatCanvas" width="1100" height="530" aria-label="Repeat 将原始数轴映射到循环区间的动画"></canvas>
+            <div class="legend"><span class="blue"><i></i>原始 value</span><span class="rust"><i></i>floor 选中的周期</span><span class="green"><i></i>Repeat 结果</span><span class="gold"><i></i>周期锯齿波</span></div>
+
+            <div class="readout" aria-live="polite">
+                <div class="metric"><strong>value</strong><output id="valueReadout">-0.25</output></div>
+                <div class="metric"><strong>value / length</strong><output id="quotientReadout">-0.25</output></div>
+                <div class="metric"><strong>floor(value / length)</strong><output id="floorReadout">-1</output></div>
+                <div class="metric"><strong>完整周期</strong><output id="multipleReadout">-1.00</output></div>
+                <div class="metric result"><strong>Repeat(value, length)</strong><output id="resultReadout">0.75</output></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>公式如何工作</h2>
+            <div class="formula">Repeat(value, length) = value − floor(value / length) × length，length &gt; 0</div>
+            <p>先用 <code>value / length</code> 算出当前位置跨越了多少个周期；再用 <code>floor</code> 向下取整，得到必须完整移除的周期数；最后减去这些完整周期，余下部分就必然位于 <code>[0, length)</code>。</p>
+            <div class="grid">
+                <article class="panel blue"><h3>1. 原始位置</h3><p><code>value</code> 可以是任意正数或负数。图上方的点不会回绕，它代表真实、连续增长的时间、角度或 UV 偏移。</p></article>
+                <article class="panel rust"><h3>2. 选择周期</h3><p><code>floor(value / length)</code> 给出当前点位于哪个完整区间。负数必须向负无穷方向取整，而不是朝零截断。</p></article>
+                <article class="panel"><h3>3. 保留余量</h3><p>减去完整周期后，剩下的局部位置就是结果。它从不等于 <code>length</code>，到达右端时会立刻回到 <code>0</code>。</p></article>
+            </div>
+        </section>
+
+        <section>
+            <h2>为什么负数要用 <code>floor</code></h2>
+            <p>令 <code>value = -0.25</code>、<code>length = 1</code>：</p>
+            <div class="formula">-0.25 − floor(-0.25 / 1) × 1 = -0.25 − (-1) = 0.75</div>
+            <div class="callout"><strong>这与 <code>std::fmod</code> 的行为不同。</strong><p><code>std::fmod(-0.25, 1.0)</code> 返回 <code>-0.25</code>，余数保留被除数的符号；<code>Repeat(-0.25, 1.0)</code> 返回 <code>0.75</code>，结果始终落在正向循环区间。后者更适合 UV、角度和动画相位。</p></div>
+        </section>
+
+        <section>
+            <h2>几个典型输入</h2>
+            <div class="table-wrap"><table><thead><tr><th>value</th><th>length</th><th>floor(value / length)</th><th>Repeat 结果</th><th>含义</th></tr></thead><tbody><tr><td>0.25</td><td>1</td><td>0</td><td>0.25</td><td>第一个周期内，保持原位置。</td></tr><tr><td>1.25</td><td>1</td><td>1</td><td>0.25</td><td>减去一个完整周期。</td></tr><tr><td>-0.25</td><td>1</td><td>-1</td><td>0.75</td><td>映射到前一周期的末端。</td></tr><tr><td>370</td><td>360</td><td>1</td><td>10</td><td>角度回绕。</td></tr><tr><td>-10</td><td>360</td><td>-1</td><td>350</td><td>负角度回绕。</td></tr></tbody></table></div>
+        </section>
+    </main>
+    <script>
+        (() => {
+            "use strict";
+
+            const colors = {
+                ink: "#18241f",
+                muted: "#56655d",
+                line: "#d4ddd7",
+                blue: "#367da8",
+                blueSoft: "#e7f1f8",
+                rust: "#b85f43",
+                rustSoft: "#faeeeb",
+                green: "#237a5a",
+                greenSoft: "#e5f2eb",
+                gold: "#9b7621",
+                goldSoft: "#faf2dc"
+            };
+
+            const canvas = document.getElementById("repeatCanvas");
+            const context = canvas.getContext("2d");
+            const playButton = document.getElementById("playButton");
+            const resetButton = document.getElementById("resetButton");
+            const lengthInput = document.getElementById("lengthInput");
+            const cycleInput = document.getElementById("cycleInput");
+            const speedInput = document.getElementById("speedInput");
+            const lengthOutput = document.getElementById("lengthOutput");
+            const cycleOutput = document.getElementById("cycleOutput");
+            const speedOutput = document.getElementById("speedOutput");
+            const valueReadout = document.getElementById("valueReadout");
+            const quotientReadout = document.getElementById("quotientReadout");
+            const floorReadout = document.getElementById("floorReadout");
+            const multipleReadout = document.getElementById("multipleReadout");
+            const resultReadout = document.getElementById("resultReadout");
+
+            let length = 1;
+            let cycles = -0.25;
+            let speed = 0.8;
+            let playing = true;
+            let lastTimestamp = 0;
+
+            function format(value, digits = 2) {
+                const safe = Math.abs(value) < 0.000001 ? 0 : value;
+                return safe.toFixed(digits);
+            }
+
+            function repeat(value, period) {
+                return period <= 0 ? 0 : value - Math.floor(value / period) * period;
+            }
+
+            function syncControls() {
+                length = Math.max(0.25, Math.min(5, Number(lengthInput.value) || 1));
+                cycles = Number(cycleInput.value);
+                speed = Number(speedInput.value);
+                lengthOutput.value = format(length);
+                cycleOutput.value = format(cycles);
+                speedOutput.value = `${format(speed, 1)} 周期/秒`;
+            }
+
+            function updateReadout() {
+                const value = cycles * length;
+                const floorValue = Math.floor(cycles);
+                const result = repeat(value, length);
+                valueReadout.value = format(value);
+                quotientReadout.value = format(cycles);
+                floorReadout.value = String(floorValue);
+                multipleReadout.value = format(floorValue * length);
+                resultReadout.value = format(result);
+            }
+
+            function prepareCanvas() {
+                const rect = canvas.getBoundingClientRect();
+                const ratio = Math.min(window.devicePixelRatio || 1, 2);
+                const width = Math.max(1, Math.round(rect.width * ratio));
+                const height = Math.max(1, Math.round(rect.height * ratio));
+                if (canvas.width !== width || canvas.height !== height) {
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+                context.setTransform(ratio, 0, 0, ratio, 0, 0);
+                return { width: rect.width, height: rect.height };
+            }
+
+            function line(x0, y0, x1, y1, color, width = 1, dash = []) {
+                context.save();
+                context.strokeStyle = color;
+                context.lineWidth = width;
+                context.setLineDash(dash);
+                context.beginPath();
+                context.moveTo(x0, y0);
+                context.lineTo(x1, y1);
+                context.stroke();
+                context.restore();
+            }
+
+            function text(content, x, y, color = colors.ink, align = "left", font = "13px Segoe UI") {
+                context.save();
+                context.fillStyle = color;
+                context.font = font;
+                context.textAlign = align;
+                context.textBaseline = "middle";
+                context.fillText(content, x, y);
+                context.restore();
+            }
+
+            function circle(x, y, radius, fill, stroke = "#ffffff") {
+                context.save();
+                context.beginPath();
+                context.arc(x, y, radius, 0, Math.PI * 2);
+                context.fillStyle = fill;
+                context.fill();
+                context.lineWidth = 2;
+                context.strokeStyle = stroke;
+                context.stroke();
+                context.restore();
+            }
+
+            function arrow(x0, y0, x1, y1, color) {
+                line(x0, y0, x1, y1, color, 2);
+                const angle = Math.atan2(y1 - y0, x1 - x0);
+                context.save();
+                context.fillStyle = color;
+                context.beginPath();
+                context.moveTo(x1, y1);
+                context.lineTo(x1 - 8 * Math.cos(angle - Math.PI / 6), y1 - 8 * Math.sin(angle - Math.PI / 6));
+                context.lineTo(x1 - 8 * Math.cos(angle + Math.PI / 6), y1 - 8 * Math.sin(angle + Math.PI / 6));
+                context.closePath();
+                context.fill();
+                context.restore();
+            }
+
+            function draw() {
+                syncControls();
+                updateReadout();
+                const { width, height } = prepareCanvas();
+                context.clearRect(0, 0, width, height);
+                context.fillStyle = "#f9fbfa";
+                context.fillRect(0, 0, width, height);
+
+                const compact = width < 640;
+                const left = compact ? 42 : 66;
+                const right = compact ? 20 : 38;
+                const graphWidth = width - left - right;
+                const rawMinimum = -2.5 * length;
+                const rawMaximum = 3.5 * length;
+                const value = cycles * length;
+                const result = repeat(value, length);
+                const floorValue = Math.floor(cycles);
+                const toRawX = (number) => left + (number - rawMinimum) / (rawMaximum - rawMinimum) * graphWidth;
+                const toResultX = (number) => left + number / length * graphWidth;
+                const sourceY = compact ? 72 : 86;
+                const bandY = compact ? 122 : 137;
+                const bandHeight = compact ? 42 : 48;
+                const resultY = compact ? 244 : 265;
+                const waveTop = compact ? 312 : 335;
+                const waveBottom = height - (compact ? 28 : 38);
+
+                text("原始数轴：value 不断向前，不回绕", left, sourceY - 32, colors.muted, "left", "700 13px Segoe UI");
+                line(left, sourceY, width - right, sourceY, colors.blue, 2);
+                for (let index = -2; index <= 3; ++index) {
+                    const x = toRawX(index * length);
+                    line(x, sourceY - 8, x, sourceY + 8, colors.blue, 1);
+                    text(`${index}L`, x, sourceY + 20, colors.muted, "center", "12px Consolas");
+                }
+
+                text("floor(value / length) 选择的完整周期", left, bandY - 13, colors.muted, "left", "700 13px Segoe UI");
+                for (let index = -2; index <= 3; ++index) {
+                    const x0 = toRawX(Math.max(index * length, rawMinimum));
+                    const x1 = toRawX(Math.min((index + 1) * length, rawMaximum));
+                    const isCurrent = index === floorValue;
+                    context.fillStyle = isCurrent ? colors.rustSoft : index % 2 === 0 ? "#edf4ef" : "#f5f8f6";
+                    context.fillRect(x0, bandY, x1 - x0, bandHeight);
+                    context.strokeStyle = isCurrent ? colors.rust : colors.line;
+                    context.lineWidth = isCurrent ? 2 : 1;
+                    context.strokeRect(x0, bandY, x1 - x0, bandHeight);
+                    if (x1 - x0 >= 46) {
+                        text(`k = ${index}`, (x0 + x1) / 2, bandY + bandHeight / 2, isCurrent ? colors.rust : colors.muted, "center", "12px Consolas");
+                    }
+                }
+
+                const sourceX = toRawX(value);
+                line(sourceX, sourceY + 10, sourceX, bandY + bandHeight + 4, colors.blue, 1.5, [5, 4]);
+                circle(sourceX, sourceY, 7, colors.blue);
+                text(`value = ${format(value)}`, sourceX, sourceY - 17, colors.blue, sourceX > width - 125 ? "right" : "left", "700 13px Consolas");
+
+                text("回绕区间：[0, length)", left, resultY - 31, colors.muted, "left", "700 13px Segoe UI");
+                context.fillStyle = colors.greenSoft;
+                context.fillRect(left, resultY, graphWidth, 48);
+                context.strokeStyle = colors.green;
+                context.lineWidth = 2;
+                context.strokeRect(left, resultY, graphWidth, 48);
+                line(left, resultY - 7, left, resultY + 56, colors.green, 1);
+                line(width - right, resultY - 7, width - right, resultY + 56, colors.green, 1);
+                text("0", left, resultY + 68, colors.muted, "center", "12px Consolas");
+                text("length", width - right, resultY + 68, colors.muted, "center", "12px Consolas");
+                const resultX = toResultX(result);
+                arrow(sourceX, bandY + bandHeight + 12, resultX, resultY - 8, colors.rust);
+                circle(resultX, resultY + 24, 8, colors.green);
+                const resultLabelOnLeft = resultX > width - 130;
+                text(
+                    `Repeat = ${format(result)}`,
+                    resultX + (resultLabelOnLeft ? -12 : 12),
+                    resultY + 24,
+                    colors.green,
+                    resultLabelOnLeft ? "right" : "left",
+                    "700 13px Consolas");
+
+                text("锯齿波：每个完整周期结束时，局部位置跳回 0", left, waveTop - 18, colors.muted, "left", "700 13px Segoe UI");
+                line(left, waveBottom, width - right, waveBottom, colors.line, 1);
+                line(left, waveTop, left, waveBottom, colors.line, 1);
+                context.save();
+                context.strokeStyle = colors.gold;
+                context.lineWidth = 2.5;
+                context.beginPath();
+                for (let index = -2; index <= 3; ++index) {
+                    const x0 = toRawX(index * length);
+                    const x1 = toRawX((index + 1) * length);
+                    context.moveTo(x0, waveBottom);
+                    context.lineTo(x1, waveTop);
+                }
+                context.stroke();
+                context.restore();
+                const waveY = waveBottom - result / length * (waveBottom - waveTop);
+                line(sourceX, waveTop, sourceX, waveBottom, colors.blue, 1, [4, 4]);
+                circle(sourceX, waveY, 7, colors.gold);
+                text("0", left - 8, waveBottom, colors.muted, "right", "12px Consolas");
+                text("L", left - 8, waveTop, colors.muted, "right", "12px Consolas");
+            }
+
+            function tick(timestamp) {
+                if (lastTimestamp === 0) {
+                    lastTimestamp = timestamp;
+                }
+                const elapsed = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
+                lastTimestamp = timestamp;
+                if (playing) {
+                    cycles += elapsed * speed;
+                    if (cycles > 3.5) {
+                        cycles = -2.5;
+                    }
+                    cycleInput.value = String(cycles);
+                }
+                draw();
+                requestAnimationFrame(tick);
+            }
+
+            playButton.addEventListener("click", () => {
+                playing = !playing;
+                playButton.textContent = playing ? "暂停" : "播放";
+                playButton.setAttribute("aria-pressed", String(playing));
+            });
+
+            resetButton.addEventListener("click", () => {
+                playing = false;
+                cycles = -0.25;
+                lengthInput.value = "1";
+                cycleInput.value = "-0.25";
+                speedInput.value = "0.8";
+                playButton.textContent = "播放";
+                playButton.setAttribute("aria-pressed", "false");
+                draw();
+            });
+
+            for (const input of [lengthInput, cycleInput, speedInput]) {
+                input.addEventListener("input", () => {
+                    playing = false;
+                    playButton.textContent = "播放";
+                    playButton.setAttribute("aria-pressed", "false");
+                    draw();
+                });
+            }
+
+            window.addEventListener("resize", draw);
+            requestAnimationFrame(tick);
+        })();
+    </script>
+</body>
+</html>
