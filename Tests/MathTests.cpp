@@ -880,6 +880,39 @@ void TestRandom() {
     Check(sorted == std::array<int, 8>{0, 1, 2, 3, 4, 5, 6, 7}, "Shuffle lost values");
     Check(random.Choose<int>(values) != nullptr, "Choose failed on a non-empty span");
 
+    const std::optional<std::string> uniqueString = random.UniqueString(32);
+    Check(
+        uniqueString.has_value() && uniqueString->size() == 32,
+        "UniqueString returned an unexpected length");
+    Check(
+        std::all_of(
+            uniqueString->begin(),
+            uniqueString->end(),
+            [](char character) {
+                return math::Random::DefaultUniqueStringAlphabet.find(character) !=
+                       std::string_view::npos;
+            }),
+        "UniqueString returned a character outside its alphabet");
+    std::string sortedUniqueString = *uniqueString;
+    std::sort(sortedUniqueString.begin(), sortedUniqueString.end());
+    Check(
+        std::adjacent_find(sortedUniqueString.begin(), sortedUniqueString.end()) ==
+            sortedUniqueString.end(),
+        "UniqueString returned duplicate characters");
+
+    const std::optional<std::string> deduplicatedAlphabet =
+        random.UniqueString(3, "aabC");
+    Check(
+        deduplicatedAlphabet.has_value() && deduplicatedAlphabet->size() == 3,
+        "UniqueString did not deduplicate its alphabet");
+    Check(
+        !random.UniqueString(4, "aabC").has_value(),
+        "UniqueString accepted a length above the distinct alphabet capacity");
+    const std::optional<std::string> emptyUniqueString = random.UniqueString(0, {});
+    Check(
+        emptyUniqueString.has_value() && emptyUniqueString->empty(),
+        "UniqueString did not accept an empty result");
+
     const std::array<float, 3> weights{0.0F, 1.0F, 0.0F};
     Check(random.WeightedIndex(weights) == 1, "WeightedIndex ignored deterministic weights");
 

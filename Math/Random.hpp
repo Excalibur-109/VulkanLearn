@@ -11,11 +11,15 @@
 #include "Math/Quaternion.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace math {
@@ -123,6 +127,9 @@ constexpr float HashFloat01(std::uint32_t seed) noexcept {
 
 class Random {
 public:
+    inline static constexpr std::string_view DefaultUniqueStringAlphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
     explicit Random(
         std::uint64_t seed = 0x853C49E6748FEA9BULL,
         std::uint64_t stream = 0xDA3E39CB94B95BDBULL) noexcept
@@ -326,6 +333,43 @@ public:
                 static_cast<std::size_t>(UInt64(static_cast<std::uint64_t>(remaining)));
             std::swap(values[remaining - 1], values[selected]);
         }
+    }
+
+    /**
+     * @brief Generate a string whose characters are unique within the result.
+     *
+     * The alphabet is deduplicated before sampling, then a partial Fisher-Yates
+     * shuffle selects length characters without replacement. std::nullopt means
+     * length exceeds the number of distinct characters in alphabet.
+     */
+    [[nodiscard]] std::optional<std::string> UniqueString(
+        std::size_t length,
+        std::string_view alphabet = DefaultUniqueStringAlphabet) {
+        if (length == 0) {
+            return std::string{};
+        }
+
+        std::array<bool, 256> seen{};
+        std::string candidates;
+        candidates.reserve(alphabet.size());
+        for (const char character : alphabet) {
+            const unsigned char index = static_cast<unsigned char>(character);
+            if (!seen[index]) {
+                seen[index] = true;
+                candidates.push_back(character);
+            }
+        }
+
+        if (length > candidates.size()) {
+            return std::nullopt;
+        }
+
+        for (std::size_t index = 0; index < length; ++index) {
+            const std::size_t selected =
+                index + static_cast<std::size_t>(UInt64(candidates.size() - index));
+            std::swap(candidates[index], candidates[selected]);
+        }
+        return std::string(candidates.begin(), candidates.begin() + length);
     }
 
     template <typename T>
