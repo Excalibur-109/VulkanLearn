@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="4×4 矩阵求逆的完整数学推导：从伴随矩阵原理到三维叉积紧凑闭式，含行列式、余子式、拉普拉斯恒等式与逐项验证。">
+    <title>4×4 矩阵求逆推导 | 数学原理</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18201d;
+            --muted: #58635e;
+            --line: #d9dfdb;
+            --paper: #ffffff;
+            --surface: #f4f7f5;
+            --nav: #17221e;
+            --green: #147a56;
+            --green-soft: #e7f4ee;
+            --blue: #246a8d;
+            --blue-soft: #e9f3f8;
+            --coral: #b94e3d;
+            --coral-soft: #faeeeb;
+            --gold: #8a6513;
+            --gold-soft: #f8f1dd;
+            --code: #101916;
+            --code-ink: #e6f1eb;
+            --radius: 6px;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: auto; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 16px;
+            line-height: 1.74;
+        }
+
+        a { color: var(--green); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+        code { font-family: Consolas, "Cascadia Code", monospace; overflow-wrap: anywhere; padding: 1px 5px; color: #174c39; background: #edf3ef; border-radius: 3px; font-size: 0.92em; }
+
+        .masthead { color: #f5fbf8; background: var(--nav); border-bottom: 4px solid var(--green); }
+        .masthead-inner {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(20px, 4vw, 64px) 24px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 28px;
+        }
+        .masthead-inner > div:first-child { min-width: 0; }
+        .eyebrow { margin: 0 0 6px; color: #8fd5b8; font-size: 13px; font-weight: 700; }
+        h1, h2, h3, h4 { margin-top: 0; letter-spacing: 0; line-height: 1.25; }
+        h1 { margin-bottom: 7px; font-size: 34px; font-weight: 720; }
+        h2 { margin-bottom: 18px; font-size: 26px; }
+        h3 { margin: 28px 0 11px; font-size: 19px; }
+        h4 { margin: 20px 0 8px; font-size: 16px; }
+        .subtitle { margin: 0; color: #c6d5ce; max-width: 820px; overflow-wrap: anywhere; }
+
+        .doc-switch {
+            flex: 0 0 auto;
+            display: flex;
+            border: 1px solid #476057;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .doc-switch a {
+            color: #dce9e3;
+            padding: 8px 13px;
+            text-decoration: none;
+            border-right: 1px solid #476057;
+            font-size: 14px;
+        }
+        .doc-switch a:last-child { border-right: 0; }
+        .doc-switch a[aria-current="page"] { color: #ffffff; background: var(--green); }
+
+        .layout {
+            width: min(1480px, 100%);
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 285px minmax(0, 1fr);
+        }
+
+        .toc {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: auto;
+            padding: 30px 24px 50px;
+            background: var(--surface);
+            border-right: 1px solid var(--line);
+        }
+        .toc strong { display: block; margin-bottom: 12px; font-size: 14px; }
+        .toc ol { list-style: none; margin: 0; padding: 0; }
+        .toc li { border-top: 1px solid var(--line); }
+        .toc a { display: block; padding: 8px 0; color: #39443f; text-decoration: none; font-size: 14px; }
+        .toc a:hover { color: var(--green); }
+
+        main { min-width: 0; padding: 48px clamp(24px, 5vw, 76px) 90px; }
+        main > section { max-width: 1060px; margin: 0 auto; padding: 0 0 56px; scroll-margin-top: 24px; }
+        main > section + section { padding-top: 52px; border-top: 1px solid var(--line); }
+        p { margin: 0 0 15px; }
+        ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+        li + li { margin-top: 6px; }
+        .lead { color: #34403b; font-size: 18px; max-width: 900px; }
+
+        .note, .warning, .important {
+            margin: 20px 0;
+            padding: 15px 17px;
+            border-left: 4px solid var(--blue);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            background: var(--blue-soft);
+        }
+        .warning { border-left-color: var(--coral); background: var(--coral-soft); }
+        .important { border-left-color: var(--green); background: var(--green-soft); }
+        .note strong, .warning strong, .important strong { display: block; margin-bottom: 4px; }
+
+        .formula {
+            margin: 18px 0;
+            padding: 18px 20px;
+            overflow-x: auto;
+            color: #12241d;
+            background: var(--green-soft);
+            border-left: 4px solid var(--green);
+            border-radius: 0 var(--radius) var(--radius) 0;
+            font-family: Cambria, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.85;
+            white-space: pre-wrap;
+        }
+        .formula.blue { background: var(--blue-soft); border-left-color: var(--blue); color: #16323f; }
+        .formula.gold { background: var(--gold-soft); border-left-color: var(--gold); color: #2a2410; }
+        .formula em { font-style: italic; color: #0c3a29; }
+        .formula b { font-weight: 700; }
+
+        .table-wrap { margin: 20px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+        table { width: 100%; border-collapse: collapse; min-width: 620px; }
+        th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+        th { color: #24312c; background: var(--surface); font-size: 14px; }
+        tr:last-child td { border-bottom: 0; }
+
+        .footer-nav {
+            max-width: 1060px;
+            margin: 0 auto;
+            padding: 16px 0 0;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .footer-nav a { text-decoration: none; }
+
+        @media (max-width: 920px) {
+            .layout { grid-template-columns: 1fr; }
+            .toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+            .doc-switch { margin-top: 20px; width: fit-content; max-width: 100%; flex-wrap: wrap; }
+        }
+        @media print {
+            .doc-switch, .toc { display: none; }
+            .layout { grid-template-columns: 1fr; }
+            main { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+<header class="masthead">
+    <div class="masthead-inner">
+        <div>
+            <p class="eyebrow">C++ Math · 数学原理</p>
+            <h1>4×4 矩阵求逆推导</h1>
+            <p class="subtitle">从 <code>A⁻¹ = adj(A) / det(A)</code> 的基本原理出发，逐步推导余子式、代数余子式、伴随矩阵与拉普拉斯恒等式，最后给出基于三维叉积的紧凑闭式及其逐项验证。</p>
+        </div>
+        <nav class="doc-switch" aria-label="数学文档切换">
+            <a href="Matrix_Math_Guide.html">Matrix</a>
+            <a href="Matrix4x4_Inverse_Derivation_Guide.html" aria-current="page">Inv4×4</a>
+            <a href="Quaternion_Math_Guide.html">Quaternion</a>
+            <a href="Quaternion_Matrix_Conversion_Guide.html">Q/M</a>
+            <a href="SIMD_Usage_Guide.html">SIMD</a>
+            <a href="Curves_Math_Guide.html">Curves</a>
+        </nav>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="toc">
+        <strong>目录</strong>
+        <ol>
+            <li><a href="#principle">1. 核心原理</a></li>
+            <li><a href="#cofactor">2. 余子式与代数余子式</a></li>
+            <li><a href="#laplace">3. 行列式的拉普拉斯展开</a></li>
+            <li><a href="#adjugate">4. 伴随矩阵</a></li>
+            <li><a href="#identity">5. 为什么这个公式成立</a></li>
+            <li><a href="#naive">6. 直接计算的结构</a></li>
+            <li><a href="#compact">7. 紧凑闭式：分块 + 叉积</a></li>
+            <li><a href="#storage">8. 存储上的最后一步</a></li>
+            <li><a href="#summary">9. 小结</a></li>
+        </ol>
+    </aside>
+
+    <main>
+        <section id="principle">
+            <h2>1. 核心原理</h2>
+            <p class="lead">对方阵 <code>A</code>，若 <code>det A ≠ 0</code>，则逆唯一存在，且</p>
+            <div class="formula">A⁻¹ = (1 / det A) · adj(A)</div>
+            <p>其中 <code>adj(A)</code> 叫<strong>伴随矩阵</strong>（adjugate）。所以求逆就两步：</p>
+            <ol>
+                <li>算 <code>det A</code>；</li>
+                <li>算 <code>adj(A)</code>，逐项除以 <code>det A</code>。</li>
+            </ol>
+            <div class="note">
+                <strong>几何含义</strong>
+                行列式 <code>det A</code> 是变换对体积的有向缩放倍数。<code>det A = 0</code> 表示空间被压扁到更低维度，信息丢失，自然无法还原，故不可逆。
+            </div>
+        </section>
+
+        <section id="cofactor">
+            <h2>2. 余子式与代数余子式</h2>
+            <p>删掉第 <code>i</code> 行第 <code>j</code> 列剩下的 <code>(n−1)×(n−1)</code> 子矩阵的行列式记为<strong>余子式</strong> <code>M<sub>ij</sub></code>。<strong>代数余子式</strong> 定义为</p>
+            <div class="formula">C<sub>ij</sub> = (−1)<sup>i+j</sup> · M<sub>ij</sub></div>
+            <p>那个 <code>(−1)<sup>i+j</sup></code> 是个棋盘符号：左上角 <code>(1,1)</code> 为 <code>+</code>，相邻交替。</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>i\j</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead>
+                    <tbody>
+                        <tr><th>1</th><td>+</td><td>−</td><td>+</td><td>−</td></tr>
+                        <tr><th>2</th><td>−</td><td>+</td><td>−</td><td>+</td></tr>
+                        <tr><th>3</th><td>+</td><td>−</td><td>+</td><td>−</td></tr>
+                        <tr><th>4</th><td>−</td><td>+</td><td>−</td><td>+</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>对 4×4，每个 <code>C<sub>ij</sub></code> 是一个带符号的 <strong>3×3 行列式</strong>。</p>
+        </section>
+
+        <section id="laplace">
+            <h2>3. 行列式的拉普拉斯展开</h2>
+            <p>按第 <code>i</code> 行展开：</p>
+            <div class="formula">det A = Σ<sub>j=1..4</sub>  a<sub>ij</sub> · C<sub>ij</sub></div>
+            <p>对 4×4，这把一个 4×4 行列式拆成 <strong>4 个 3×3 行列式</strong>。每个 3×3 再展开就是 6 项，所以 <code>det A</code> 展开到底共 <code>4 × 6 = 24</code> 个乘积项。</p>
+            <div class="note">
+                <strong>按哪行哪列展开都行</strong>
+                结果与展开选择无关，这是行列式的基本性质。实践中挑 0 最多的行/列展开能省计算。
+            </div>
+        </section>
+
+        <section id="adjugate">
+            <h2>4. 伴随矩阵</h2>
+            <p>把所有代数余子式排成矩阵 <code>C = (C<sub>ij</sub>)</code>，则</p>
+            <div class="formula">adj(A) = C<sup>T</sup></div>
+            <div class="warning">
+                <strong>注意转置</strong>
+                <code>adj(A)</code> 的 <code>(i,j)</code> 位置是 <code>C<sub>ji</sub></code>，也就是删原矩阵第 <code>j</code> 行第 <code>i</code> 列得到的余子式。这是初学者最常错的地方。
+            </div>
+        </section>
+
+        <section id="identity">
+            <h2>5. 为什么这个公式成立</h2>
+            <p>关键恒等式（拉普拉斯展开的推广形式）：</p>
+            <div class="formula blue">Σ<sub>k=1..n</sub>  a<sub>ik</sub> · C<sub>jk</sub> = δ<sub>ij</sub> · det A</div>
+            <ul>
+                <li><strong>i = j</strong>：就是按第 <code>i</code> 行展开行列式，等于 <code>det A</code>。</li>
+                <li><strong>i ≠ j</strong>：相当于「用第 <code>i</code> 行的元素，套上第 <code>j</code> 行的代数余子式去组合」。这等于一个<strong>有两行相同的行列式</strong>（第 <code>j</code> 行被复制成第 <code>i</code> 行的内容），所以为 0。</li>
+            </ul>
+            <p>把这条恒等式写成矩阵形式：</p>
+            <div class="formula">A · C<sup>T</sup> = (det A) · I    ⟹    A · adj(A) = (det A) · I</div>
+            <p>两边除以 <code>det A</code> 就得到 <code>A⁻¹ = adj(A) / det A</code>。这是整个求逆公式的<strong>理论基础</strong>。</p>
+        </section>
+
+        <section id="naive">
+            <h2>6. 直接计算的结构</h2>
+            <p>对 4×4，朴素伴随法要算：</p>
+            <ul>
+                <li>1 个 <code>det A</code>（4 项 3×3 行列式）；</li>
+                <li>16 个 <code>C<sub>ij</sub></code>（每个一个 3×3 行列式）。</li>
+            </ul>
+            <p>但 16 个余子式里有大量重复的 2×2 子行列式。朴素做法要做约 17 次 3×3 行列式（上百次乘法）。于是人们寻找<strong>共享子计算</strong>的紧凑公式——这就引出下面的叉积闭式。</p>
+        </section>
+
+        <section id="compact">
+            <h2>7. 紧凑闭式：分块 + 叉积</h2>
+            <p>把 4 行看作 4 个 4 维向量 <code>a, b, c, d</code>，每行拆成「3 维部分 + 第 4 分量」：</p>
+            <div class="formula">a = (a, a_w)    b = (b, b_w)    c = (c, c_w)    d = (d, d_w)</div>
+            <p>其中 <code>a, b, c, d ∈ ℝ³</code> 是 xyz 部分，<code>a_w, b_w, c_w, d_w</code> 是第 4 分量。</p>
+
+            <h3>7.1 构造 4 个辅助向量</h3>
+            <div class="formula">s = a × b
+t = c × d
+u = b_w · a  −  a_w · b
+v = d_w · c  −  c_w · d</div>
+            <div class="note">
+                <strong>直觉</strong>
+                <code>s, t</code> 捕捉「行对 {a,b} / {c,d} 在 xyz 子空间的 2-向量」信息；<code>u, v</code> 捕捉「与 w 轴耦合的那部分」信息。从外代数看，<code>s</code> 是 <code>a∧b</code> 这个 2-形式在 xyz 三维子空间上的 Hodge 对偶，<code>u</code> 是它涉及 w 分量的剩余部分。
+            </div>
+
+            <h3>7.2 行列式</h3>
+            <div class="formula gold">det A = s·v  +  t·u</div>
+            <p>这把 24 项的行列式压成了 <strong>2 个点积</strong>。原理：4×4 行列式按「行对 {a,b} vs 行对 {c,d}」分块做拉普拉斯展开时，等于两个 2-形式的内积；用上面 4 个辅助向量表示出来就是这个式子。</p>
+
+            <h3>7.3 逆矩阵的 4 个列</h3>
+            <p>除以 <code>det A</code> 之后，<code>A⁻¹</code> 的 4 个<strong>列</strong>为（每个列是一个 4 维向量，前三分量是 3D 叉积加标量广播项，第 4 分量是 3D 点积）：</p>
+            <div class="formula">r₀ = ( b × v  +  b_w · t ,   −b·t )
+r₁ = ( v × a  −  a_w · t ,    a·t )
+r₂ = ( d × u  +  d_w · s ,   −d·s )
+r₃ = ( u × c  −  c_w · s ,    c·s )</div>
+            <div class="important">
+                <strong>只做一次标量除法</strong>
+                先把 <code>s, t, u, v</code> 各自乘以 <code>1/det A</code> 缩放好，上面 4 列就直接是 <code>A⁻¹</code> 的列——全程只在算 <code>1/det</code> 时做一次标量除法。
+            </div>
+
+            <h3>7.4 验证（以第 0 列为例）</h3>
+            <p>按定义，行 <code>a</code> 点 列 <code>r₀</code> 应当等于 <code>det A</code>（因为 <code>A A⁻¹ = I</code> 的 (0,0) 位置）：</p>
+            <div class="formula blue">a · r₀ = a·(b × v)  +  b_w · (a·t)  −  a_w · (b·t)</div>
+            <p>用标量三重积轮换 <code>a·(b × v) = (a × b)·v = s·v</code>，再用 <code>t·u = b_w·(a·t) − a_w·(b·t)</code>，正好得到</p>
+            <div class="formula">a · r₀ = s·v  +  t·u  =  det A</div>
+            <p>除以 <code>det A</code> 后即为 1。其余 15 个位置（<code>a·r₁</code>、<code>b·r₀</code> 等）同理可证：要么是 <code>det A</code>（对角）、要么是 0（非对角），从而 <code>A A⁻¹ = I</code> 成立。这就是闭式的正确性来源。</p>
+        </section>
+
+        <section id="storage">
+            <h2>8. 存储上的最后一步：转置</h2>
+            <p>闭式直接产出的是 <code>A⁻¹</code> 的<strong>列</strong>。如果存储是行主序（一行一行存），就要把 4 个列向量转置成 4 个行向量存回。</p>
+            <div class="note">
+                <strong>这是实现细节，不是数学</strong>
+                转置只与内存布局有关。数学上 <code>A⁻¹</code> 就是那 4 个列（或等价地那 4 个行），怎么存取决于引擎的矩阵约定。
+            </div>
+        </section>
+
+        <section id="summary">
+            <h2>9. 小结</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>方法</th><th>核心</th><th>代价</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>原理</strong></td>
+                            <td><code>A⁻¹ = adj(A) / det A</code>，本质是拉普拉斯恒等式 <code>Σ a<sub>ik</sub>C<sub>jk</sub> = δ<sub>ij</sub> det A</code></td>
+                            <td>概念清晰，但朴素实现重</td>
+                        </tr>
+                        <tr>
+                            <td><strong>朴素法</strong></td>
+                            <td>1 个行列式 + 16 个代数余子式（每个 3×3），转置后除以行列式</td>
+                            <td>约 17 次 3×3 行列式</td>
+                        </tr>
+                        <tr>
+                            <td><strong>紧凑闭式</strong></td>
+                            <td>4 行拆「3D + w」，用 <code>s,t,u,v</code> 把 det 压成 2 个点积，把 16 个余子式压成 4 个「叉积+点积」</td>
+                            <td>一次标量除法，SIMD 上特别高效</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>这三者是同一个数学答案的三种表达：原理给出「为什么对」，朴素法给出「直接怎么算」，紧凑闭式给出「怎么算得快」。引擎里的 4×4 SIMD 求逆走的正是第三条路。</p>
+
+            <div class="footer-nav">
+                <a href="Matrix_Math_Guide.html">← Matrix 数学原理与引擎实现</a>
+                <a href="SIMD_Usage_Guide.html">SIMD 详细使用手册 →</a>
+            </div>
+        </section>
+    </main>
+</div>
+</body>
+</html>
