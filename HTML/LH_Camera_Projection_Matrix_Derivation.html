@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="推导 Matrix.hpp 中 LookAtLH、PerspectiveLH_ZO、OrthographicLH_ZO 的返回矩阵，并说明 PerspectiveVulkanLH_ZO。">
+    <title>LH 相机与投影矩阵推导 | VulkanLearn</title>
+    <style>
+        :root { --ink:#18231f; --muted:#52625a; --paper:#fff; --surface:#f3f7f4; --line:#d5dfd9; --nav:#17241f; --green:#08775a; --green-soft:#e5f4ed; --blue:#176e93; --orange:#bc5a2e; --code:#12211b; --radius:6px; }
+        * { box-sizing:border-box; }
+        html { scroll-behavior:smooth; }
+        body { margin:0; color:var(--ink); background:var(--paper); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; font-size:16px; line-height:1.72; letter-spacing:0; }
+        a { color:var(--green); text-underline-offset:3px; }
+        code { overflow-wrap:anywhere; font-family:Consolas,"Cascadia Mono",monospace; font-size:.91em; }
+        .masthead { color:#f5fbf8; background:var(--nav); border-bottom:4px solid var(--green); }
+        .masthead-inner { width:min(1380px,100%); margin:0 auto; padding:30px clamp(20px,5vw,72px) 26px; }
+        .eyebrow { margin:0 0 5px; color:#8ed8ba; font-size:13px; font-weight:700; }
+        h1,h2,h3 { margin-top:0; line-height:1.25; letter-spacing:0; }
+        h1 { margin-bottom:8px; font-size:34px; }
+        h2 { margin-bottom:16px; font-size:26px; }
+        h3 { margin:28px 0 10px; font-size:19px; }
+        .subtitle { max-width:840px; margin:0; color:#c7d8d0; }
+        .layout { width:min(1380px,100%); margin:0 auto; display:grid; grid-template-columns:248px minmax(0,1fr); }
+        .toc { position:sticky; top:0; height:100vh; padding:28px 22px; overflow:auto; background:var(--surface); border-right:1px solid var(--line); }
+        .toc strong { display:block; margin-bottom:9px; font-size:14px; }
+        .toc ol { list-style:none; margin:0; padding:0; }
+        .toc li { border-top:1px solid var(--line); }
+        .toc a { display:block; padding:9px 0; color:#35443c; text-decoration:none; font-size:14px; }
+        .toc a:hover { color:var(--green); }
+        main { min-width:0; padding:46px clamp(22px,5vw,76px) 88px; }
+        section { max-width:1030px; margin:0 auto; padding-bottom:52px; scroll-margin-top:20px; }
+        section + section { padding-top:50px; border-top:1px solid var(--line); }
+        p { margin:0 0 15px; }
+        ul { margin:10px 0 18px; padding-left:24px; }
+        li + li { margin-top:6px; }
+        .lead { max-width:900px; color:#34443c; font-size:18px; }
+        .facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:22px 0; }
+        .fact { padding:14px; background:var(--surface); border-top:3px solid var(--green); border-radius:var(--radius); }
+        .fact strong { display:block; margin-bottom:4px; }
+        .fact span { color:var(--muted); font-size:14px; }
+        .note,.warning { margin:20px 0; padding:14px 17px; border-left:4px solid var(--blue); background:#edf7fb; border-radius:0 var(--radius) var(--radius) 0; }
+        .warning { border-left-color:var(--orange); background:#fdf1ea; }
+        .note strong,.warning strong { display:block; margin-bottom:3px; }
+        .formula { margin:18px 0; padding:17px 20px; overflow-x:auto; color:#16372a; background:var(--green-soft); border-left:4px solid var(--green); border-radius:0 var(--radius) var(--radius) 0; font-family:Cambria,"Times New Roman",serif; font-size:18px; line-height:1.7; }
+        pre { margin:20px 0; padding:18px; overflow-x:auto; color:#eaf4ef; background:var(--code); border-radius:var(--radius); line-height:1.6; }
+        .matrix-row { display:flex; align-items:center; justify-content:center; gap:16px; margin:24px 0; overflow-x:auto; padding:8px 0; }
+        .matrix { position:relative; display:grid; grid-template-columns:repeat(4,max-content); gap:5px 14px; padding:7px 15px; font-family:Cambria,"Times New Roman",serif; font-size:17px; text-align:center; white-space:nowrap; }
+        .matrix::before,.matrix::after { position:absolute; top:0; bottom:0; width:8px; content:""; }
+        .matrix::before { left:0; border-top:2px solid var(--ink); border-bottom:2px solid var(--ink); border-left:2px solid var(--ink); }
+        .matrix::after { right:0; border-top:2px solid var(--ink); border-right:2px solid var(--ink); border-bottom:2px solid var(--ink); }
+        .matrix-label { margin:0 0 3px; color:var(--muted); font-size:14px; text-align:center; }
+        .derivation { margin:22px 0; overflow:hidden; border:1px solid var(--line); border-left:4px solid var(--green); border-radius:var(--radius); }
+        .derivation-head { padding:13px 16px; background:var(--green-soft); border-bottom:1px solid var(--line); }
+        .derivation-head small { display:block; color:var(--green); font-weight:750; }
+        .derivation-head strong { font-size:17px; }
+        .step { display:grid; grid-template-columns:32px minmax(0,1fr) minmax(180px,.66fr); gap:14px; align-items:center; padding:14px 16px; }
+        .step + .step { border-top:1px solid var(--line); }
+        .step-index { display:grid; width:27px; height:27px; place-items:center; color:#fff; background:var(--green); border-radius:50%; font-weight:700; font-size:13px; }
+        .expression { overflow-x:auto; font-family:Cambria,"Times New Roman",serif; font-size:18px; }
+        .reason { padding-left:14px; color:var(--muted); border-left:1px solid var(--line); font-size:14px; }
+        .result { padding:13px 16px; color:#134f3c; background:#f0f8f4; font-family:Cambria,"Times New Roman",serif; font-size:18px; }
+        .two-column { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+        figure { margin:24px 0; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius); background:#fbfdfc; }
+        canvas { display:block; width:100%; height:320px; }
+        figcaption { padding:11px 14px; color:var(--muted); background:var(--surface); border-top:1px solid var(--line); font-size:14px; }
+        table { width:100%; margin:20px 0; border-collapse:collapse; font-size:14px; }
+        th,td { padding:11px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+        th { color:#fff; background:#263a31; }
+        tbody tr:nth-child(even) { background:var(--surface); }
+        .source { color:var(--muted); font-size:14px; }
+        @media (max-width:980px) { .layout { grid-template-columns:210px minmax(0,1fr); } .facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media (max-width:700px) { h1 { font-size:28px; overflow-wrap:anywhere; } .layout { display:block; } .toc { position:static; width:100%; height:auto; padding:17px 20px; border-right:0; border-bottom:1px solid var(--line); } .toc ol { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:18px; } main { padding:34px 20px 62px; } section { padding-bottom:40px; } section + section { padding-top:39px; } .facts,.two-column { grid-template-columns:1fr; } .step { grid-template-columns:29px minmax(0,1fr); gap:10px; padding:13px 12px; } .reason { grid-column:2; padding:8px 0 0; border-top:1px dashed var(--line); border-left:0; } .matrix { gap:4px 8px; padding:7px 12px; font-size:14px; } canvas { height:265px; } }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <p class="eyebrow">VulkanLearn / Math / Matrix.hpp</p>
+            <h1>左手相机与投影矩阵：返回值从哪里来</h1>
+            <p class="subtitle">逐项推导 <code>LookAtLH</code>、<code>PerspectiveLH_ZO</code>、<code>OrthographicLH_ZO</code> 的 4x4 返回矩阵，并给出新增 <code>PerspectiveVulkanLH_ZO</code> 的唯一差异。</p>
+        </div>
+    </header>
+    <div class="layout">
+        <nav class="toc" aria-label="目录">
+            <strong>目录</strong>
+            <ol>
+                <li><a href="#contract">0. 先固定约定</a></li>
+                <li><a href="#lookat">1. LookAtLH</a></li>
+                <li><a href="#perspective">2. PerspectiveLH_ZO</a></li>
+                <li><a href="#orthographic">3. OrthographicLH_ZO</a></li>
+                <li><a href="#vulkan">4. PerspectiveVulkanLH_ZO</a></li>
+                <li><a href="#checks">5. 代入检查</a></li>
+            </ol>
+        </nav>
+        <main>
+            <section id="contract">
+                <h2>0. 先固定约定</h2>
+                <p class="lead">这三个函数看起来不同，但都只是把“目标坐标应该映射到哪里”写成方程，然后逐项填入一个 4x4 矩阵。先固定项目约定，符号才不会在转置、手性或深度范围上发生歧义。</p>
+                <div class="facts">
+                    <div class="fact"><strong>存储</strong><span>行主序，<code>matrix[row][column]</code></span></div>
+                    <div class="fact"><strong>乘法</strong><span>列向量右乘：<code>p' = M * p</code></span></div>
+                    <div class="fact"><strong>LH 视空间</strong><span>相机前方是 <code>+Z</code></span></div>
+                    <div class="fact"><strong>ZO 深度</strong><span><code>near -&gt; 0</code>，<code>far -&gt; 1</code></span></div>
+                </div>
+                <div class="formula">p = (x, y, z, 1)<sup>T</sup><br>M * p = (m00*x + m01*y + m02*z + m03, m10*x + m11*y + m12*z + m13, m20*x + m21*y + m22*z + m23, m30*x + m31*y + m32*z + m33)<sup>T</sup></div>
+                <p>因此，C++ 构造函数的 16 个参数按“第 0 行、再第 1 行”的顺序写入。最后一列是与齐次分量 <code>w=1</code> 相乘的常数项；这正是观察矩阵中的平移，以及投影矩阵中的深度常数。</p>
+                <p class="source">对应源码：<a href="../Math/Matrix.hpp">Math/Matrix.hpp</a> 中 <code>Matrix</code> 构造函数与相机/投影函数。</p>
+            </section>
+            <section id="lookat">
+                <h2>1. <code>LookAtLH</code>：把世界点写到相机坐标系</h2>
+                <p>输入的 <code>eye</code> 是相机位置，<code>target</code> 是它观察的点。LH 版本要求观察方向成为视空间的正 Z 轴，因此先构造相机的三条单位基向量：</p>
+                <div class="formula">f = normalize(target - eye)<br>r = normalize(worldUp x f)<br>u = f x r</div>
+                <p>以相机为原点后的世界点是 <code>p - eye</code>。坐标变换的每一个输出就是这个向量在相机基上的投影：</p>
+                <div class="formula">x<sub>view</sub> = r . (p - eye) = r . p - r . eye<br>y<sub>view</sub> = u . (p - eye) = u . p - u . eye<br>z<sub>view</sub> = f . (p - eye) = f . p - f . eye</div>
+                <div class="derivation">
+                    <div class="derivation-head"><small>行向量如何出现</small><strong>将三个点积直接排成列向量右乘的行</strong></div>
+                    <div class="step"><span class="step-index">1</span><div class="expression">x<sub>view</sub> = r<sub>x</sub>x + r<sub>y</sub>y + r<sub>z</sub>z - r . eye</div><div class="reason">它必须是矩阵第 0 行与 <code>(x,y,z,1)</code> 的点积。</div></div>
+                    <div class="step"><span class="step-index">2</span><div class="expression">y<sub>view</sub> = u<sub>x</sub>x + u<sub>y</sub>y + u<sub>z</sub>z - u . eye</div><div class="reason">同理得到第 1 行。</div></div>
+                    <div class="step"><span class="step-index">3</span><div class="expression">z<sub>view</sub> = f<sub>x</sub>x + f<sub>y</sub>y + f<sub>z</sub>z - f . eye</div><div class="reason">LH 前方为 <code>+Z</code>，所以这里保留 <code>+f</code>。</div></div>
+                    <div class="result">View<sub>LH</sub> 的三行就是 r、u、f 的点积展开；最后一行保留齐次坐标。</div>
+                </div>
+                <div class="matrix-row" aria-label="LookAtLH 返回矩阵"><div><p class="matrix-label">LookAtLH 的最终返回值</p><div class="matrix"><span>r<sub>x</sub></span><span>r<sub>y</sub></span><span>r<sub>z</sub></span><span>-r.eye</span><span>u<sub>x</sub></span><span>u<sub>y</sub></span><span>u<sub>z</sub></span><span>-u.eye</span><span>f<sub>x</sub></span><span>f<sub>y</sub></span><span>f<sub>z</sub></span><span>-f.eye</span><span>0</span><span>0</span><span>0</span><span>1</span></div></div></div>
+                <figure><canvas id="lookAtCanvas" aria-label="LookAtLH 相机基图"></canvas><figcaption>相机位于 <code>eye</code>，<code>target-eye</code> 定义正 Z。观察矩阵不是“摆放相机”的矩阵，而是它的逆：先减去 eye，再测量 r/u/f 三个分量。</figcaption></figure>
+                <pre><code>const Vector&lt;T, 3&gt; forward = NormalizeSafe(target - eye, {0, 0, 1});
+const Vector&lt;T, 3&gt; right = NormalizeSafe(Cross(worldUp, forward), {1, 0, 0});
+const Vector&lt;T, 3&gt; up = Cross(forward, right);
+
+return Matrix&lt;T, 4, 4&gt;(
+    right.x, right.y, right.z, -Dot(right, eye),
+    up.x, up.y, up.z, -Dot(up, eye),
+    forward.x, forward.y, forward.z, -Dot(forward, eye),
+    0, 0, 0, 1);</code></pre>
+            </section>
+            <section id="perspective">
+                <h2>2. <code>PerspectiveLH_ZO</code>：同时满足视锥、透视除法与深度端点</h2>
+                <p>设垂直视场角为 <code>theta</code>，宽高比为 <code>aspect</code>。由相似三角形，边界点满足 <code>y = z * tan(theta/2)</code>。要让它除以 <code>w</code> 后刚好到达 NDC 的 <code>y=1</code>，先定义：</p>
+                <div class="formula">s<sub>y</sub> = cot(theta / 2) = 1 / tan(theta / 2)<br>s<sub>x</sub> = s<sub>y</sub> / aspect</div>
+                <p>透视的关键是让齐次坐标 <code>clip.w = z</code>。因为 LH 的前方 z 为正，前方点的 <code>w</code> 也为正。于是 <code>clip.x=sx*x</code>、<code>clip.y=sy*y</code>，透视除法后自然得到 <code>ndc.x=sx*x/z</code>、<code>ndc.y=sy*y/z</code>。</p>
+                <div class="derivation">
+                    <div class="derivation-head"><small>求 z 行的两个未知数</small><strong>ZO 深度要求近面为 0，远面为 1</strong></div>
+                    <div class="step"><span class="step-index">1</span><div class="expression">clip.z = A*z + B, &nbsp; clip.w = z<br>ndc.z = (A*z + B) / z</div><div class="reason">第 2 行负责 <code>clip.z</code>，第 3 行的 <code>m32=1</code> 负责 <code>clip.w</code>。</div></div>
+                    <div class="step"><span class="step-index">2</span><div class="expression">z=n: 0 = (A*n + B) / n &nbsp; =&gt; &nbsp; B = -A*n</div><div class="reason">近平面的 NDC 深度目标是 0。</div></div>
+                    <div class="step"><span class="step-index">3</span><div class="expression">z=f: 1 = (A*f + B) / f &nbsp; =&gt; &nbsp; A*f + B = f</div><div class="reason">远平面的 NDC 深度目标是 1。</div></div>
+                    <div class="step"><span class="step-index">4</span><div class="expression">A(f-n) = f &nbsp; =&gt; &nbsp; A = f/(f-n)<br>B = -f*n/(f-n)</div><div class="reason">将第 2 步的 B 代入第 3 步即可。</div></div>
+                    <div class="result">把 A、B 放入第 2 行；把 1 放入 <code>m32</code>，投影矩阵的所有非零元素就确定了。</div>
+                </div>
+                <div class="matrix-row" aria-label="PerspectiveLH ZO 返回矩阵"><div><p class="matrix-label">PerspectiveLH_ZO 的最终返回值</p><div class="matrix"><span>s<sub>x</sub></span><span>0</span><span>0</span><span>0</span><span>0</span><span>s<sub>y</sub></span><span>0</span><span>0</span><span>0</span><span>0</span><span>f/(f-n)</span><span>-fn/(f-n)</span><span>0</span><span>0</span><span>1</span><span>0</span></div></div></div>
+                <div class="formula">P * (x, y, z, 1)<sup>T</sup> = (s<sub>x</sub>x, s<sub>y</sub>y, f/(f-n) * z - fn/(f-n), z)<sup>T</sup><br><br>z=n =&gt; ndc.z=0<br>z=f =&gt; ndc.z=1</div>
+                <p>源码中 <code>inverseDepth = 1 / (farPlane - nearPlane)</code>，所以 <code>output[2][2] = farPlane * inverseDepth</code> 就是 A，<code>output[2][3] = -farPlane * nearPlane * inverseDepth</code> 就是 B。</p>
+            </section>
+            <section id="orthographic">
+                <h2>3. <code>OrthographicLH_ZO</code>：三个一元线性映射拼成矩阵</h2>
+                <p>正交投影不需要透视除法，齐次 w 始终为 1。分别令 x、y、z 做一次“区间映射到目标区间”的仿射变换即可：</p>
+                <div class="formula">x<sub>ndc</sub> = a<sub>x</sub>x + b<sub>x</sub>, [left,right] -&gt; [-1,1]<br>y<sub>ndc</sub> = a<sub>y</sub>y + b<sub>y</sub>, [bottom,top] -&gt; [-1,1]<br>z<sub>ndc</sub> = a<sub>z</sub>z + b<sub>z</sub>, [near,far] -&gt; [0,1]</div>
+                <div class="two-column">
+                    <div><h3>X/Y 的系数</h3><div class="formula">a<sub>x</sub>*left + b<sub>x</sub> = -1<br>a<sub>x</sub>*right + b<sub>x</sub> = 1<br><br>a<sub>x</sub> = 2/(right-left)<br>b<sub>x</sub> = -(right+left)/(right-left)</div><p>把 <code>left/right</code> 换成 <code>bottom/top</code> 就得到 y 行。</p></div>
+                    <div><h3>LH ZO 深度的系数</h3><div class="formula">a<sub>z</sub>*near + b<sub>z</sub> = 0<br>a<sub>z</sub>*far + b<sub>z</sub> = 1<br><br>a<sub>z</sub> = 1/(far-near)<br>b<sub>z</sub> = -near/(far-near)</div><p>这里没有除以 z；它与透视投影共享的只是 ZO 的端点目标。</p></div>
+                </div>
+                <div class="matrix-row" aria-label="OrthographicLH ZO 返回矩阵"><div><p class="matrix-label">OrthographicLH_ZO 的最终返回值</p><div class="matrix"><span>2/(r-l)</span><span>0</span><span>0</span><span>-(r+l)/(r-l)</span><span>0</span><span>2/(t-b)</span><span>0</span><span>-(t+b)/(t-b)</span><span>0</span><span>0</span><span>1/(f-n)</span><span>-n/(f-n)</span><span>0</span><span>0</span><span>0</span><span>1</span></div></div></div>
+                <p>此矩阵直接由 <code>return Matrix&lt;T, 4, 4&gt;(...)</code> 返回，16 个参数仍按行写入。最后一行是 <code>(0,0,0,1)</code>，所以 <code>TransformPoint</code> 不会额外改变 x/y/z 的比例。</p>
+            </section>
+            <section id="vulkan">
+                <h2>4. <code>PerspectiveVulkanLH_ZO</code>：只翻转裁剪空间 Y</h2>
+                <p>新增函数先完整复用 <code>PerspectiveLH_ZO</code>，然后将 <code>output[1][1]</code> 取反。普通 LH 投影的这一项是 <code>sy</code>，因此 Vulkan 版本的差异只有：</p>
+                <div class="formula">clip.y = s<sub>y</sub>*y &nbsp; -&gt; &nbsp; clip.y = -s<sub>y</sub>*y<br>ndc.y = clip.y / clip.w &nbsp; -&gt; &nbsp; -ndc.y<br><br>clip.x, clip.z, clip.w 不变</div>
+                <div class="matrix-row" aria-label="PerspectiveVulkanLH ZO 返回矩阵"><div><p class="matrix-label">PerspectiveVulkanLH_ZO 的最终返回值</p><div class="matrix"><span>s<sub>x</sub></span><span>0</span><span>0</span><span>0</span><span>0</span><span>-s<sub>y</sub></span><span>0</span><span>0</span><span>0</span><span>0</span><span>f/(f-n)</span><span>-fn/(f-n)</span><span>0</span><span>0</span><span>1</span><span>0</span></div></div></div>
+                <pre><code>template &lt;FloatingScalar T&gt;
+inline Matrix&lt;T, 4, 4&gt; PerspectiveVulkanLH_ZO(
+    T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
+    Matrix&lt;T, 4, 4&gt; output =
+        PerspectiveLH_ZO(verticalFovRadians, aspectRatio, nearPlane, farPlane);
+    output[1][1] = -output[1][1];
+    return output;
+}</code></pre>
+                <div class="warning"><strong>不要翻转两次</strong>Vulkan 的 Y 方向也可以通过负高度 viewport 处理。当前函数选择在投影矩阵中翻转，调用方应与后端的 viewport 策略保持一致；同时翻转投影和 viewport 会把图像再次翻正，导致约定不一致。</div>
+                <p>Y 翻转不改变 LH/RH，也不改变 NDC 深度范围。手性仍由观察矩阵和 <code>clip.w=+z</code> 决定，ZO 深度项仍是 <code>f/(f-n)</code> 与 <code>-fn/(f-n)</code>。</p>
+            </section>
+            <section id="checks">
+                <h2>5. 代入检查：每个返回矩阵应该满足什么</h2>
+                <table><thead><tr><th>函数</th><th>代入输入</th><th>期望输出</th><th>原因</th></tr></thead><tbody>
+                    <tr><td><code>LookAtLH</code></td><td><code>p = eye</code></td><td><code>(0,0,0,1)</code></td><td>每一行都是 <code>basis . (p-eye)</code>。</td></tr>
+                    <tr><td><code>LookAtLH</code></td><td><code>p = target</code></td><td><code>z &gt; 0</code></td><td>target 在 LH 相机的前方，即 +Z。</td></tr>
+                    <tr><td><code>PerspectiveLH_ZO</code></td><td><code>z=near</code></td><td><code>ndc.z=0</code></td><td>深度方程的第一个边界条件。</td></tr>
+                    <tr><td><code>PerspectiveLH_ZO</code></td><td><code>z=far</code></td><td><code>ndc.z=1</code></td><td>深度方程的第二个边界条件。</td></tr>
+                    <tr><td><code>OrthographicLH_ZO</code></td><td><code>(left,bottom,near)</code></td><td><code>(-1,-1,0)</code></td><td>三个区间映射的左端点。</td></tr>
+                    <tr><td><code>OrthographicLH_ZO</code></td><td><code>(right,top,far)</code></td><td><code>(1,1,1)</code></td><td>三个区间映射的右端点。</td></tr>
+                    <tr><td><code>PerspectiveVulkanLH_ZO</code></td><td><code>(0,y,z,1)</code></td><td><code>ndc.y</code> 符号相反</td><td>仅 <code>m11</code> 被取反，z/w 保持不变。</td></tr>
+                </tbody></table>
+                <div class="note"><strong>阅读源码时的快速定位</strong><code>LookAtLH</code> 的最后一列来自 <code>-Dot(basis, eye)</code>；<code>PerspectiveLH_ZO</code> 的 <code>[2][2]</code>、<code>[2][3]</code> 来自近远平面方程；<code>OrthographicLH_ZO</code> 的每一行都是一个区间的仿射映射。理解这三点，返回矩阵的每个非零元素都可以自己重新得到。</div>
+            </section>
+        </main>
+    </div>
+    <script>
+        (() => {
+            const canvas = document.getElementById("lookAtCanvas");
+            const context = canvas.getContext("2d");
+            function draw() {
+                const rect = canvas.getBoundingClientRect();
+                const ratio = window.devicePixelRatio || 1;
+                canvas.width = Math.round(rect.width * ratio);
+                canvas.height = Math.round(rect.height * ratio);
+                context.setTransform(ratio, 0, 0, ratio, 0, 0);
+                context.clearRect(0, 0, rect.width, rect.height);
+                const width = rect.width;
+                const height = rect.height;
+                const eye = { x: width * .23, y: height * .68 };
+                const target = { x: width * .72, y: height * .31 };
+                const up = { x: eye.x, y: height * .22 };
+                const right = { x: width * .54, y: eye.y };
+                context.strokeStyle = "#d7e2dc";
+                context.lineWidth = 1;
+                for (let x = 28; x < width; x += 36) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
+                for (let y = 22; y < height; y += 36) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+                function arrow(from, to, color, label) {
+                    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+                    context.strokeStyle = color;
+                    context.fillStyle = color;
+                    context.lineWidth = 3;
+                    context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(to.x, to.y); context.stroke();
+                    context.beginPath(); context.moveTo(to.x, to.y); context.lineTo(to.x - 12 * Math.cos(angle - Math.PI / 6), to.y - 12 * Math.sin(angle - Math.PI / 6)); context.lineTo(to.x - 12 * Math.cos(angle + Math.PI / 6), to.y - 12 * Math.sin(angle + Math.PI / 6)); context.closePath(); context.fill();
+                    context.font = "600 15px Segoe UI, Microsoft YaHei, sans-serif";
+                    context.fillText(label, to.x + 9, to.y - 8);
+                }
+                arrow(eye, right, "#bc5a2e", "right r");
+                arrow(eye, up, "#176e93", "up u");
+                arrow(eye, target, "#08775a", "forward f = target - eye");
+                context.fillStyle = "#17241f";
+                context.beginPath(); context.arc(eye.x, eye.y, 6, 0, Math.PI * 2); context.fill();
+                context.font = "600 15px Segoe UI, Microsoft YaHei, sans-serif";
+                context.fillText("eye", eye.x - 18, eye.y + 26);
+                context.beginPath(); context.arc(target.x, target.y, 5, 0, Math.PI * 2); context.fill();
+                context.fillText("target", target.x + 9, target.y + 20);
+            }
+            draw();
+            window.addEventListener("resize", draw);
+        })();
+    </script>
+</body>
+</html>

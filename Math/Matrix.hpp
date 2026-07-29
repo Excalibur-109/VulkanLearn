@@ -922,6 +922,15 @@ inline Matrix<T, 4, 4> PerspectiveVulkanRH_ZO(T verticalFovRadians, T aspectRati
 }
 
 template <FloatingScalar T>
+inline Matrix<T, 4, 4> PerspectiveVulkanLH_ZO(T verticalFovRadians, T aspectRatio, T nearPlane, T farPlane) noexcept {
+    // Preserve LH handedness and ZO depth; only flip clip-space Y for the Vulkan positive-height viewport path.
+    Matrix<T, 4, 4> output =
+        PerspectiveLH_ZO(verticalFovRadians, aspectRatio, nearPlane, farPlane);
+    output[1][1] = -output[1][1];
+    return output;
+}
+
+template <FloatingScalar T>
 constexpr Matrix<T, 4, 4> OrthographicRH_ZO(T left, T right, T bottom, T top, T nearPlane, T farPlane) noexcept {
     return Matrix<T, 4, 4>(
         static_cast<T>(2) / (right - left),
@@ -1088,6 +1097,7 @@ using math::OrthographicRH_ZO;
 using math::PerspectiveLH_ZO;
 using math::PerspectiveRH_NO;
 using math::PerspectiveRH_ZO;
+using math::PerspectiveVulkanLH_ZO;
 using math::PerspectiveVulkanRH_ZO;
 using math::ResizeMatrix;
 using math::RotationAxisMatrix;

@@ -317,12 +317,48 @@ void TestTransformsAndProjection() {
         Near(math::TransformPoint(view, math::float3(0.0F)), math::float3(0.0F, 0.0F, -5.0F)),
         "LookAtRH failed");
 
+    const math::float4x4 leftHandedView = math::LookAtLH(
+        math::float3(0.0F, 0.0F, -5.0F),
+        math::float3(0.0F),
+        math::float3(0.0F, 1.0F, 0.0F));
+    Check(
+        Near(
+            math::TransformPoint(leftHandedView, math::float3(0.0F)),
+            math::float3(0.0F, 0.0F, 5.0F)),
+        "LookAtLH failed");
+
     const math::float4x4 projection =
         math::PerspectiveRH_ZO(math::Radians(60.0F), 16.0F / 9.0F, 0.1F, 100.0F);
     const math::float4 nearClip = projection * math::float4(0.0F, 0.0F, -0.1F, 1.0F);
     const math::float4 farClip = projection * math::float4(0.0F, 0.0F, -100.0F, 1.0F);
     Check(Near(nearClip.z / nearClip.w, 0.0F, 1.0e-5F), "RH_ZO near plane mapping failed");
     Check(Near(farClip.z / farClip.w, 1.0F, 1.0e-5F), "RH_ZO far plane mapping failed");
+
+    const math::float4x4 leftHandedProjection =
+        math::PerspectiveLH_ZO(math::Radians(60.0F), 16.0F / 9.0F, 0.1F, 100.0F);
+    const math::float4 leftHandedNearClip =
+        leftHandedProjection * math::float4(0.0F, 0.0F, 0.1F, 1.0F);
+    const math::float4 leftHandedFarClip =
+        leftHandedProjection * math::float4(0.0F, 0.0F, 100.0F, 1.0F);
+    Check(
+        Near(leftHandedNearClip.z / leftHandedNearClip.w, 0.0F, 1.0e-5F),
+        "LH_ZO near plane mapping failed");
+    Check(
+        Near(leftHandedFarClip.z / leftHandedFarClip.w, 1.0F, 1.0e-5F),
+        "LH_ZO far plane mapping failed");
+
+    const math::float4x4 leftHandedOrthographic =
+        math::OrthographicLH_ZO(-2.0F, 2.0F, -1.0F, 1.0F, 0.1F, 100.0F);
+    Check(
+        Near(
+            math::TransformPoint(leftHandedOrthographic, math::float3(-2.0F, -1.0F, 0.1F)),
+            math::float3(-1.0F, -1.0F, 0.0F)),
+        "OrthographicLH_ZO near corner mapping failed");
+    Check(
+        Near(
+            math::TransformPoint(leftHandedOrthographic, math::float3(2.0F, 1.0F, 100.0F)),
+            math::float3(1.0F, 1.0F, 1.0F)),
+        "OrthographicLH_ZO far corner mapping failed");
 
     const math::float4x4 vulkanProjection =
         math::PerspectiveVulkanRH_ZO(math::Radians(60.0F), 1.0F, 0.1F, 100.0F);
@@ -331,6 +367,21 @@ void TestTransformsAndProjection() {
     Check(
         Near(vulkanProjection[1][1], -regularProjection[1][1]),
         "Vulkan projection did not flip clip-space Y");
+
+    const math::float4x4 vulkanLeftHandedProjection =
+        math::PerspectiveVulkanLH_ZO(math::Radians(60.0F), 1.0F, 0.1F, 100.0F);
+    const math::float4x4 regularLeftHandedProjection =
+        math::PerspectiveLH_ZO(math::Radians(60.0F), 1.0F, 0.1F, 100.0F);
+    const math::float4 regularLeftHandedClip =
+        regularLeftHandedProjection * math::float4(0.0F, 1.0F, 1.0F, 1.0F);
+    const math::float4 vulkanLeftHandedClip =
+        vulkanLeftHandedProjection * math::float4(0.0F, 1.0F, 1.0F, 1.0F);
+    Check(
+        Near(vulkanLeftHandedProjection[1][1], -regularLeftHandedProjection[1][1]) &&
+            Near(vulkanLeftHandedClip.y, -regularLeftHandedClip.y) &&
+            Near(vulkanLeftHandedClip.z, regularLeftHandedClip.z) &&
+            Near(vulkanLeftHandedClip.w, regularLeftHandedClip.w),
+        "Vulkan LH projection did not only flip clip-space Y");
 }
 
 void TestQuaternion() {
