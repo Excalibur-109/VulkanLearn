@@ -28,7 +28,15 @@ enum class Format {
     BGRA8_UNorm,
     RGBA16_Float,
     RGBA32_Float,
+    RGB32_Float,
+    RG32_Float,
+    R32_Float,
     D32_Float,
+};
+
+enum class IndexFormat {
+    UInt16,
+    UInt32,
 };
 
 // 资源用途是位掩码，因为同一个纹理可能既是渲染目标又是着色器输入，
@@ -69,6 +77,12 @@ enum class PrimitiveTopology {
     TriangleList,
     TriangleStrip,
     LineList,
+};
+
+enum class CullMode {
+    None,
+    Front,
+    Back,
 };
 
 enum class CompareOp {
@@ -123,6 +137,10 @@ struct BufferDesc {
     ResourceUsage usage = ResourceUsage::None;
     bool cpuVisible = false;
     std::string debugName;
+
+    // 顶点/索引绑定需要的附加元数据。放在末尾以保持旧聚合初始化兼容。
+    uint32_t stride = 0;
+    IndexFormat indexFormat = IndexFormat::UInt32;
 };
 
 struct TextureDesc {
@@ -172,6 +190,7 @@ struct PipelineDesc {
     Format depthFormat = Format::D32_Float;
     PrimitiveTopology topology = PrimitiveTopology::TriangleList;
     CompareOp depthCompare = CompareOp::LessEqual;
+    CullMode cullMode = CullMode::Back;
 
     bool depthTest = true;
     bool depthWrite = true;
@@ -271,6 +290,17 @@ public:
     virtual std::unique_ptr<Pipeline> createPipeline(const PipelineDesc&) = 0;
     virtual std::unique_ptr<CommandList> createCommandList() = 0;
 
+    // 更新 CPU 可见或动态缓冲区。offset + size 必须在目标缓冲区范围内。
+    virtual bool updateBuffer(Buffer&, const void*, size_t, size_t = 0) {
+        return false;
+    }
+
+    // 当 DeviceCreateInfo::nativeWindow 非空时，后端创建内部交换链。
+    // 这两个纹理由后端拥有，调用者只在当前帧使用，不负责释放。
+    virtual Texture* currentColorTarget() { return nullptr; }
+    virtual Texture* currentDepthTarget() { return nullptr; }
+    virtual bool resizeDrawable(Extent2D) { return false; }
+
     virtual void submit(CommandList&) = 0;
     virtual void waitIdle() = 0;
     virtual bool present() = 0;
@@ -280,6 +310,9 @@ public:
 struct DeviceCreateInfo {
     Backend backend = Backend::Software;
     Extent2D extent{1280, 720};
+    void* nativeWindow = nullptr;
+    bool enableDebugLayer = true;
+    bool enableVsync = true;
     std::string applicationName = "RHI PBR Demo";
 };
 

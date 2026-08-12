@@ -51,6 +51,7 @@ endif()
 
 add_executable(pbr_demo
   examples/pbr_demo/main.cpp
+  examples/pbr_demo/NativeSceneRenderer.cpp
   examples/pbr_demo/PbrMath.cpp
   examples/pbr_demo/PlaneMesh.cpp
   examples/pbr_demo/SphereMesh.cpp

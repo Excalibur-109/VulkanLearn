@@ -2,6 +2,17 @@
 
 这是一个只依赖当前目录的 C++17 渲染硬件接口学习工程。`include/rhi/RHI.h` 是唯一面向应用的合同：资源描述、着色器、图形管线、命令列表、提交/呈现和后端选择都在这里定义，完全不暴露 Vulkan、D3D11、D3D12 或 Win32 类型。
 
+## 当前后端状态
+
+| 后端 | 状态 | 说明 |
+| --- | --- | --- |
+| D3D11 | 已实现原生呈现 | `HWND`、DXGI 交换链、RTV/DSV/SRV、HLSL、输入布局、状态对象、阴影贴图、`DrawIndexed` 与 `Present`。 |
+| Software | 参考路径 | 仅生成 CPU 参考图像，不创建 GPU 窗口，也不自称图形 API 后端。 |
+| Vulkan | 未实现 | 选择该后端会明确失败，不会伪装为 Vulkan 或回退到 software。 |
+| D3D12 | 未实现 | 选择该后端会明确失败，不会伪装为 D3D12 或回退到 software。 |
+
+因此当前仓库是“D3D11 原生后端 + 跨 API RHI 的演进起点”，不是已经完成的三后端引擎。Vulkan 和 D3D12 必须分别完成真实设备、队列、交换链、资源视图、着色器、描述符和同步实现后，才能标记为支持。
+
 ## 目录
 
 ```text
@@ -29,9 +40,9 @@ cmake --build build --config Release
 .\build\bin\pbr_demo.exe d3d12
 ```
 
-命令行参数选择后端；省略参数等价于 `software`。软件后端会记录命令并输出提交的 draw 数量，可用于验证应用逻辑和资源生命周期。
+命令行参数选择后端；Windows 下省略参数等价于 `d3d11`。D3D11 运行时会创建驻留的原生 GPU 窗口；软件参考路径使用 `software --no-wait`。
 
-双击 `run_pbr_demo.bat` 或直接运行 exe 会创建一个真正驻留的 Win32 `HWND` 窗口，标题为 `RHI PBR Sphere - Vulkan / D3D11 / D3D12 RHI`。窗口持续刷新球体和移动的点光源，按 `Esc` 关闭窗口。`--no-wait` 仅用于自动化测试，会跳过窗口消息循环。
+双击 `run_pbr_demo.bat` 或直接运行 exe 会创建一个真正驻留的 Win32 `HWND` 窗口。D3D11 后端通过 DXGI 交换链持续呈现球体、地面、阴影贴图和移动点光源，按 `Esc` 关闭窗口。`--no-wait` 仅用于 software 参考图像生成。
 
 程序同时生成 `pbr_sphere.bmp` 和 `pbr_sphere.ppm` 作为离线验证输出。场景包含 1024x1024 D32 阴影贴图描述、阴影深度 pass、地面 pass 和球体 pass；软件验证后端会报告 draw、transition 和 binding 数量。
 

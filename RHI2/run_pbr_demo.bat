@@ -8,4 +8,4 @@ if not exist "%EXE%" (
   pause
   exit /b 1
 )
-"%EXE%" software
+"%EXE%" d3d11
