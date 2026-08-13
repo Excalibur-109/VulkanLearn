@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 void RHID3D11::Destroy(RHIBuffer handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
@@ -128,7 +128,7 @@ void RHID3D11::Destroy(RHISwapchain handle) noexcept {
 // view 引用 texture，pipeline 引用 shader/state，swapchain 引用 back buffer。
 // Shutdown 会按反向依赖顺序调用这些 Destroy，避免 context 或 view 还持有底层资源。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

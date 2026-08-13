@@ -14,7 +14,7 @@
 #include "Math.hpp"
 
 /// 固定宽度无符号 8 位整数。
-namespace rhi {
+namespace RHI {
 
 using u8 = std::uint8_t;
 
@@ -2171,7 +2171,7 @@ struct RHICapabilities {
     bool supportsTextureCompressionASTC = false;             ///< 是否支持 ASTC 压缩格式。
 };
 
-} // namespace rhi
+} // namespace RHI
 
 
 

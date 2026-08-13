@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 namespace {
 
 using Microsoft::WRL::ComPtr;
@@ -546,12 +546,12 @@ std::unique_ptr<Device> createD3D11Device(const DeviceCreateInfo& info) {
     return std::make_unique<D3D11Device>(info);
 }
 
-} // namespace rhi
+} // namespace RHI
 
 #else
-namespace rhi {
+namespace RHI {
 std::unique_ptr<Device> createD3D11Device(const DeviceCreateInfo&) {
     throw std::runtime_error("D3D11 仅支持 Windows 平台");
 }
-} // namespace rhi
+} // namespace RHI
 #endif

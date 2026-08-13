@@ -13,7 +13,7 @@
 #include <utility>
 #include <variant>
 
-namespace rhi {
+namespace RHI {
 
 namespace {
 
@@ -316,7 +316,7 @@ RHI_FORWARD_DESTROY(RHISwapchain)
 
 #undef RHI_FORWARD_DESTROY
 
-} // namespace rhi
+} // namespace RHI
 
 
 

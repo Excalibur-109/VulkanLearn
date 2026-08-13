@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIBuffer RHID3D11::CreateBuffer(const RHIBufferDesc& desc) {
     if (!IsInitialized()) {
@@ -466,7 +466,7 @@ RHIPipelineCache RHID3D11::CreatePipelineCache(const RHIPipelineCacheDesc& desc)
 // 但 view 仍然很重要：同一 texture 可以通过 SRV/RTV/DSV/UAV 以不同用途暴露给 shader 或 render target。
 // 学习时可以按“resource 本体 -> view -> bind set 绑定表”的顺序看。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIQueryPool RHIVulkan::CreateQueryPool(const RHIQueryPoolDesc& desc) {
     Impl::QueryPoolResource resource{};
@@ -400,7 +400,7 @@ bool RHIVulkan::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // CommandBuffer/Fence 由 FrameContext 按 framesInFlight 轮转复用；CPU 只等待即将复用的
 // 帧槽位，而不是每次提交后立刻等待整帧完成。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

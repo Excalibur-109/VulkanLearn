@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 namespace {
 
 struct SoftwareBuffer final : Buffer {

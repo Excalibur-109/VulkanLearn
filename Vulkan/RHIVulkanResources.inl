@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIBuffer RHIVulkan::CreateBuffer(const RHIBufferDesc& desc) {
     if (!IsInitialized()) {
@@ -427,7 +427,7 @@ RHIPipelineCache RHIVulkan::CreatePipelineCache(const RHIPipelineCacheDesc& desc
     return handle;
 }
 
-} // namespace rhi
+} // namespace RHI
 
 
 

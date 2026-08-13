@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 static VkStencilOpState toVkStencilState(const RHIStencilFaceState& state) {
     VkStencilOpState vkState{};
@@ -269,7 +269,7 @@ RHIPipeline RHIVulkan::CreateComputePipeline(const RHIComputePipelineDesc& desc)
 // QueryPool 用于 GPU 侧统计：timestamp 量时间，occlusion 量通过深度/模板测试的样本，
 // pipeline statistics 量各阶段调用次数。不是所有统计项都默认可用，所以初始化时会检查 feature。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIBuffer RHID3D12::CreateBuffer(const RHIBufferDesc& desc) {
     if (!IsInitialized()) {
@@ -555,7 +555,7 @@ RHIPipelineCache RHID3D12::CreatePipelineCache(const RHIPipelineCacheDesc& desc)
 // - BindSet 先解析成 CPU descriptor，后续完整命令录制时再拷贝到 shader-visible heap；
 // - PipelineLayout 会真正生成 D3D12 root signature，这是 D3D12 资源绑定模型的核心。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

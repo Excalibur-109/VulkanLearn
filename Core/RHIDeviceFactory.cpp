@@ -1,6 +1,6 @@
 ﻿#include "RHIDeviceFactory.hpp"
 
-namespace rhi {
+namespace RHI {
 
 std::unique_ptr<RHIDevice> CreateRHIDevice(RHIGraphicsAPI api, std::string*) {
     return std::make_unique<RHIDevice>(api);
@@ -14,7 +14,7 @@ std::unique_ptr<RHIDevice> CreateInitializedRHIDevice(const RHIDeviceCreateDesc&
     return device;
 }
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIVulkan::RHIVulkan()
     : impl_(std::make_unique<Impl>()) {
@@ -471,7 +471,7 @@ const RHIVulkanNativeHandles& RHIVulkan::NativeHandles() const noexcept {
 // requirements，分配合适 memory type，最后 vkBindBufferMemory 绑定。persistentlyMapped
 // 只适合 CPU 可见内存，用来让上层长期写入动态数据。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

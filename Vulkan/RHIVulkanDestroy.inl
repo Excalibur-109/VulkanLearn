@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 void RHIVulkan::Destroy(RHIBuffer handle) noexcept {
     Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle);
@@ -173,7 +173,7 @@ void RHIVulkan::Destroy(RHISwapchain handle) noexcept {
     }
 }
 
-} // namespace rhi
+} // namespace RHI
 
 
 

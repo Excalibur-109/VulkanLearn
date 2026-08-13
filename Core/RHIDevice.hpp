@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 /// 唯一的跨 API RHI 设备门面。
 ///
@@ -83,7 +83,7 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace rhi
+} // namespace RHI
 
 
 

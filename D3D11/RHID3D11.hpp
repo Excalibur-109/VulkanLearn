@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 struct RHID3D11SurfaceDesc {
     HWND hwnd = nullptr;
@@ -118,7 +118,7 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace rhi
+} // namespace RHI
 
 
 

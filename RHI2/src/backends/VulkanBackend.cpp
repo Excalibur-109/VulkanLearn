@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-namespace rhi {
+namespace RHI {
 
 // 不能把软件验证后端伪装成 Vulkan。真实 Vulkan 后端需要实例、物理设备
 // 选择、设备队列、KHR 交换链、SPIR-V 编译、描述符集和同步对象的完整实现。

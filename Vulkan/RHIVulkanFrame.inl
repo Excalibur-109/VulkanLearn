@@ -2,7 +2,7 @@
 
 #include "RHIVulkanPrivate.inl"
 
-namespace rhi {
+namespace RHI {
 
 bool RHIVulkan::RecordAndSubmitFrame(
     const RHIFramePacket& packet,
@@ -1127,7 +1127,7 @@ void RHIVulkan::WaitIdle() const noexcept {
 
 // Destroy 会先清空句柄槽，再按 submission serial 延迟释放 native 对象。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

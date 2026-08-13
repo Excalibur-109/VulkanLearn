@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIQueryPool RHID3D12::CreateQueryPool(const RHIQueryPoolDesc& desc) {
     if (!IsInitialized()) {
@@ -303,7 +303,7 @@ bool RHID3D12::Present(const RHIPresentDesc& desc, std::string* errorMessage) {
 // - Swapchain 使用 IDXGISwapChain3 并把每个 back buffer 包装成统一 RHITexture；
 // - Semaphore 暂时是 CPU 模拟，后续若需要跨进程/跨队列同步可扩展到 shared fence。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

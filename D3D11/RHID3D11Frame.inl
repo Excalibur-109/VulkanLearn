@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 static bool stageVisible(RHIShaderStage visibility, RHIShaderStage stage) {
     if (visibility == RHIShaderStage::All) {
@@ -796,7 +796,7 @@ void RHID3D11::WaitIdle() const noexcept {
 // - Pipeline -> IA/InputLayout/Shader/Rasterizer/DepthStencil/Blend 状态；
 // - RenderGraph pass -> OMSetRenderTargets + Clear + Draw/Dispatch + Present。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

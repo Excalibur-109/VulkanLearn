@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 /// Vulkan surface 由平台层创建，例如 GLFW、Win32、SDL 或 Android。
 /// 渲染后端只接收已经创建好的 VkSurfaceKHR，避免把窗口系统代码混进通用后端。
@@ -190,7 +190,7 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHID3D12::RHID3D12()
     : impl_(std::make_unique<Impl>()) {
@@ -187,7 +187,7 @@ const RHID3D12NativeHandles& RHID3D12::NativeHandles() const noexcept {
 // 注意这里已经创建了 command list，但它只是基础命令录制容器；真正把 RenderGraph 变成 draw/dispatch，
 // 需要在 Frame 片段中补 command allocator reset、barrier、root signature/descriptor heap 绑定等步骤。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

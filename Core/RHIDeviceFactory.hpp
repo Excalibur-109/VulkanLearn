@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace rhi {
+namespace RHI {
 
 [[nodiscard]] std::unique_ptr<RHIDevice> CreateRHIDevice(
     RHIGraphicsAPI api,
@@ -15,7 +15,7 @@ namespace rhi {
     const RHIDeviceCreateDesc& desc,
     std::string* errorMessage = nullptr);
 
-} // namespace rhi
+} // namespace RHI
 
 
 

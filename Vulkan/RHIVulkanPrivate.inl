@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace rhi {
+namespace RHI {
 
 // 学习导读：
 // 这个文件是统一渲染抽象到 Vulkan 的落地层。RHIDefinitions.hpp 里的 RHIBufferDesc、
@@ -1336,7 +1336,7 @@ static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
     return info;
 }
 
-} // namespace rhi
+} // namespace RHI
 
 
 

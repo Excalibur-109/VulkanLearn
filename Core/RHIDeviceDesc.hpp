@@ -6,7 +6,7 @@
 #include <functional>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 /// 统一 RHI 设备初始化描述。公共层不包含任何图形 API 原生类型。
 struct RHIDeviceCreateDesc {
@@ -25,7 +25,7 @@ struct RHIDeviceCreateDesc {
     bool allowSoftwareAdapter = true;  ///< D3D 初始化失败时是否允许 WARP 回退。
 };
 
-} // namespace rhi
+} // namespace RHI
 
 
 

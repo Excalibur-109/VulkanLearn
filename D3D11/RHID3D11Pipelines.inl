@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 static D3D11_DEPTH_STENCILOP_DESC toD3DStencilFace(const RHIStencilFaceState& state) {
     D3D11_DEPTH_STENCILOP_DESC desc{};
@@ -200,7 +200,7 @@ RHIPipeline RHID3D11::CreateComputePipeline(const RHIComputePipelineDesc& desc) 
 // 本实现把 input layout、shader stages、rasterizer、depth-stencil、blend、topology 等保存在 PipelineResource，
 // 真正绘制时由 RHID3D11Frame.inl 的 applyPipeline 逐项绑定到 immediate context。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

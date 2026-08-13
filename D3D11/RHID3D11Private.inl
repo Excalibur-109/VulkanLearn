@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace rhi {
+namespace RHI {
 
 using Microsoft::WRL::ComPtr;
 
@@ -1000,7 +1000,7 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - DXGI adapter 选择和 RHICapabilities 生成。
 // 读这里时重点看“RHIDefinitions.hpp 的抽象字段，最终落到哪个 D3D11 原生类型”。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

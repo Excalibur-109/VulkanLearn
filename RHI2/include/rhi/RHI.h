@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 // 创建设备时选择一次后端，应用层不需要再区分具体图形 API。
 enum class Backend {

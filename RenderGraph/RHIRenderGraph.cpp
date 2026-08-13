@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace rhi {
+namespace RHI {
 namespace {
 
 constexpr u64 FNV_OFFSET = 14695981039346656037ULL;
@@ -1030,4 +1030,4 @@ RHIRenderGraphCompileResult CompileRHIRenderGraph(
     return result;
 }
 
-} // namespace rhi
+} // namespace RHI

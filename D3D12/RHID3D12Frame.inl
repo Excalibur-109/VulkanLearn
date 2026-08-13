@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 bool RHID3D12::RecordAndSubmitFrame(
     const RHIFramePacket& packet,
@@ -899,7 +899,7 @@ void RHID3D12::WaitIdle() const noexcept {
 // - 还没有把 RenderGraph pass 录制成 command list；
 // - 下一步要补的是 resource barrier、RTV/DSV 绑定、descriptor heap 拷贝、root table 设置、Draw/Dispatch。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

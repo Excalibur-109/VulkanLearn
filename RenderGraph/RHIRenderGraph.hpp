@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace rhi {
+namespace RHI {
 
 /**
  * 编译计划中的资源引用。Buffer 的 index 索引 RHIRenderGraphDesc::buffers，Texture 和
@@ -129,4 +129,4 @@ struct RHIRenderGraphCompileResult {
     std::span<const RHIQueueSubmitDesc> submissions,
     std::string* errorMessage = nullptr);
 
-} // namespace rhi
+} // namespace RHI

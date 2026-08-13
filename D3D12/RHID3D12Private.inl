@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace rhi {
+namespace RHI {
 
 using Microsoft::WRL::ComPtr;
 
@@ -1198,7 +1198,7 @@ static RHICapabilities makeCapabilities(IDXGIAdapter1* adapter, D3D_FEATURE_LEVE
 // - Impl 中保存的 ID3D12Resource/RootSignature/PSO/Swapchain/Fence；
 // - DXGI adapter 选择、feature level 和 RHICapabilities 生成。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 static D3D12_DEPTH_STENCILOP_DESC toD3D12StencilFace(const RHIStencilFaceState& state) {
     D3D12_DEPTH_STENCILOP_DESC desc{};
@@ -254,7 +254,7 @@ RHIPipeline RHID3D12::CreateComputePipeline(const RHIComputePipelineDesc& desc) 
 // 和 D3D11 的“多个状态对象逐项绑定”不同，D3D12 创建 PSO 后，绘制时只需要 SetPipelineState，
 // 但前提是 command list 还要正确绑定 root signature、descriptor heap 和具体 descriptor table。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

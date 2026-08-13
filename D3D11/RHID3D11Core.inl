@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHID3D11::RHID3D11()
     : impl_(std::make_unique<Impl>()) {
@@ -174,7 +174,7 @@ const RHID3D11NativeHandles& RHID3D11::NativeHandles() const noexcept {
 // 这里对应 Vulkan 后端的 RHIVulkanCore.inl，但 D3D11 只有一个 immediate context，
 // 不需要显式创建 queue、command pool 或 descriptor pool。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-namespace rhi {
+namespace RHI {
 
 // 不能把软件验证后端伪装成 D3D12。真实 D3D12 后端需要 DXGI Factory、
 // Command Queue、Fence、Frame Allocator、描述符堆、资源状态屏障和交换链。

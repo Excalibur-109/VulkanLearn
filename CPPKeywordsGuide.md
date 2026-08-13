@@ -440,12 +440,12 @@ public:
 命名空间用于组织名称并避免冲突：
 
 ```cpp
-namespace rhi {
+namespace RHI {
 
 class RHIDevice {
 };
 
-} // namespace rhi
+} // namespace RHI
 ```
 
 C++17 支持嵌套命名空间简写：

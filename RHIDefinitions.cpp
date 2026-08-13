@@ -2,7 +2,7 @@
 
 #include <type_traits>
 
-namespace rhi {
+namespace RHI {
 
 static_assert(sizeof(u8)  == 1);
 static_assert(sizeof(u16) == 2);
@@ -20,7 +20,7 @@ static_assert(RHIHasAll(
     RHITextureAspect::Depth | RHITextureAspect::Stencil,
     RHITextureAspect::Depth | RHITextureAspect::Stencil));
 
-} // namespace rhi
+} // namespace RHI
 
 
 

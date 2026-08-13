@@ -2,7 +2,7 @@
 
 #include "RHID3D12Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 void RHID3D12::Destroy(RHIBuffer handle) noexcept {
     if (Impl::BufferResource* resource = getRenderResource(impl_->buffers, handle)) {
@@ -136,7 +136,7 @@ void RHID3D12::Destroy(RHISwapchain handle) noexcept {
 // 这是当前后端的简单线性分配策略：句柄槽位保持稳定，descriptor 槽位在 renderer 生命周期内单调增长。
 // 后续如果做长期运行编辑器，需要再补 descriptor free-list 或按帧 ring allocator。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

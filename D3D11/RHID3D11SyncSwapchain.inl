@@ -2,7 +2,7 @@
 
 #include "RHID3D11Private.inl"
 
-namespace rhi {
+namespace RHI {
 
 RHIQueryPool RHID3D11::CreateQueryPool(const RHIQueryPoolDesc& desc) {
     if (!IsInitialized()) {
@@ -174,7 +174,7 @@ RHIExtent2D RHID3D11::GetSwapchainExtent(RHISwapchain handle) const {
 // D3D11 immediate context 没有 Vulkan 那种显式 queue Submit；Submit 多数时候只是对模拟同步状态做标记，
 // 真正的 GPU 命令已经在 RHIFramePacket 执行时写入 immediate context，Present 则通过 IDXGISwapChain::Present 完成。
 
-} // namespace rhi
+} // namespace RHI
 
 
 

@@ -1,7 +1,7 @@
 #include "rhi/RHI.h"
 #include <stdexcept>
 
-namespace rhi {
+namespace RHI {
 std::unique_ptr<Device> createSoftwareDevice(const DeviceCreateInfo&);
 std::unique_ptr<Device> createVulkanDevice(const DeviceCreateInfo&);
 std::unique_ptr<Device> createD3D11Device(const DeviceCreateInfo&);
