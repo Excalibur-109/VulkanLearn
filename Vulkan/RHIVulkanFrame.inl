@@ -8,6 +8,10 @@ bool RHIVulkan::RecordAndSubmitFrame(
     const RHIFramePacket& packet,
     const RHIRenderGraphExecutionPlan& graphPlan,
     std::string* errorMessage) {
+    // 这是 RHI 一帧在 Vulkan 后端的汇合点：CPU 上传数据、根据执行计划创建 transient
+    // 资源、写入 barrier 和 draw/dispatch，最后将一个 command buffer 提交到 graphics queue。
+    // graphPlan 仅描述已编译的静态依赖/资源分配；packet 保存当前帧的动态数据，例如上传字节、
+    // clear value、draw 参数和导入资源的实际句柄。
     Impl::FrameContext* frame = nullptr;
     bool frameSubmitted = false;
 
@@ -19,6 +23,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
     std::vector<RHITextureView> transientTextureViews;
 
     const auto releaseTransientResources = [&]() noexcept {
+        // view 依赖 texture，texture/buffer 又可能仍被本帧 command buffer 引用，因此按
+        // 依赖的反方向发起销毁。提交后 Destroy 会延迟 native 销毁；提交前异常则立即安全释放。
         for (auto view = transientTextureViews.rbegin();
              view != transientTextureViews.rend();
              ++view) {
@@ -45,6 +51,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         }
 
         frame = &impl_->prepareNextFrameContext();
+        // prepareNextFrameContext 会等待这个轮转槽位对应的 timeline 值，释放上一轮的
+        // staging 资源并重置 command buffer。因此 CPU 最多领先 GPU framesInFlight 帧。
         VkCommandBuffer commandBuffer = frame->commandBuffer;
 
         VkCommandBufferBeginInfo beginInfo{};
@@ -54,6 +62,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             throw std::runtime_error("vkBeginCommandBuffer failed");
         }
 
+        // 上传命令本身是 TransferWrite；copy 之后必须把这次写入对资源最终用途可见。
+        // 下面两个函数把 RHI 的 usage 转为这个“第一次消费者”所需的 access/stage。
         const auto bufferDstAccess = [](RHIBufferUsage usage) {
             VkAccessFlags access = 0;
             if (RHIHasAny(usage, RHIBufferUsage::Vertex))   access |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
@@ -93,6 +103,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         std::vector<RHIBuffer> uploadedBuffers;
         VkPipelineStageFlags uploadDestinationStages = 0;
         for (const RHIBufferUploadDesc& upload : packet.uploads.buffers) {
+            // 每个 CPU blob 都经过独立的 host-visible staging buffer。目标 buffer 可为
+            // device local；CPU 永远不会直接 map 目标 buffer。
             if (upload.data.empty()) {
                 continue;
             }
@@ -151,6 +163,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             copy.size = static_cast<VkDeviceSize>(upload.data.size());
             vkCmdCopyBuffer(commandBuffer, trackedStaging.buffer, destination->buffer, 1, &copy);
 
+            // 这不是 layout transition，而是纯内存可见性 barrier：保证 vkCmdCopyBuffer
+            // 写入 destination 后，后续 VertexInput/Shader/Indirect 等读取阶段能看见它。
             VkBufferMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -199,6 +213,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         std::vector<RHIBuffer> physicalGraphBuffers(
             graphPlan.bufferAllocationCount);
         for (u32 index = 0; index < packet.graph.buffers.size(); ++index) {
+            // 被 RenderGraph cull 的资源 lifetime 没有 firstPass；既不创建，也不会出现在
+            // compiled pass transition 中。
             if (graphPlan.bufferLifetimes[index].firstPass == RHI_INVALID_INDEX) {
                 continue;
             }
@@ -275,6 +291,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         }
 
         const auto findViewForTexture = [&](RHITexture texture, RHITextureAspect aspect) -> RHITextureView {
+            // Imported texture 的 view 由调用方/Swapchain 创建，transient texture 的 view 则
+            // 刚在上方创建。附件编译计划只存 texture index，因此在录制时补回适合 aspect 的 view。
             for (u64 index = 0; index < impl_->textureViews.size(); ++index) {
                 const Impl::TextureViewResource& view = impl_->textureViews[static_cast<size_t>(index)];
                 if (view.view != VK_NULL_HANDLE && view.desc.texture == texture &&
@@ -340,6 +358,9 @@ bool RHIVulkan::RecordAndSubmitFrame(
             barrier.subresourceRange.baseArrayLayer = 0;
             barrier.subresourceRange.layerCount = texture->desc.arrayLayers;
 
+            // discardContents 说明新的逻辑资源不需要旧像素；普通首次使用可直接声明
+            // UNDEFINED，跳过保存旧内容。aliasingBarrier 则复用同一物理 VkImage，仍要以
+            // 上一逻辑资源的真实 stage/access/layout 为 source，不能把同步关系一并丢掉。
             vkCmdPipelineBarrier(
                 commandBuffer,
                 discardContents && !aliasingBarrier
@@ -375,6 +396,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
                     ? accessFromResourceState(transition.after)
                     : toVkAccessFlags(transition.destinationAccess);
 
+            // buffer 没有 image layout，但依然需要通过 stage/access 建立前一使用和后一使用
+            // 的 execution/memory dependency。这里对整个 buffer 生效，RHI 暂未细分 subrange。
             VkBufferMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
             barrier.srcAccessMask = transition.discardContents &&
@@ -406,6 +429,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         };
 
         for (const RHITextureUploadDesc& upload : packet.uploads.textures) {
+            // 图片上传与 buffer 上传相同：CPU -> staging buffer -> vkCmdCopyBufferToImage。
+            // 区别在于 image 在 copy 前必须先进入 TRANSFER_DST_OPTIMAL layout。
             if (upload.data.empty()) {
                 continue;
             }
@@ -463,6 +488,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
                 RHIPipelineStage::Transfer,
                 RHIAccessFlags::TransferWrite);
 
+            // staging resource 挂到 FrameContext，而不是函数局部直接销毁；GPU 在 submit 后
+            // 仍会读取它，只有该帧 completionValue 完成后才能释放。
             Impl::StagingResource staging{};
             VkBufferCreateInfo stagingInfo{};
             stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -565,6 +592,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         // 编译器生成的 transition，再录制 workload；这条顺序就是依赖真正落到 GPU
         // command stream 的位置。
         for (const RHICompiledRenderGraphPass& compiledPass : graphPlan.passes) {
+            // sourcePass 保存构建本帧 attachment 的动态数据；compiledPass 保存经过排序、
+            // cull、资源分配后稳定不变的索引和 transition 列表。
             const RHIRenderGraphPassDesc& sourcePass =
                 packet.graph.passes[compiledPass.sourcePassIndex];
             for (const RHIRenderGraphTransition& transition : compiledPass.transitions) {
@@ -659,6 +688,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             }
 
             if (!hasAttachments) {
+                // 没有 raster attachment 的 pass 按计算/传输命令录制。图编译器已经验证了
+                // pass 类型与命令种类的兼容性；这里仅把 RHI command 映射为 Vulkan 命令。
                 for (const RHIDispatchCommand& dispatch : workload->dispatches) {
                     const Impl::PipelineResource* pipeline =
                         getRenderResource(impl_->pipelines, dispatch.pipeline);
@@ -720,6 +751,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
                     throw std::runtime_error("RenderGraph color attachment requires a valid texture view");
                 }
 
+                // 先保留每个 attachment 对应的转换结果，再把它复制进 attachment 的
+                // clearValue；这样多 color attachment 不会复用同一个临时清屏值。
                 colorClearValues.push_back(vkClearColor(attachment.clearValue.color));
                 VkRenderingAttachmentInfo colorAttachment{};
                 colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -759,6 +792,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
                                            workload->scissor.extent.height == 0
                                        ? packet.settings.scissor
                                        : workload->scissor;
+            // Dynamic Rendering 不创建 VkRenderPass/VkFramebuffer；这里把一个 RenderGraph
+            // raster pass 的 attachment、render area、load/store 直接填入 VkRenderingInfo。
             VkRenderingInfo renderingInfo{};
             renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             renderingInfo.renderArea.offset = {renderArea.offset.x, renderArea.offset.y};
@@ -772,6 +807,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
 
             vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
+            // workload 可以覆盖全帧默认 viewport/scissor。scissor 同时决定 dynamic rendering
+            // 的 renderArea 和 VkScissor，避免 attachment clear 的区域与 rasterization 区域不同。
             RHIViewport viewport = workload == nullptr ||
                                            workload->viewport.width == 0.0F ||
                                            workload->viewport.height == 0.0F
@@ -810,6 +847,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
                     descriptorSets.push_back(bindSet->set);
                 }
                 if (!descriptorSets.empty()) {
+                    // RHI 的 bindSets 按 set 编号顺序传入；当前接口从 firstSet=0 连续绑定，
+                    // 因此调用方必须提供与 pipeline layout 对齐的集合顺序。
                     vkCmdBindDescriptorSets(
                         commandBuffer,
                         pipeline->bindPoint,
@@ -847,6 +886,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             };
 
             if (workload != nullptr) {
+                // 非索引和索引 draw 分开保存，只是为了避免空 index stream；二者共享相同的
+                // pipeline -> descriptor sets -> vertex streams 绑定过程。
                 for (const RHIDrawCommand& draw : workload->draws) {
                     const Impl::PipelineResource* pipeline =
                         getRenderResource(impl_->pipelines, draw.pipeline);
@@ -913,6 +954,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         }
 
         if (packet.present.has_value()) {
+            // Present 不在 command buffer 中执行，但调用 vkQueuePresentKHR 前，swapchain image
+            // 必须从最后一次 color attachment 写入转换回 PRESENT_SRC_KHR。
             const Impl::SwapchainResource* swapchain = getRenderResource(impl_->swapchains, packet.present->swapchain);
             if (swapchain != nullptr && packet.present->imageIndex < swapchain->images.size()) {
                 transitionTexture(swapchain->images[packet.present->imageIndex], RHIResourceState::Present);
@@ -933,6 +976,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         bool usesTimelineSemaphore = false;
 
         for (const RHIQueueSubmitDesc& submitDesc : packet.submissions) {
+            // 一个 packet 可以包含多个逻辑 submission 描述；当前实现将它们的 wait/signal
+            // 汇总为一次 graphics queue submit，passNames 的顺序已在上层验证。
             for (const RHIQueueWaitDesc& wait : submitDesc.waits) {
                 const Impl::GPUWaitGPUSignalResource* semaphore = getRenderResource(impl_->gpuWaitGPUSignals, wait.signal);
                 if (semaphore == nullptr || semaphore->semaphore == VK_NULL_HANDLE) {
@@ -968,6 +1013,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         timelineInfo.signalSemaphoreValueCount = static_cast<u32>(signalValues.size());
         timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
+        // pNext 链只在存在 timeline semaphore 时才需要。Binary semaphore 对应的 value 会被
+        // Vulkan 忽略，但为了结构对齐仍在 waitValues/signalValues 中保留一个位置。
         VkSubmitInfo SubmitInfo{};
         SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         SubmitInfo.pNext = usesTimelineSemaphore ? &timelineInfo : nullptr;
@@ -987,6 +1034,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
             throw std::runtime_error("vkQueueSubmit(recorded frame) failed");
         }
         frameSubmitted = true;
+        // 只有 vkQueueSubmit 成功后，staging 与 transient native 对象才可能仍被 GPU 使用。
+        // 从此刻起它们的释放由 frameCompletionValue 和延迟回收队列保证安全。
         impl_->deviceKnownIdle = false;
         frame->prepared = false;
         frame->completionValue = frameCompletionValue;
@@ -1002,6 +1051,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
         }
         return true;
     } catch (const std::exception& error) {
+        // 命令录制阶段失败时尚未提交，staging/transient 可以立即释放；若提交已经成功，
+        // releaseTransientResources 会转入 deferRelease，不能直接销毁 GPU 仍可能访问的对象。
         releaseTransientResources();
         if (frame != nullptr && !frameSubmitted) {
             impl_->releaseStagingResources(*frame);
@@ -1015,6 +1066,8 @@ bool RHIVulkan::RecordAndSubmitFrame(
 }
 
 bool RHIVulkan::SubmitFrame(const RHIFramePacket& packet, std::string* errorMessage) {
+    // 这个重载面向直接使用 RHIVulkan 的调用方：先把声明式 graph 编译为可执行计划，再交给
+    // 下面的计划重载录制。通过 RHIDevice 调用时，设备层还会缓存结构相同的计划。
     RHIRenderGraphCompileResult graph =
         CompileRHIRenderGraph(packet.graph, packet.workloads);
     if (!graph.Succeeded()) {
@@ -1041,6 +1094,8 @@ bool RHIVulkan::SubmitFrame(
     }
     if (!graphPlan.passes.empty() || !packet.uploads.buffers.empty() ||
         !packet.uploads.textures.empty()) {
+        // 只要有 RenderGraph work 或 upload，就必须建立 command buffer；完全没有 GPU work
+        // 的 packet 才走低层 Submit/Present，用于单独测试外部同步或呈现流程。
         return RecordAndSubmitFrame(packet, graphPlan, errorMessage);
     }
 
@@ -1057,6 +1112,8 @@ bool RHIVulkan::SubmitFrame(
 
 void RHIVulkan::WaitIdle() const noexcept {
     if (IsInitialized()) {
+        // WaitIdle 是 resize、退出或大规模资源重建的同步边界。它牺牲并行度换取“所有已提交
+        // 工作都完成”的强保证，因此可以安全释放所有 staging 与 deferred native 资源。
         vkDeviceWaitIdle(impl_->native.device);
         impl_->completedSubmissionSerial = impl_->lastSubmissionSerial;
         impl_->hasUntrackedSubmissions = false;
